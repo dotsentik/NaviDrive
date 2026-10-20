@@ -12,11 +12,14 @@ VOLUME_NAME="NaviDrive"
 BACKGROUND="$SCRIPT_DIR/dmg-background.png"
 BACKGROUND_2X="$SCRIPT_DIR/dmg-background@2x.png"
 BACKGROUND_SOURCE="$SCRIPT_DIR/make_dmg_background.swift"
+README_SOURCE="$SCRIPT_DIR/first-launch.txt"
+README_NAME="READ ME FIRST.txt"
 # Окно 600×400 и центры иконок — те же, что в make_dmg_background.swift.
 WINDOW_W=600
 WINDOW_H=400
 APP_POS="150, 190"
 APPLICATIONS_POS="450, 190"
+README_POS="300, 70"  # над стрелкой: внизу фона — подпись «Перетащите…»
 
 fail() { echo "Ошибка: $*" >&2; exit 1; }
 step() { echo "==> $*"; }
@@ -56,6 +59,9 @@ STAGING="$WORK/staging"
 mkdir -p "$STAGING/.background"
 ditto "$APP" "$STAGING/NaviDrive.app"
 ln -s /Applications "$STAGING/Applications"
+# Как открыть неподписанную Apple сборку на другом Mac (Gatekeeper) — на английском и русском.
+[ -f "$README_SOURCE" ] || fail "не найден $README_SOURCE"
+cp "$README_SOURCE" "$STAGING/$README_NAME"
 # Один TIFF с 1x и @2x: Finder сам выбирает нужное разрешение на Retina.
 tiffutil -cathidpicheck "$BACKGROUND" "$BACKGROUND_2X" -out "$STAGING/.background/background.tiff" >/dev/null 2>&1
 ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$APP/Contents/Info.plist" 2>/dev/null || echo AppIcon)"
@@ -93,6 +99,7 @@ tell application "Finder"
         set background picture of viewOptions to file ".background:background.tiff"
         set position of item "NaviDrive.app" of container window to {$APP_POS}
         set position of item "Applications" of container window to {$APPLICATIONS_POS}
+        set position of item "$README_NAME" of container window to {$README_POS}
         update without registering applications
         delay 2
         close

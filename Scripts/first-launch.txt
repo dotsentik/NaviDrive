@@ -1,0 +1,29 @@
+NaviDrive — first launch
+
+NaviDrive is signed with the project's own certificate and is not notarized by Apple,
+so macOS Gatekeeper blocks the first launch on another Mac.
+
+1. Drag NaviDrive to Applications, then right-click it → Open → Open.
+2. If that does not help, run in Terminal:
+   xattr -dr com.apple.quarantine /Applications/NaviDrive.app
+3. If the DMG came through a sandboxed messenger (for example, Telegram) and macOS says
+   "File created by an AppSandbox", run:
+   sudo xattr -cr /Applications/NaviDrive.app
+
+Tip: download the DMG from GitHub Releases in a browser or send it over AirDrop.
+
+----------------------------------------------------------------
+
+NaviDrive — первый запуск
+
+NaviDrive подписан собственным сертификатом и не нотаризован Apple,
+поэтому на другом Mac Gatekeeper блокирует первый запуск.
+
+1. Перетащите NaviDrive в «Программы», затем правый клик → «Открыть» → «Открыть».
+2. Если не помогло, выполните в Терминале:
+   xattr -dr com.apple.quarantine /Applications/NaviDrive.app
+3. Если DMG пришёл через мессенджер с песочницей (например, Telegram) и macOS пишет
+   «File created by an AppSandbox», выполните:
+   sudo xattr -cr /Applications/NaviDrive.app
+
+Совет: скачивайте DMG из GitHub Releases в браузере или передавайте по AirDrop.
