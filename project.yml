@@ -91,7 +91,7 @@ targets:
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         LSApplicationCategoryType: public.app-category.productivity
         NSPrincipalClass: NSApplication
-        NSHumanReadableCopyright: "NaviDrive"
+        NSHumanReadableCopyright: "© 2026 pouringsounds. MIT License."
         NaviDriveGoogleClientID: $(GOOGLE_CLIENT_ID)
         NaviDriveGoogleClientSecret: $(GOOGLE_CLIENT_SECRET)
         NaviDriveDropboxAppKey: $(DROPBOX_APP_KEY)

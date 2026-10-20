@@ -100,4 +100,4 @@ project.yml   XcodeGen project definition
 
 ## License
 
-No license has been chosen yet; all rights reserved.
+MIT, see the [LICENSE](LICENSE) file.
