@@ -1,18 +1,18 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "Upload to Google Drive (NaviDrive)": {
+    "Upload to NaviDrive": {
       "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Загрузить в Google Drive (NaviDrive)"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Upload to Google Drive (NaviDrive)"
+            "value": "Upload to NaviDrive"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузить в NaviDrive"
           }
         }
       }

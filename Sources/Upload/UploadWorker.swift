@@ -16,7 +16,10 @@ struct UploadWorker: Sendable {
     static let maxRateLimitRetries = 10
 
     enum Outcome: Sendable {
-        case uploaded(fileId: String, hash: String?, size: Int64)
+        /// `name` — имя в облаке, если облако его изменило («Сохранить оба» через autorename).
+        case uploaded(fileId: String, hash: String?, size: Int64, name: String?)
+        /// Правило «Пропустить»: имя в папке уже занято, файл не отправлялся.
+        case skipped
         case failed(String, UploadErrorKind?)
         case waitingForVolume(String)
         /// Вход без права записи — задача остаётся в очереди до повторного входа.
@@ -54,7 +57,9 @@ struct UploadWorker: Sendable {
             } catch AttemptError.sessionExpired {
                 // Сессия истекла (404/410): новая сессия с нуля. Защита от бесконечного цикла.
                 expiredSessions += 1
-                guard expiredSessions <= 3 else { return .failed(String(localized: "Google Drive doesn’t accept the upload session"), nil) }
+                guard expiredSessions <= 3 else {
+                    return .failed(String(localized: "\(provider.kind.displayName) doesn’t accept the upload session"), nil)
+                }
                 db.resetUploadSession(id: task.id)
                 task.sessionURI = nil
                 task.sessionCreatedAt = nil
@@ -129,12 +134,17 @@ struct UploadWorker: Sendable {
             switch try await provider.uploadState(session: session, task: task) {
             case .incomplete(let next):
                 offset = next
-            case .complete(let fileId, let hash):
-                return .uploaded(fileId: fileId, hash: hash, size: task.fileSize)
+            case .complete(let fileId, let hash, let name):
+                return .uploaded(fileId: fileId, hash: hash, size: task.fileSize, name: name)
             case .expired:
                 throw AttemptError.sessionExpired
             }
         } else {
+            // «Пропустить»: имя могли занять после подготовки пачки — проверка перед новой сессией.
+            if task.conflictPolicy == .skip, task.replaceFileId == nil,
+               try await provider.uploadDestinationExists(task) {
+                return .skipped
+            }
             let session = try await provider.startUploadSession(for: task)
             let created = Int64(Date().timeIntervalSince1970)
             db.saveUploadSession(id: task.id, uri: session, createdAt: created)
@@ -146,8 +156,8 @@ struct UploadWorker: Sendable {
 
         // Пустой файл: один запрос без тела.
         if task.fileSize == 0 {
-            if case .complete(let fileId, let hash) = try await provider.uploadState(session: session, task: task) {
-                return .uploaded(fileId: fileId, hash: hash, size: 0)
+            if case .complete(let fileId, let hash, let name) = try await provider.uploadState(session: session, task: task) {
+                return .uploaded(fileId: fileId, hash: hash, size: 0, name: name)
             }
             throw AttemptError.transient(String(localized: "The server didn’t confirm the empty file upload"))
         }
@@ -179,16 +189,16 @@ struct UploadWorker: Sendable {
                 // Верим серверу: он мог принять меньше, чем мы отправили.
                 offset = next
                 record(&task, confirmed: offset)
-            case .complete(let fileId, let hash):
+            case .complete(let fileId, let hash, let name):
                 try checkSource(task)
-                return .uploaded(fileId: fileId, hash: hash, size: task.fileSize)
+                return .uploaded(fileId: fileId, hash: hash, size: task.fileSize, name: name)
             case .expired:
                 throw AttemptError.sessionExpired
             }
         }
         // Все байты подтверждены, но финальный ответ не получен — спросим состояние.
         switch try await provider.uploadState(session: session, task: task) {
-        case .complete(let fileId, let hash): return .uploaded(fileId: fileId, hash: hash, size: task.fileSize)
+        case .complete(let fileId, let hash, let name): return .uploaded(fileId: fileId, hash: hash, size: task.fileSize, name: name)
         case .expired: throw AttemptError.sessionExpired
         case .incomplete: throw AttemptError.transient(String(localized: "The server didn’t confirm the upload finished"))
         }

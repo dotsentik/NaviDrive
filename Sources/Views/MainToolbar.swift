@@ -92,13 +92,15 @@ struct MainToolbar: ToolbarContent {
     @ToolbarContentBuilder
     private var downloadItems: some ToolbarContent {
         ToolbarItem(id: "downloads.pause", placement: .primaryAction) {
+            let action = model.pauseAllAction
             Button {
                 model.togglePauseAll()
             } label: {
-                Label(model.snapshot.isPaused ? String(localized: "Resume All") : String(localized: "Pause All"),
-                      systemImage: model.snapshot.isPaused ? "play.fill" : "pause.fill")
+                Label(action == .resume ? String(localized: "Resume All") : String(localized: "Pause All"),
+                      systemImage: action == .resume ? "play.fill" : "pause.fill")
             }
-            .help(model.snapshot.isPaused ? String(localized: "Resume All") : String(localized: "Pause All"))
+            .disabled(action == .none)
+            .help(action.help)
         }
         ToolbarItem(id: "downloads.more", placement: .primaryAction) {
             Menu {

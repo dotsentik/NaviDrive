@@ -52,7 +52,7 @@ enum UploadStatus: String, Sendable, CaseIterable, Codable {
 enum UploadErrorKind: String, Sendable {
     /// Размер или дата изменения исходного файла поменялись во время загрузки.
     case sourceChanged = "source_changed"
-    /// MD5 из ответа Google не совпал с локальным.
+    /// Хеш из ответа облака (MD5 Google, content_hash Dropbox) не совпал с локальным.
     case checksumMismatch = "checksum_mismatch"
 
     var restartTitle: String {
@@ -90,6 +90,11 @@ struct UploadTask: Sendable, Identifiable, Hashable {
     var checksum: String?
     var updatedAt: Int64
     var provider: CloudProviderKind = .googleDrive
+    /// Правило для занятого имени, выбранное при постановке в очередь (облако применяет его при фиксации файла).
+    var conflictPolicy: UploadConflictPolicy = .keepBoth
+    /// Папки облака (ID цели загрузки), внутри которых окажется файл: сохраняются в `transfer_folders`
+    /// для общего прогресса у строки папки в браузере. Из базы не читается.
+    var folderIds: [String] = []
 
     var fraction: Double? {
         guard fileSize > 0 else { return status == .completed ? 1 : nil }
@@ -205,12 +210,12 @@ struct UploadTarget: Sendable, Hashable {
 }
 
 /// Что делать с файлами, имя которых уже занято в целевой папке.
-enum UploadConflictPolicy: Sendable {
+enum UploadConflictPolicy: String, Sendable {
     case skip
     /// Новая версия того же файла.
     case replace
     /// Добавить « (1)» к имени.
-    case keepBoth
+    case keepBoth = "keep_both"
 }
 
 struct UploadEnqueueReport: Sendable, Equatable {

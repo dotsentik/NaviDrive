@@ -26,9 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         [.banner, .sound, .list]
     }
 
-    // MARK: - NSServices: «Upload to Google Drive (NaviDrive)»
+    // MARK: - NSServices: «Upload to NaviDrive»
 
-    @objc func uploadToGoogleDrive(_ pasteboard: NSPasteboard, userData: String?,
+    @objc func uploadToNaviDrive(_ pasteboard: NSPasteboard, userData: String?,
                                    error: AutoreleasingUnsafeMutablePointer<NSString?>) {
         var paths: [String] = []
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self],
@@ -43,8 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             error.pointee = String(localized: "No files selected for upload") as NSString
             return
         }
+        let mainWindowWasClosed = !NSApp.windows.contains {
+            $0.identifier?.rawValue.hasPrefix(WindowOpener.mainWindowId) == true && $0.isVisible
+        }
         if AppModel.shared.isSignedIn { WindowOpener.showMainWindow() }
-        AppModel.shared.upload(paths: paths)
+        AppModel.shared.upload(paths: paths, mainWindowWasClosed: mainWindowWasClosed)
     }
 }
 

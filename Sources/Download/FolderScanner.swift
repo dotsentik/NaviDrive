@@ -11,8 +11,10 @@ struct FolderScanner: Sendable {
     let provider: any CloudProvider
     let scheduler: DownloadScheduler
 
-    /// - Parameter folder: уже разрешённая папка (не ярлык).
-    func scan(_ folder: CloudItem, into destinationDir: String) async -> EnqueueReport {
+    /// - Parameters:
+    ///   - folder: уже разрешённая папка (не ярлык).
+    ///   - ancestorIds: папки облака над `folder` — для общего прогресса у строк папок в браузере.
+    func scan(_ folder: CloudItem, into destinationDir: String, ancestorIds: [String] = []) async -> EnqueueReport {
         var report = EnqueueReport()
         let rootDir = (destinationDir as NSString).appendingPathComponent(PathResolver.sanitize(folder.name))
         /// Локальная папка для каждой папки облака; нет записи — папка (и её поддерево) пропускается.
@@ -21,6 +23,8 @@ struct FolderScanner: Sendable {
         var prepared: Set<String> = []
         /// Занятые имена в каждой папке (страниц у папки может быть несколько).
         var usedNames: [String: Set<String>] = [:]
+        /// Цепочка папок облака от корня обхода (и выше) до каждой папки.
+        var chains: [String: [String]] = [folder.targetId: ancestorIds + [folder.targetId]]
 
         for await event in provider.traverse(folder, resolvingAliases: true) {
             if Task.isCancelled { break }
@@ -40,6 +44,7 @@ struct FolderScanner: Sendable {
                     if item.isFolder {
                         let name = PathResolver.uniqueName(PathResolver.sanitize(item.name), used: &used)
                         dirs[item.targetId] = (dir as NSString).appendingPathComponent(name)
+                        chains[item.targetId] = (chains[folderId] ?? [folderId]) + [item.targetId]
                     } else if item.isDownloadable {
                         let name = PathResolver.uniqueName(item.localFileName, used: &used)
                         do {
@@ -48,7 +53,9 @@ struct FolderScanner: Sendable {
                             await fail(error.localizedDescription, into: &report)
                             continue
                         }
-                        batch.append(.make(from: item, fileName: name, targetDir: dir))
+                        var task = DownloadTask.make(from: item, fileName: name, targetDir: dir)
+                        task.folderIds = chains[folderId] ?? [folderId]
+                        batch.append(task)
                     } else {
                         report.unsupported += 1
                     }

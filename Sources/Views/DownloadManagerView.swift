@@ -35,7 +35,7 @@ struct DownloadManagerView: View {
 
     private var summary: some View {
         HStack(alignment: .center, spacing: 24) {
-            stat("Speed", model.snapshot.isPaused ? String(localized: "Paused") : Format.speed(model.snapshot.bytesPerSecond))
+            stat("Speed", model.downloadSpeedText)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Threads (limit \(model.snapshot.userLimit))").font(.caption).foregroundStyle(.secondary)
                 Text(model.threadsSummary).font(.headline).monospacedDigit()
@@ -117,18 +117,17 @@ struct DownloadManagerView: View {
         return List {
             ForEach(kinds) { kind in
                 let rows = model.sections[kind] ?? []
+                // Строки и счётчики — из одного снимка состояния: число в заголовке совпадает со строками
+                // (кроме секций длиннее предела загрузки, где строки показываются первыми N).
                 let total = max(sectionCount(kind), rows.count)
-                if total > 0 {
+                if !rows.isEmpty {
                     Section {
                         // Ленивая отрисовка; Equatable — строка перерисовывается, только если изменились её данные.
                         ForEach(rows) { task in
                             DownloadTaskRow(task: task, liveBytes: model.snapshot.liveProgress[task.id],
-                                            verifyBytes: model.snapshot.verificationProgress[task.id])
+                                            verifyBytes: model.snapshot.verificationProgress[task.id],
+                                            isConnecting: model.snapshot.connecting.contains(task.id))
                                 .equatable()
-                        }
-                        if total > rows.count {
-                            Text("…and \(total - rows.count) more")
-                                .font(.caption).foregroundStyle(.secondary)
                         }
                     } header: {
                         sectionHeader(kind, total: total)
@@ -138,7 +137,7 @@ struct DownloadManagerView: View {
         }
         .listStyle(.inset)
         .overlay {
-            if kinds.allSatisfy({ (model.sections[$0] ?? []).isEmpty && sectionCount($0) == 0 }) {
+            if kinds.allSatisfy({ (model.sections[$0] ?? []).isEmpty }) {
                 ContentUnavailableView("No Tasks", systemImage: "tray",
                                        description: Text("Download files using the context menu in My Drive."))
             }
@@ -156,7 +155,12 @@ struct DownloadManagerView: View {
             Spacer()
             switch kind {
             case .paused:
-                Button("Resume All") { model.resumeAllPaused() }.buttonStyle(.link)
+                if model.totals.pausedAllCount > 0 {
+                    Text("All paused").foregroundStyle(.secondary)
+                }
+                Button("Resume All") { model.resumeAllPaused() }
+                    .buttonStyle(.link)
+                    .help("Resumes every paused file, including files paused individually")
             case .failed:
                 Button("Retry All") { model.retryFailed() }.buttonStyle(.link)
             case .completed:
@@ -181,10 +185,13 @@ private struct DownloadTaskRow: View, Equatable {
     let liveBytes: Int64?
     /// Прочитано байт при проверке MD5.
     let verifyBytes: Int64?
+    /// Поток запущен, первые байты ещё не пришли.
+    let isConnecting: Bool
     @State private var confirmCancel = false
 
     nonisolated static func == (lhs: DownloadTaskRow, rhs: DownloadTaskRow) -> Bool {
         lhs.task == rhs.task && lhs.liveBytes == rhs.liveBytes && lhs.verifyBytes == rhs.verifyBytes
+            && lhs.isConnecting == rhs.isConnecting
     }
 
     private var downloaded: Int64 { liveBytes ?? task.downloadedSize }
@@ -221,7 +228,7 @@ private struct DownloadTaskRow: View, Equatable {
                                   ? String(localized: "content_hash matches the Dropbox checksum")
                                   : String(localized: "MD5 matches the Google Drive checksum"))
                     }
-                    if task.retryCount > 0 && ![.completed, .paused].contains(task.status) {
+                    if task.retryCount > 0 && ![.completed, .paused, .pausedAll].contains(task.status) {
                         Text("Retries: \(task.retryCount)")
                     }
                 }
@@ -232,7 +239,7 @@ private struct DownloadTaskRow: View, Equatable {
                         .font(.caption).foregroundStyle(.orange)
                 }
                 // Причина ожидания или ошибки: «Внешний диск «T7A» не подключён…», «Ожидание интернета…», текст ошибки.
-                if let error = task.lastError, ![.completed, .paused].contains(task.status) {
+                if let error = task.lastError, ![.completed, .paused, .pausedAll].contains(task.status) {
                     Text(error).font(.caption).foregroundStyle(task.status == .failed ? .red : .orange).lineLimit(2)
                 }
             }
@@ -243,7 +250,7 @@ private struct DownloadTaskRow: View, Equatable {
                 switch task.status {
                 case .downloading, .queued, .waitingForNetwork, .waitingForVolume, .waitingForSpace:
                     iconButton("pause.fill", "Pause") { model.pause(task) }
-                case .paused, .cancelled, .waitingForQuota:
+                case .paused, .pausedAll, .cancelled, .waitingForQuota:
                     iconButton("play.fill", "Resume") { model.resume(task) }
                 case .failed:
                     iconButton("arrow.clockwise", "Retry") { model.resume(task) }
@@ -262,7 +269,7 @@ private struct DownloadTaskRow: View, Equatable {
             if [.downloading, .queued, .waitingForNetwork, .waitingForVolume, .waitingForSpace].contains(task.status) {
                 Button("Pause") { model.pause(task) }
             }
-            if [.paused, .cancelled, .waitingForQuota].contains(task.status) { Button("Resume") { model.resume(task) } }
+            if [.paused, .pausedAll, .cancelled, .waitingForQuota].contains(task.status) { Button("Resume") { model.resume(task) } }
             if task.status == .failed { Button("Retry") { model.resume(task) } }
             if canCancel {
                 Divider()
@@ -291,7 +298,7 @@ private struct DownloadTaskRow: View, Equatable {
             }
         case .downloading:
             if let fraction { ProgressView(value: fraction) } else { ProgressView().progressViewStyle(.linear) }
-        case .paused, .queued, .waitingForNetwork, .waitingForVolume, .waitingForSpace, .waitingForQuota, .failed:
+        case .paused, .pausedAll, .queued, .waitingForNetwork, .waitingForVolume, .waitingForSpace, .waitingForQuota, .failed:
             // Серый прогресс — сколько уже лежит в .gdrive.part.
             if downloaded > 0, let fraction { ProgressView(value: fraction).tint(.gray) }
         case .completed, .cancelled:
@@ -301,7 +308,7 @@ private struct DownloadTaskRow: View, Equatable {
 
     /// «На паузе · 160 МБ из 2,89 ГБ · 5,4%»
     private var statusLine: String {
-        var parts = [task.status.title]
+        var parts = [task.status == .downloading && isConnecting ? String(localized: "Connecting…") : task.status.title]
         if task.expectedSize > 0, task.status != .completed || downloaded > 0 {
             parts.append(String(localized: "\(Format.bytes(downloaded)) of \(Format.bytes(task.expectedSize))"))
             if let fraction, task.status != .completed { parts.append(Format.percent(fraction)) }

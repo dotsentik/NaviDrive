@@ -163,6 +163,21 @@ final class DatabaseManager: @unchecked Sendable {
         if try keyColumnCount("upload_tasks") == 1 {
             try rebuild("upload_tasks", schema: Self.uploadTasksSchema, columns: Self.uploadTasksColumns)
         }
+        // v8: правило конфликта имён у задачи отправки (Dropbox применяет его при upload_session/finish).
+        if try !storedColumns("upload_tasks").contains("conflict_policy") {
+            try execute("ALTER TABLE upload_tasks ADD COLUMN conflict_policy TEXT NOT NULL DEFAULT '\(UploadConflictPolicy.keepBoth.rawValue)';")
+        }
+        // v9: папки облака, внутри которых лежит файл задачи (kind 'd' — скачивание, 'u' — отправка).
+        // По ним браузер показывает общий прогресс у строки папки. Строки удаляются вместе с задачей.
+        try execute("""
+            CREATE TABLE IF NOT EXISTS transfer_folders (
+                kind TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                folder_id TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                PRIMARY KEY (kind, provider, folder_id, task_id)
+            ) WITHOUT ROWID;
+            """)
         if try keyColumnCount("custom_routes") == 1 {
             try rebuild("custom_routes", schema: Self.customRoutesSchema, columns: Self.customRoutesColumns)
         }
@@ -186,6 +201,20 @@ final class DatabaseManager: @unchecked Sendable {
         try execute("CREATE INDEX IF NOT EXISTS idx_uploads_status ON upload_tasks(status, priority);")
         try execute("CREATE INDEX IF NOT EXISTS idx_uploads_status_updated ON upload_tasks(status, updated_at);")
         try execute("CREATE INDEX IF NOT EXISTS idx_uploads_local ON upload_tasks(local_path, parent_drive_id);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_file ON download_tasks(provider, drive_file_id);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_uploads_parent ON upload_tasks(provider, parent_drive_id);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_transfer_folders_task ON transfer_folders(kind, provider, task_id);")
+        // Триггеры — после пересборок таблиц (пересборка удаляет и их).
+        try execute("""
+            CREATE TRIGGER IF NOT EXISTS trg_download_tasks_folders AFTER DELETE ON download_tasks BEGIN
+                DELETE FROM transfer_folders WHERE kind = 'd' AND provider = old.provider AND task_id = old.id;
+            END;
+            """)
+        try execute("""
+            CREATE TRIGGER IF NOT EXISTS trg_upload_tasks_folders AFTER DELETE ON upload_tasks BEGIN
+                DELETE FROM transfer_folders WHERE kind = 'u' AND provider = old.provider AND task_id = old.id;
+            END;
+            """)
     }
 
     // MARK: - v6: первичный ключ (provider, id)
@@ -259,6 +288,7 @@ final class DatabaseManager: @unchecked Sendable {
         error_kind TEXT,
         priority INTEGER NOT NULL DEFAULT 0,
         provider TEXT NOT NULL DEFAULT 'googleDrive',
+        conflict_policy TEXT NOT NULL DEFAULT 'keep_both',
         PRIMARY KEY (provider, id)
         """
 
@@ -573,6 +603,7 @@ final class DatabaseManager: @unchecked Sendable {
                 sqlite3_bind_text(statement, 15, task.provider.rawValue, -1, transient)
                 if let path = task.cloudPath { sqlite3_bind_text(statement, 16, path, -1, transient) } else { sqlite3_bind_null(statement, 16) }
                 guard sqlite3_step(statement) == SQLITE_DONE else { throw DatabaseError.step(errorMessage) }
+                try insertTransferFolders(kind: "d", provider: task.provider, taskId: task.id, folderIds: task.folderIds)
             }
             try execute("COMMIT;")
         } catch {
@@ -665,10 +696,24 @@ final class DatabaseManager: @unchecked Sendable {
             """, [.int(Self.now), .text(id)])
     }
 
-    /// «Возобновить все»: вручную приостановленные файлы тоже возвращаются в очередь (с приоритетом).
+    /// «Возобновить все» в секции «На паузе»: и вручную приостановленные, и после общей паузы (с приоритетом).
     @discardableResult
     func resumeAllPaused() -> Int {
-        (try? run("UPDATE download_tasks SET status = 'queued', priority = 1, updated_at = ? WHERE status = 'paused'",
+        (try? run("UPDATE download_tasks SET status = 'queued', priority = 1, last_error = NULL, updated_at = ? WHERE status IN ('paused', 'paused_all')",
+                  [.int(Self.now)])) ?? 0
+    }
+
+    /// Общая пауза: идущие и ожидающие задачи → paused_all одной операцией.
+    func pauseAll() {
+        let from = TaskStatus.pausable.map { "'\($0.rawValue)'" }.joined(separator: ", ")
+        _ = try? run("UPDATE download_tasks SET status = 'paused_all', last_error = NULL, updated_at = ? WHERE status IN (\(from))",
+                     [.int(Self.now)])
+    }
+
+    /// Снять общую паузу: только задачи paused_all, в прежнем порядке очереди; вручную приостановленные остаются.
+    @discardableResult
+    func resumePausedAll() -> Int {
+        (try? run("UPDATE download_tasks SET status = 'queued', updated_at = ? WHERE status = 'paused_all'",
                   [.int(Self.now)])) ?? 0
     }
 
@@ -802,7 +847,7 @@ final class DatabaseManager: @unchecked Sendable {
             SELECT \(Self.volumeRootSQL) AS root,
                 SUM(MAX(expected_size - downloaded_size, 0)), SUM(status = 'downloading')
             FROM download_tasks
-            WHERE status IN ('queued', 'downloading', 'paused', 'waiting_for_volume', 'waiting_for_network',
+            WHERE status IN ('queued', 'downloading', 'paused', 'paused_all', 'waiting_for_volume', 'waiting_for_network',
                              'waiting_for_quota', 'waiting_for_space')
             GROUP BY root
             """, reader: true) { s in
@@ -930,7 +975,7 @@ extension DatabaseManager {
     private static let uploadColumns = """
         id, local_path, file_name, file_size, local_modified_at, parent_drive_id, parent_name, shared_drive_id,
         replace_file_id, session_uri, session_created_at, uploaded_bytes, status, retry_count, last_error,
-        error_kind, drive_file_id, md5_checksum, updated_at, provider
+        error_kind, drive_file_id, md5_checksum, updated_at, provider, conflict_policy
         """
 
     private static func upload(_ s: OpaquePointer) -> UploadTask {
@@ -942,7 +987,8 @@ extension DatabaseManager {
             uploadedBytes: sqlite3_column_int64(s, 11), status: UploadStatus(rawValue: text(s, 12) ?? "") ?? .failed,
             retryCount: Int(sqlite3_column_int64(s, 13)), lastError: text(s, 14),
             errorKind: text(s, 15).flatMap(UploadErrorKind.init(rawValue:)), driveFileId: text(s, 16),
-            checksum: text(s, 17), updatedAt: sqlite3_column_int64(s, 18), provider: provider(s, 19))
+            checksum: text(s, 17), updatedAt: sqlite3_column_int64(s, 18), provider: provider(s, 19),
+            conflictPolicy: text(s, 20).flatMap(UploadConflictPolicy.init(rawValue:)) ?? .keepBoth)
     }
 
     /// Пакетная постановка в очередь одной транзакцией. Файл, который уже ждёт отправки
@@ -961,12 +1007,14 @@ extension DatabaseManager {
                 if !exists.isEmpty { duplicates += 1; continue }
                 try run("""
                     INSERT INTO upload_tasks (id, local_path, file_name, file_size, local_modified_at, parent_drive_id,
-                        parent_name, shared_drive_id, replace_file_id, uploaded_bytes, status, updated_at, provider)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'queued', ?, ?)
+                        parent_name, shared_drive_id, replace_file_id, uploaded_bytes, status, updated_at, provider,
+                        conflict_policy)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'queued', ?, ?, ?)
                     """, [.text(task.id), .text(task.localPath), .text(task.fileName), .int(task.fileSize),
                           .int(task.localModifiedAt), .text(task.parentDriveId), .text(task.parentName),
                           .text(task.sharedDriveId), .text(task.replaceFileId), .int(Self.now),
-                          .text(task.provider.rawValue)])
+                          .text(task.provider.rawValue), .text(task.conflictPolicy.rawValue)])
+                try insertTransferFolders(kind: "u", provider: task.provider, taskId: task.id, folderIds: task.folderIds)
                 added += 1
             }
             try execute("COMMIT;")
@@ -1038,11 +1086,12 @@ extension DatabaseManager {
     }
 
     /// Сервер принял файл целиком; дальше — сверка хеша.
-    func markUploadTransferred(id: String, driveFileId: String, checksum: String?, size: Int64) {
+    /// `fileName` — имя, под которым облако сохранило файл (nil — без изменений).
+    func markUploadTransferred(id: String, driveFileId: String, checksum: String?, size: Int64, fileName: String? = nil) {
         _ = try? run("""
             UPDATE upload_tasks SET status = 'verifying', drive_file_id = ?, md5_checksum = ?, uploaded_bytes = ?,
-                session_uri = NULL, last_error = NULL, updated_at = ? WHERE id = ?
-            """, [.text(driveFileId), .text(checksum), .int(size), .int(Self.now), .text(id)])
+                file_name = COALESCE(?, file_name), session_uri = NULL, last_error = NULL, updated_at = ? WHERE id = ?
+            """, [.text(driveFileId), .text(checksum), .int(size), .text(fileName), .int(Self.now), .text(id)])
     }
 
     func markUploadCompleted(id: String) {
@@ -1141,5 +1190,102 @@ extension DatabaseManager {
         let filter = Self.localPathFilter(volumeRoot)
         _ = try? run("UPDATE upload_tasks SET status = 'queued', last_error = NULL, updated_at = ? WHERE status = 'waiting_for_volume' AND \(filter.sql)",
                      [.int(Self.now)] + filter.values)
+    }
+}
+
+
+// MARK: - Индикаторы передач в браузере облака
+
+/// Общий прогресс передач внутри папки облака.
+struct TransferAggregate: Sendable, Equatable {
+    var total = 0
+    var running = 0
+    var queued = 0
+    var paused = 0
+    var failed = 0
+    var waiting = 0
+    var bytes: Int64 = 0
+    var doneBytes: Int64 = 0
+    var firstError: String?
+}
+
+extension DatabaseManager {
+    /// Вызывается внутри транзакции вставки задач.
+    fileprivate func insertTransferFolders(kind: String, provider: CloudProviderKind, taskId: String, folderIds: [String]) throws {
+        for folderId in Set(folderIds) where !folderId.isEmpty || provider == .dropbox {
+            try run("INSERT OR IGNORE INTO transfer_folders (kind, provider, folder_id, task_id) VALUES (?, ?, ?, ?)",
+                    [.text(kind), .text(provider.rawValue), .text(folderId), .text(taskId)])
+        }
+    }
+
+    private static func placeholders(_ count: Int) -> String {
+        Array(repeating: "?", count: count).joined(separator: ",")
+    }
+
+    /// Незавершённые задачи скачивания для файлов `fileIds` (ID в облаке).
+    func activeDownloads(provider: CloudProviderKind, fileIds: [String]) -> [DownloadTask] {
+        guard !fileIds.isEmpty else { return [] }
+        var result: [DownloadTask] = []
+        for chunk in stride(from: 0, to: fileIds.count, by: 500).map({ Array(fileIds[$0..<min($0 + 500, fileIds.count)]) }) {
+            result += (try? query("""
+                SELECT \(Self.taskColumns) FROM download_tasks
+                WHERE provider = ? AND drive_file_id IN (\(Self.placeholders(chunk.count)))
+                    AND status NOT IN ('completed', 'cancelled')
+                """, [.text(provider.rawValue)] + chunk.map { .text($0) }, reader: true, map: Self.task)) ?? []
+        }
+        return result
+    }
+
+    /// Отправки в папку `parentId`: незавершённые и завершённые за последние `recentSeconds` секунд
+    /// (строка-заглушка держится, пока обновлённый список папки не покажет настоящий файл).
+    func uploadsInFolder(provider: CloudProviderKind, parentId: String, recentSeconds: Int64 = 120) -> [UploadTask] {
+        (try? query("""
+            SELECT \(Self.uploadColumns) FROM upload_tasks
+            WHERE provider = ? AND parent_drive_id = ?
+                AND (status NOT IN ('completed', 'cancelled') OR (status = 'completed' AND updated_at >= ?))
+            ORDER BY rowid
+            """, [.text(provider.rawValue), .text(parentId), .int(Self.now - recentSeconds)], reader: true,
+            map: Self.upload)) ?? []
+    }
+
+    /// Общий прогресс незавершённых передач внутри папок `folderIds` (kind 'd' или 'u').
+    func transferAggregates(kind: String, provider: CloudProviderKind, folderIds: [String]) -> [String: TransferAggregate] {
+        guard !folderIds.isEmpty else { return [:] }
+        let isDownload = kind == "d"
+        let table = isDownload ? "download_tasks" : "upload_tasks"
+        let size = isDownload ? "t.expected_size" : "t.file_size"
+        let done = isDownload ? "MIN(t.downloaded_size, t.expected_size)" : "MIN(t.uploaded_bytes, t.file_size)"
+        let runningStatuses = isDownload ? "'downloading', 'verifying'" : "'uploading', 'verifying'"
+        let pausedStatuses = isDownload ? "'paused', 'paused_all'" : "'paused'"
+        var result: [String: TransferAggregate] = [:]
+        for chunk in stride(from: 0, to: folderIds.count, by: 500).map({ Array(folderIds[$0..<min($0 + 500, folderIds.count)]) }) {
+            let rows = (try? query("""
+                SELECT f.folder_id, COUNT(*), SUM(t.status IN (\(runningStatuses))), SUM(t.status = 'queued'),
+                    SUM(t.status IN (\(pausedStatuses))), SUM(t.status = 'failed'), SUM(t.status LIKE 'waiting%'),
+                    SUM(\(size)), SUM(\(done)), MAX(CASE WHEN t.status = 'failed' THEN t.last_error END)
+                FROM transfer_folders f JOIN \(table) t ON t.provider = f.provider AND t.id = f.task_id
+                WHERE f.kind = ? AND f.provider = ? AND f.folder_id IN (\(Self.placeholders(chunk.count)))
+                    AND t.status NOT IN ('completed', 'cancelled')
+                GROUP BY f.folder_id
+                """, [.text(kind), .text(provider.rawValue)] + chunk.map { .text($0) }, reader: true) { s in
+                (Self.text(s, 0) ?? "", TransferAggregate(
+                    total: Int(sqlite3_column_int64(s, 1)), running: Int(sqlite3_column_int64(s, 2)),
+                    queued: Int(sqlite3_column_int64(s, 3)), paused: Int(sqlite3_column_int64(s, 4)),
+                    failed: Int(sqlite3_column_int64(s, 5)), waiting: Int(sqlite3_column_int64(s, 6)),
+                    bytes: sqlite3_column_int64(s, 7), doneBytes: sqlite3_column_int64(s, 8),
+                    firstError: Self.text(s, 9)))
+            }) ?? []
+            for (id, aggregate) in rows { result[id] = aggregate }
+        }
+        return result
+    }
+
+    /// ID незавершённых задач внутри папки (пауза / продолжение / отмена из контекстного меню папки).
+    func transferTaskIds(kind: String, provider: CloudProviderKind, folderId: String) -> [String] {
+        let table = kind == "d" ? "download_tasks" : "upload_tasks"
+        return (try? query("""
+            SELECT t.id FROM transfer_folders f JOIN \(table) t ON t.provider = f.provider AND t.id = f.task_id
+            WHERE f.kind = ? AND f.provider = ? AND f.folder_id = ? AND t.status NOT IN ('completed', 'cancelled')
+            """, [.text(kind), .text(provider.rawValue), .text(folderId)], reader: true) { s in Self.text(s, 0) ?? "" }) ?? []
     }
 }

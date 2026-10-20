@@ -303,6 +303,25 @@ final class DropboxProvider: CloudProvider {
     /// У Dropbox нет отмены сессии: незавершённая сессия истекает сама.
     func cancelUploadSession(_ session: String) async {}
 
+    /// «Сохранить оба» — mode add + autorename при upload_session/finish.
+    var autorenamesOnConflict: Bool { true }
+    /// Пути Dropbox не различают регистр.
+    var caseInsensitiveNames: Bool { true }
+
+    /// «Пропустить»: /2/files/get_metadata по пути назначения до начала загрузки.
+    func uploadDestinationExists(_ task: UploadTask) async throws -> Bool {
+        do {
+            _ = try await metadata(path: Self.destinationPath(task))
+            return true
+        } catch CloudAPIError.http(404, _, _) {
+            return false
+        }
+    }
+
+    private static func destinationPath(_ task: UploadTask) -> String {
+        join(task.parentDriveId, task.fileName)
+    }
+
     private func append(_ data: Data, at offset: Int64, session: String,
                         delegate: (any URLSessionTaskDelegate)?) async throws -> CloudUploadState {
         let argument: [String: Any] = ["cursor": ["session_id": session, "offset": offset], "close": false]
@@ -315,13 +334,14 @@ final class DropboxProvider: CloudProvider {
 
     private func finish(_ data: Data, at offset: Int64, session: String, task: UploadTask,
                         delegate: (any URLSessionTaskDelegate)?) async throws -> CloudUploadState {
-        let parent = task.parentDriveId == "/" ? "" : task.parentDriveId
+        // «Заменить» — перезапись (новая версия того же файла), «Сохранить оба» — add + autorename,
+        // «Пропустить» — add без autorename: файл, появившийся во время загрузки, не перезаписывается.
+        let replace = task.replaceFileId != nil || task.conflictPolicy == .replace
         let argument: [String: Any] = [
             "cursor": ["session_id": session, "offset": offset],
-            "commit": ["path": parent + "/" + task.fileName,
-                       // Новая версия существующего файла — перезапись, иначе — только новый файл.
-                       "mode": task.replaceFileId == nil ? "add" : "overwrite",
-                       "autorename": false, "mute": false],
+            "commit": ["path": Self.destinationPath(task),
+                       "mode": replace ? "overwrite" : "add",
+                       "autorename": !replace && task.conflictPolicy == .keepBoth, "mute": false],
         ]
         let (body, http, token) = try await api.upload("/files/upload_session/finish", argument: argument,
                                                        body: data, delegate: delegate)
@@ -329,7 +349,7 @@ final class DropboxProvider: CloudProvider {
             guard let entry = try? JSONDecoder().decode(DropboxEntry.self, from: body), let id = entry.id else {
                 throw CloudAPIError.invalidResponse
             }
-            return .complete(fileId: id, hash: entry.content_hash)
+            return .complete(fileId: id, hash: entry.content_hash, name: entry.name == task.fileName ? nil : entry.name)
         }
         if let state = sessionState(http, data: body) { return state }
         throw uploadError(http, data: body, token: token)
@@ -362,6 +382,8 @@ final class DropboxProvider: CloudProvider {
             return CloudTransferError.fatal(String(localized: "Dropbox is out of storage"))
         case 409 where summary.contains("no_write_permission"):
             return CloudTransferError.fatal(String(localized: "You don’t have permission to upload to this folder"))
+        case 409 where summary.contains("conflict"):
+            return CloudTransferError.fatal(String(localized: "A file with this name already exists in the folder"))
         case 500, 502, 503, 504:
             return CloudTransferError.transient(String(localized: "Dropbox server is temporarily unavailable (HTTP \(http.statusCode))"))
         default:

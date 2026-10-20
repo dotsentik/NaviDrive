@@ -5,6 +5,11 @@ struct NaviDriveApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel.shared
 
+    init() {
+        // До создания окна: сохранённая ширина sidebar шире предела (320) — к пределу.
+        SidebarWidth.clampSavedWidth()
+    }
+
     var body: some Scene {
         // Главное окно — только при сохранённом входе; без него при запуске открывается окно приветствия.
         // Восстановление окон отключено: какое окно показать, решает только наличие входа.

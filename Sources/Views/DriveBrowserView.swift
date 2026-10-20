@@ -50,6 +50,8 @@ struct DriveBrowserView: View {
     @State private var moveCandidates: [CloudItem] = []
     @State private var showMovePicker = false
     @State private var isDropTargeted = false
+    @State private var downloadCancelCandidates: [TransferSubject] = []
+    @State private var confirmDownloadCancel = false
 
     var body: some View {
         Group {
@@ -84,7 +86,7 @@ struct DriveBrowserView: View {
                 .dropDestination(for: URL.self) { urls, _ in
                     let files = urls.filter(\.isFileURL)
                     guard let target = uploadTarget, !files.isEmpty else { return false }
-                    model.startUpload(files, to: target)
+                    model.startUpload(files, to: target, ancestorIds: uploadAncestorIds)
                     return true
                 } isTargeted: { targeted in
                     isDropTargeted = targeted && uploadTarget != nil
@@ -102,14 +104,27 @@ struct DriveBrowserView: View {
                 .accessibilityHidden(true)
         }
         .confirmationDialog(trashTitle, isPresented: $confirmTrash) {
-            Button("Move to Trash", role: .destructive) { trash(trashCandidates) }
+            if deletesPermanently {
+                Button("Delete", role: .destructive) { trash(trashCandidates) }
+            } else {
+                Button("Move to Trash", role: .destructive) { trash(trashCandidates) }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
-            if model.activeCloud == .dropbox {
-                Text("Deleted items can be restored in Dropbox under Deleted files.")
+            if deletesPermanently {
+                Text("Deleted items can be restored on the Dropbox website (Deleted files) during your plan’s file recovery period.")
             } else {
                 Text("Items can be restored from the Google Drive trash within 30 days.")
             }
+        }
+        // Отмена скачивания удаляет уже скачанную часть — как в «Менеджере загрузок», с подтверждением.
+        .confirmationDialog("Cancel the download?", isPresented: $confirmDownloadCancel) {
+            Button("Cancel Download", role: .destructive) {
+                downloadCancelCandidates.forEach { model.cancelTransfer($0) }
+            }
+            Button("Don’t Cancel", role: .cancel) {}
+        } message: {
+            Text("The part already downloaded will be deleted. To continue later, use Pause.")
         }
         .sheet(isPresented: $showMovePicker) {
             FolderPickerSheet(title: moveTitle, actionTitle: String(localized: "Move"),
@@ -142,7 +157,15 @@ struct DriveBrowserView: View {
         .onChange(of: model.linkedItems) {
             if isLinkedRoot { reload(resetting: false) }
         }
-        .onDisappear { cancelLoading() }
+        // Индикаторы передач: модель читает очереди для строк текущей папки.
+        .onChange(of: items, initial: true) { publishTransferContext() }
+        .onChange(of: stack) { publishTransferContext() }
+        // Отправленный файл уже в облаке или созданы папки — список папки обновляется тихо, без мерцания.
+        .onChange(of: model.browserListingStaleToken) { if !isLoading { refresh() } }
+        .onDisappear {
+            cancelLoading()
+            model.browserTransferContext = nil
+        }
     }
 
     // MARK: - Subviews
@@ -190,6 +213,10 @@ struct DriveBrowserView: View {
                     } else {
                         Text(item.name).lineLimit(1)
                     }
+                    if let indicator = model.browserTransfers.indicators[item.id] {
+                        TransferIndicatorView(indicator: indicator)
+                            .transition(.opacity)
+                    }
                     if item.isAlias {
                         Image(systemName: "arrow.turn.up.right")
                             .font(.caption)
@@ -223,7 +250,7 @@ struct DriveBrowserView: View {
             contextMenu(for: items(for: ids))
         } primaryAction: { ids in
             let selected = items(for: ids)
-            if selected.count == 1, let folder = selected.first, folder.isFolder {
+            if selected.count == 1, let folder = selected.first, folder.isFolder, !isUploading(folder) {
                 open(folder)
             }
         }
@@ -260,22 +287,30 @@ struct DriveBrowserView: View {
 
     @ViewBuilder
     private func contextMenu(for selected: [CloudItem]) -> some View {
-        if selected.isEmpty, let target = uploadTarget {
-            // Пустое место списка: действия с текущей папкой.
+        if selected.isEmpty, uploadTarget != nil || !stack.isEmpty {
+            // Пустое место списка: действия с текущей папкой (в папке только для чтения — неактивны).
             Button("New Folder") { createFolder() }
-            Button("Upload…") { model.chooseFilesToUpload(into: target) }
+                .disabled(uploadTarget == nil)
+            Button("Upload…") { if let target = uploadTarget { model.chooseFilesToUpload(into: target, ancestorIds: uploadAncestorIds) } }
+                .disabled(uploadTarget == nil)
         }
         if !selected.isEmpty {
+            transferMenu(for: selected)
+            // Загружаемый файл нельзя открыть, скачать, переименовать или переместить.
+            let uploading = selected.contains(where: isUploading)
             // Неподдерживаемые объекты не отбрасываются молча: итог покажет баннер в «Менеджере загрузок».
             Button("Download to Default Folder") {
                 model.downloadToDefault(selected, ancestors: stack)
             }
+            .disabled(uploading)
             Button("Download to Custom Folder / External SSD…") {
                 model.downloadToCustom(selected, ancestors: stack)
             }
+            .disabled(uploading)
             Button("Set Permanent Custom Location…") {
                 model.setPermanentRoute(selected)
             }
+            .disabled(uploading)
             if selected.count == 1, let item = selected.first, let route = model.route(for: item) {
                 Button("Remove Custom Location") { model.deleteRoute(route) }
             }
@@ -283,22 +318,26 @@ struct DriveBrowserView: View {
             Button("Show in Finder") {
                 if let first = selected.first { model.revealInFinder(first, ancestors: stack) }
             }
+            .disabled(selected.contains { AppModel.isUploadPlaceholder($0.id) })
             Divider()
-            if uploadTarget != nil {
+            if uploadTarget != nil || !stack.isEmpty {
                 Button("New Folder") { createFolder() }
+                    .disabled(uploadTarget == nil)
             }
             Button("Rename") {
                 if let item = selected.first { beginRename(item) }
             }
-            .disabled(selected.count != 1 || !(selected.first?.canRename ?? false))
+            .disabled(selected.count != 1 || !(selected.first?.canRename ?? false) || uploading)
             Button("Move To…") {
                 moveCandidates = selected
                 showMovePicker = true
             }
-            .disabled(!selected.allSatisfy(\.canMove))
-            Button("Move to Trash…") {
+            .disabled(!selected.allSatisfy(\.canMove) || uploading)
+            Button {
                 trashCandidates = selected
                 confirmTrash = true
+            } label: {
+                if model.activeCloud == .dropbox { Text("Delete…") } else { Text("Move to Trash…") }
             }
             .disabled(!selected.allSatisfy(\.canTrash))
             if isLinkedRoot {
@@ -310,8 +349,66 @@ struct DriveBrowserView: View {
             if selected.count == 1, let folder = selected.first, folder.isFolder {
                 Divider()
                 Button("Open") { open(folder) }
+                    .disabled(uploading)
             }
         }
+    }
+
+    /// «Пауза»/«Продолжить», «Отменить», «Показать в …» для строк с идущей передачей.
+    @ViewBuilder
+    private func transferMenu(for selected: [CloudItem]) -> some View {
+        let indicators = selected.compactMap { model.browserTransfers.indicators[$0.id] }
+        if !indicators.isEmpty {
+            if indicators.contains(where: \.canPause) {
+                Button("Pause") { indicators.filter(\.canPause).forEach { model.pauseTransfer($0.subject) } }
+            }
+            if indicators.contains(where: \.canResume) {
+                Button("Resume") { indicators.filter(\.canResume).forEach { model.resumeTransfer($0.subject) } }
+            }
+            let uploads = indicators.filter(\.isUpload)
+            let downloads = indicators.filter { !$0.isUpload }
+            if !uploads.isEmpty {
+                Button("Cancel Upload") { uploads.forEach { model.cancelTransfer($0.subject) } }
+            }
+            if !downloads.isEmpty {
+                Button("Cancel Download…") {
+                    downloadCancelCandidates = downloads.map(\.subject)
+                    confirmDownloadCancel = true
+                }
+            }
+            if let first = uploads.first {
+                Button("Show in Uploads") { model.showTransferManager(first.subject) }
+            }
+            if let first = downloads.first {
+                Button("Show in Download Manager") { model.showTransferManager(first.subject) }
+            }
+            Divider()
+        }
+    }
+
+    /// Файл ещё отправляется (строка-заглушка или замена существующего файла).
+    private func isUploading(_ item: CloudItem) -> Bool {
+        if AppModel.isUploadPlaceholder(item.id) { return true }
+        guard let indicator = model.browserTransfers.indicators[item.id], indicator.isUpload else { return false }
+        return !item.isFolder
+    }
+
+    /// Папки над целью загрузки (ID цели) — для общего прогресса у строк папок.
+    private var uploadAncestorIds: [String] {
+        stack.dropLast().map { model.provider.uploadTarget(for: $0).id }
+    }
+
+    private func publishTransferContext() {
+        let provider = model.provider
+        let rows = items.map { item in
+            BrowserTransferContext.Row(id: item.id, name: item.name, isFolder: item.isFolder, downloadId: item.targetId,
+                                       uploadFolderId: item.isFolder && !item.isAlias ? provider.uploadTarget(for: item).id : nil)
+        }
+        let context = BrowserTransferContext(provider: provider.kind, uploadParentId: uploadTarget?.id,
+                                             caseInsensitiveNames: provider.caseInsensitiveNames, rows: rows)
+        guard model.browserTransferContext != context else { return }
+        model.browserTransferContext = context
+        Task { await model.refreshBrowserTransfers() }
     }
 
     // MARK: - Editing
@@ -326,8 +423,18 @@ struct DriveBrowserView: View {
         return scope == .myDrive ? model.provider.rootFolder : nil
     }
 
+    /// Dropbox удаляет без корзины: объект восстанавливается на сайте в течение срока хранения.
+    private var deletesPermanently: Bool {
+        (trashCandidates.first?.provider ?? model.activeCloud) == .dropbox
+    }
+
     private var trashTitle: String {
-        trashCandidates.count == 1
+        if deletesPermanently {
+            return trashCandidates.count == 1
+                ? String(localized: "Delete “\(trashCandidates[0].name)” from Dropbox?")
+                : String(localized: "Delete \(trashCandidates.count) items from Dropbox?")
+        }
+        return trashCandidates.count == 1
             ? String(localized: "Move “\(trashCandidates[0].name)” to the Trash?")
             : String(localized: "Move \(trashCandidates.count) items to the Trash?")
     }
@@ -393,18 +500,26 @@ struct DriveBrowserView: View {
 
     // MARK: - Data
 
+    /// Строки списка: содержимое папки и строки-заглушки файлов, которые сейчас отправляются сюда.
+    private var allRows: [CloudItem] {
+        let placeholders = model.browserTransfers.placeholders.filter { $0.provider == model.activeCloud }
+        return placeholders.isEmpty ? items : items + placeholders
+    }
+
     private var displayedItems: [CloudItem] {
         let filter = model.browserFilter
-        let filtered = filter.isEmpty ? items : items.filter { $0.name.localizedCaseInsensitiveContains(filter) }
+        let rows = allRows
+        let filtered = filter.isEmpty ? rows : rows.filter { $0.name.localizedCaseInsensitiveContains(filter) }
         let folders = filtered.filter(\.isFolder).sorted(using: sortOrder)
         let files = filtered.filter { !$0.isFolder }.sorted(using: sortOrder)
         return folders + files
     }
 
-    private var selectedItems: [CloudItem] { items(for: selection) }
+    /// Выделение для команд тулбара (скачать и т. п.): без файлов, которые ещё отправляются.
+    private var selectedItems: [CloudItem] { items(for: selection).filter { !isUploading($0) } }
 
     private func items(for ids: Set<CloudItem.ID>) -> [CloudItem] {
-        items.filter { ids.contains($0.id) }
+        allRows.filter { ids.contains($0.id) }
     }
 
     private var currentFolderRoute: String? {
@@ -437,7 +552,7 @@ struct DriveBrowserView: View {
         case .back: goBack()
         case .refresh: refresh()
         case .newFolder: if uploadTarget != nil { createFolder() }
-        case .upload: if let target = uploadTarget { model.chooseFilesToUpload(into: target) }
+        case .upload: if let target = uploadTarget { model.chooseFilesToUpload(into: target, ancestorIds: uploadAncestorIds) }
         case .download: model.downloadToDefault(selectedItems, ancestors: stack)
         case .downloadToCustom: model.downloadToCustom(selectedItems, ancestors: stack)
         case .setPermanentRoute: model.setPermanentRoute(selectedItems)

@@ -34,10 +34,10 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
-				<string>Upload to Google Drive (NaviDrive)</string>
+				<string>Upload to NaviDrive</string>
 			</dict>
 			<key>NSMessage</key>
-			<string>uploadToGoogleDrive</string>
+			<string>uploadToNaviDrive</string>
 			<key>NSPortName</key>
 			<string>NaviDrive</string>
 			<key>NSRequiredContext</key>

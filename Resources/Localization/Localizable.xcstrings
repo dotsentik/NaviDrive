@@ -11,6 +11,22 @@
         }
       }
     },
+    "%@ doesn’t accept the upload session": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ doesn’t accept the upload session"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ не принимает сессию загрузки"
+          }
+        }
+      }
+    },
     "%@ free of %@": {
       "localizations": {
         "ru": {
@@ -237,6 +253,22 @@
         }
       }
     },
+    "A file with this name already exists in the folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A file with this name already exists in the folder"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл с таким именем уже есть в папке"
+          }
+        }
+      }
+    },
     "Access to Dropbox has expired. Please sign in again.": {
       "localizations": {
         "en": {
@@ -425,6 +457,22 @@
         }
       }
     },
+    "All paused": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All paused"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всё на паузе"
+          }
+        }
+      }
+    },
     "Also: View → Show/Hide Sidebar (⌃⌘S)": {
       "localizations": {
         "ru": {
@@ -561,6 +609,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Отменить загрузку «%@»?"
+          }
+        }
+      }
+    },
+    "Cancel the download?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel the download?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить скачивание?"
           }
         }
       }
@@ -707,12 +771,18 @@
         }
       }
     },
-    "Checksum mismatch (Google: %@…, file: %@…)": {
+    "Checksum mismatch (%@: %@…, file: %@…)": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checksum mismatch (%@: %@…, file: %@…)"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Контрольная сумма не совпадает (Google: %@…, файл: %@…)"
+            "value": "Контрольная сумма не совпадает (%@: %@…, файл: %@…)"
           }
         }
       }
@@ -737,18 +807,34 @@
         }
       }
     },
-    "Choose what to connect. You can add the other one later.": {
+    "Choose a cloud": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choose what to connect. You can add the other one later."
+            "value": "Choose a cloud"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Выберите, что подключить. Второе облако можно добавить позже."
+            "value": "Выберите облако"
+          }
+        }
+      }
+    },
+    "Choose a cloud to connect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a cloud to connect"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выберите облако для подключения"
           }
         }
       }
@@ -907,28 +993,60 @@
         }
       }
     },
-    "Connect a Cloud…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect a Cloud…"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Подключить облако…"
-          }
-        }
-      }
-    },
     "Connected": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Подключён"
+          }
+        }
+      }
+    },
+    "Connecting…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключение…"
+          }
+        }
+      }
+    },
+    "Continue with Dropbox": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue with Dropbox"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Продолжить с Dropbox"
+          }
+        }
+      }
+    },
+    "Continue with Google Drive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue with Google Drive"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Продолжить с Google Drive"
           }
         }
       }
@@ -1193,18 +1311,82 @@
         }
       }
     },
-    "Deleted items can be restored in Dropbox under Deleted files.": {
+    "Delete": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Deleted items can be restored in Dropbox under Deleted files."
+            "value": "Delete"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Удалённое можно восстановить в Dropbox в разделе «Удалённые файлы»."
+            "value": "Удалить"
+          }
+        }
+      }
+    },
+    "Delete %lld items from Dropbox?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete %lld items from Dropbox?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить объекты из Dropbox (%lld)?"
+          }
+        }
+      }
+    },
+    "Delete “%@” from Dropbox?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete “%@” from Dropbox?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить «%@» из Dropbox?"
+          }
+        }
+      }
+    },
+    "Deleted items can be restored on the Dropbox website (Deleted files) during your plan’s file recovery period.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted items can be restored on the Dropbox website (Deleted files) during your plan’s file recovery period."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалённое можно восстановить на сайте Dropbox (раздел «Удалённые файлы») в течение срока хранения, который зависит от вашего тарифа."
+          }
+        }
+      }
+    },
+    "Delete…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить…"
           }
         }
       }
@@ -1309,22 +1491,6 @@
         }
       }
     },
-    "Download and upload Google Drive and Dropbox files reliably — even very large ones, with resume after interruptions.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Download and upload Google Drive and Dropbox files reliably — even very large ones, with resume after interruptions."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Надёжное скачивание и загрузка файлов Google Drive и Dropbox — даже очень больших, с докачкой после обрывов."
-          }
-        }
-      }
-    },
     "Download files using the context menu in My Drive.": {
       "localizations": {
         "ru": {
@@ -1371,6 +1537,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Скачивается сюда: %@ осталось"
+          }
+        }
+      }
+    },
+    "Downloading to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading to %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачивается в %@"
           }
         }
       }
@@ -1856,16 +2038,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Google Рисунок"
-          }
-        }
-      }
-    },
-    "Google Drive doesn’t accept the upload session": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Google Drive не принимает сессию загрузки"
           }
         }
       }
@@ -2621,6 +2793,22 @@
         }
       }
     },
+    "No downloads to pause or resume": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No downloads to pause or resume"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет загрузок, которые можно приостановить или возобновить"
+          }
+        }
+      }
+    },
     "No files selected for upload": {
       "localizations": {
         "ru": {
@@ -2964,6 +3152,22 @@
         }
       }
     },
+    "Pause all active and queued downloads": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause all active and queued downloads"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приостановить все активные и ожидающие загрузки"
+          }
+        }
+      }
+    },
     "Pause all uploads": {
       "localizations": {
         "ru": {
@@ -3212,6 +3416,22 @@
         }
       }
     },
+    "Reliable downloads and uploads for Google Drive and Dropbox — even very large files, with resume after interruptions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reliable downloads and uploads for Google Drive and Dropbox — even very large files, with resume after interruptions"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Надёжное скачивание и загрузка для Google Drive и Dropbox — даже очень больших файлов, с продолжением после обрывов"
+          }
+        }
+      }
+    },
     "Remove Custom Location": {
       "localizations": {
         "ru": {
@@ -3342,12 +3562,44 @@
         }
       }
     },
+    "Resume downloads stopped with Pause All (files paused individually stay paused)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume downloads stopped with Pause All (files paused individually stay paused)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Возобновить загрузки, остановленные общей паузой (файлы, приостановленные по отдельности, остаются на паузе)"
+          }
+        }
+      }
+    },
     "Resumed": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Возобновлено"
+          }
+        }
+      }
+    },
+    "Resumes every paused file, including files paused individually": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resumes every paused file, including files paused individually"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Возобновляет все приостановленные файлы, в том числе поставленные на паузу по отдельности"
           }
         }
       }
@@ -3686,12 +3938,44 @@
         }
       }
     },
+    "Show in Download Manager": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show in Download Manager"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать в «Менеджер загрузок»"
+          }
+        }
+      }
+    },
     "Show in Finder": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Показать в Finder"
+          }
+        }
+      }
+    },
+    "Show in Uploads": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show in Uploads"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать в «Отправка»"
           }
         }
       }
@@ -3712,6 +3996,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Выйти"
+          }
+        }
+      }
+    },
+    "Sign in to %@ again to upload": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to %@ again to upload"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для загрузки нужно заново войти в %@"
           }
         }
       }
@@ -3802,6 +4102,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пропустить"
+          }
+        }
+      }
+    },
+    "Skipped: “%@” already exists in the folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped: “%@” already exists in the folder"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропущено: «%@» уже есть в папке"
           }
         }
       }
@@ -4132,6 +4448,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Уже скачанная часть (%@) будет удалена. Чтобы продолжить позже, используйте паузу."
+          }
+        }
+      }
+    },
+    "The part already downloaded will be deleted. To continue later, use Pause.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The part already downloaded will be deleted. To continue later, use Pause."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уже скачанная часть будет удалена. Чтобы продолжить позже, используйте паузу."
           }
         }
       }
@@ -4590,6 +4922,22 @@
         }
       }
     },
+    "Waiting for disk %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for disk %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидание диска %@"
+          }
+        }
+      }
+    },
     "Waiting for disk: %lld": {
       "localizations": {
         "ru": {
@@ -4616,6 +4964,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ожидание интернета…"
+          }
+        }
+      }
+    },
+    "Waiting for sign-in in the browser…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for sign-in in the browser…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидание входа в браузере…"
           }
         }
       }
@@ -4770,6 +5134,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пока есть активные или ожидающие загрузки, система не уходит в сон. Экран при этом гаснет как обычно."
+          }
+        }
+      }
+    },
+    "You can connect the other cloud later from the sidebar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can connect the other cloud later from the sidebar"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Второе облако можно подключить позже в боковой панели"
           }
         }
       }

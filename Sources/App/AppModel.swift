@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import SwiftUI
 import UserNotifications
 
 enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
@@ -29,6 +30,14 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
         case .downloads: "arrow.down.circle"
         case .uploads: "arrow.up.circle"
         case .routes: "arrow.triangle.branch"
+        }
+    }
+
+    /// Экран браузера облака (а не менеджеры и маршруты).
+    var isCloudBrowser: Bool {
+        switch self {
+        case .myDrive, .sharedWithMe, .sharedDrives, .linked: true
+        case .downloads, .uploads, .routes: false
         }
     }
 
@@ -89,7 +98,7 @@ enum TaskSectionKind: String, CaseIterable, Identifiable, Sendable {
     var statuses: [TaskStatus] {
         switch self {
         case .downloading: [.downloading, .verifying]
-        case .paused: [.paused]
+        case .paused: [.paused, .pausedAll]
         case .queued: [.queued]
         case .waiting: [.waitingForVolume, .waitingForSpace, .waitingForNetwork, .waitingForQuota]
         case .failed: [.failed]
@@ -100,12 +109,12 @@ enum TaskSectionKind: String, CaseIterable, Identifiable, Sendable {
     /// История и ошибки — новые сверху; остальное — в порядке очереди.
     var newestFirst: Bool { self == .failed || self == .completed }
 
-    /// Сколько строк загружать (List ленивый; остаток показывается строкой «и ещё N»).
+    /// Сколько строк загружать за один снимок (List ленивый, строки отрисовываются по мере прокрутки).
     var limit: Int {
         switch self {
-        case .downloading: 200
-        case .waiting, .completed: 500
-        case .paused, .queued, .failed: 1_000
+        case .downloading: 500
+        case .waiting, .completed: 2_000
+        case .paused, .queued, .failed: 5_000
         }
     }
 }
@@ -243,6 +252,15 @@ final class AppModel {
 
     // Состояние загрузок
     var snapshot = EngineSnapshot()
+    /// Строки текущей папки браузера, для которых считаются индикаторы передач.
+    @ObservationIgnored var browserTransferContext: BrowserTransferContext?
+    /// Индикаторы передач и строки-заглушки загружаемых файлов для текущей папки.
+    var browserTransfers = BrowserTransfers()
+    /// Растёт, когда список папки устарел (отправленный файл уже в облаке, в очередь добавлены папки).
+    var browserListingStaleToken = 0
+    /// Отправки, после завершения которых список папки уже обновлялся.
+    @ObservationIgnored var requestedListingRefresh: Set<String> = []
+    @ObservationIgnored private var downloadStateVersion = 0
     var totals = QueueTotals()
     /// По умолчанию «Все»: задачи на паузе, в ожидании и с ошибками не должны «исчезать» из списка.
     var downloadFilter: DownloadFilter = .all
@@ -266,6 +284,8 @@ final class AppModel {
     @ObservationIgnored var seenReauthRequests = 0
     /// Файлы из Finder Services, для которых выбирается папка на диске.
     var pendingServiceUpload: [URL]?
+    /// Services вызваны при закрытом главном окне: после выбора папки окно открывается на ней.
+    @ObservationIgnored var serviceUploadOpensTarget = false
     /// Раздел «Диски»: системный диск и подключённые внешние диски с заполненностью.
     var volumes: [DiskVolume] = []
 
@@ -452,21 +472,25 @@ final class AppModel {
     }
 
     func refresh(includeTasks: Bool = true) async {
-        guard let scheduler, let db else { return }
-        // Всё тяжёлое — в акторе планировщика и на фоновом read-only соединении SQLite;
-        // на главном потоке только присвоение готовых данных и только если они изменились,
-        // чтобы не перерисовывать окно без надобности.
-        let newSnapshot = await scheduler.snapshot()
-        if newSnapshot != snapshot { snapshot = newSnapshot }
-        let active = newSnapshot.runningCount > 0 || newSnapshot.scanningFolders > 0 || !newSnapshot.verificationProgress.isEmpty
-        if active != hasActiveDownloads { hasActiveDownloads = active }
-        let filter = downloadFilter
-        let (newTotals, newTasks) = await Task.detached(priority: .userInitiated) {
-            (db.totals(), includeTasks ? Self.loadSections(filter.sections, from: db) : nil)
-        }.value
-        if totals != newTotals { totals = newTotals }
-        if let newTasks, newTasks != sections { sections = newTasks }
+        guard let scheduler else { return }
+        // Снимок планировщика, счётчики и секции — одним вызовом актора (единый источник правды):
+        // шапка, вкладки, секции, трей и кнопки всегда показывают одно и то же состояние.
+        // На главном потоке только присвоение и только если данные изменились.
+        let state = await scheduler.state(sections: downloadFilter.sections)
+        if state.version > downloadStateVersion {
+            downloadStateVersion = state.version
+            // Переход задачи между секциями — с короткой анимацией; обновления прогресса — без неё.
+            let moved = state.sections.mapValues { $0.map(\.id) } != sections.mapValues { $0.map(\.id) }
+            withAnimation(moved ? .easeInOut(duration: 0.2) : nil) {
+                if state.snapshot != snapshot { snapshot = state.snapshot }
+                if state.totals != totals { totals = state.totals }
+                if state.sections != sections { sections = state.sections }
+            }
+            let active = snapshot.runningCount > 0 || snapshot.scanningFolders > 0 || !snapshot.verificationProgress.isEmpty
+            if active != hasActiveDownloads { hasActiveDownloads = active }
+        }
         await refreshUploads(includeTasks: includeTasks && selection == .uploads)
+        await refreshBrowserTransfers()
         updateSleepAssertion()
         notifyIfQueueFinished()
     }
@@ -583,6 +607,24 @@ final class AppModel {
         }
     }
 
+    /// Браузер облака на папке, выбранной в дереве папок (`path` — от корня до папки).
+    func openInBrowser(path: [UploadTarget]) {
+        guard let target = path.last, let provider = providers[target.provider] else { return }
+        let inMyDrive = path.first?.id == provider.rootFolder.id
+        let scope: BrowserScope = inMyDrive ? .myDrive : .sharedDrives
+        let stack = (inMyDrive ? Array(path.dropFirst()) : path).map { folder -> CloudItem in
+            var item = CloudItem(provider: folder.provider, id: folder.id, name: folder.name, isFolder: true)
+            // Dropbox адресует папки путями: ID цели загрузки и есть путь.
+            if folder.provider == .dropbox { item.path = folder.id }
+            item.spaceId = folder.spaceId
+            return item
+        }
+        activeCloud = target.provider
+        browserStacks[BrowserStackKey(cloud: target.provider, scope: scope)] = stack
+        browserNavigationToken += 1
+        selection = scope == .myDrive ? .myDrive : .sharedDrives
+    }
+
     /// «Открыть в браузере NaviDrive»: раздел «Добавленные по ссылке», внутри папки.
     func openInBrowser(_ item: CloudItem) {
         activeCloud = item.provider
@@ -685,18 +727,19 @@ final class AppModel {
                                                         defaultPath: defaultDownloadPath)
             groups[dir, default: []].append(item)
         }
-        enqueue(items, groups: groups)
+        enqueue(items, groups: groups, ancestors: ancestors)
     }
 
-    /// Постановка в очередь, переход в «Менеджер загрузок» и баннер с итогом.
-    private func enqueue(_ items: [CloudItem], groups: [String: [CloudItem]]) {
+    /// Постановка в очередь и баннер с итогом. Экран не переключается: прогресс виден
+    /// индикаторами в списке файлов облака, «Менеджер загрузок» открывается только по запросу.
+    private func enqueue(_ items: [CloudItem], groups: [String: [CloudItem]], ancestors: [CloudItem] = []) {
         guard let scheduler, !items.isEmpty else { return }
         let title = Self.title(for: items)
-        selection = .downloads
+        let ancestorIds = ancestors.map(\.targetId)
         Task {
             var report = EnqueueReport(title: title)
             for (dir, group) in groups {
-                report.merge(await scheduler.enqueue(group, destinationDir: dir, projectName: title))
+                report.merge(await scheduler.enqueue(group, destinationDir: dir, projectName: title, ancestorIds: ancestorIds))
             }
             showEnqueueReport(report)
         }
@@ -709,7 +752,7 @@ final class AppModel {
             : String(localized: "Where should \(items.count) items be downloaded? You can choose an external disk in /Volumes.")
         guard let path = chooseDirectory(message: message) else { return }
         for item in items { setRoute(for: item, path: path) }
-        enqueue(items, groups: [path: items])
+        enqueue(items, groups: [path: items], ancestors: ancestors)
     }
 
     private static func title(for items: [CloudItem]) -> String {
@@ -718,6 +761,11 @@ final class AppModel {
 
     /// Показывает итог на несколько секунд (предупреждения — дольше).
     private func showEnqueueReport(_ report: EnqueueReport) {
+        // Экран больше не переключается на «Менеджер загрузок», где висит баннер: если ничего
+        // не добавлено из-за ошибок или запрета, причина показывается сразу.
+        if selection != .downloads, report.added == 0, report.alreadyDownloaded == 0, report.tone == .warning {
+            errorMessage = report.message
+        }
         let banner = EnqueueBanner(report: report)
         enqueueBanner = banner
         let seconds: Double = report.tone == .warning ? 12 : 6
@@ -793,10 +841,35 @@ final class AppModel {
 
     // MARK: - Queue control
 
+    /// Что сделает кнопка общей паузы (тулбар, трей): пауза, если есть что останавливать;
+    /// «продолжить», если есть задачи после общей паузы; иначе — ничего (кнопка неактивна).
+    enum PauseAllAction {
+        case pause, resume, none
+
+        var help: String {
+            switch self {
+            case .pause: String(localized: "Pause all active and queued downloads")
+            case .resume: String(localized: "Resume downloads stopped with Pause All (files paused individually stay paused)")
+            case .none: String(localized: "No downloads to pause or resume")
+            }
+        }
+    }
+
+    var pauseAllAction: PauseAllAction {
+        if totals.hasPausable { return .pause }
+        return totals.pausedAllCount > 0 ? .resume : .none
+    }
+
     func togglePauseAll() {
-        let paused = !snapshot.isPaused
-        snapshot.isPaused = paused
-        Task { await scheduler?.setPaused(paused) }
+        let action = pauseAllAction
+        Task {
+            switch action {
+            case .pause: await scheduler?.pauseAll()
+            case .resume: await scheduler?.resumePausedAll()
+            case .none: return
+            }
+            await refresh()
+        }
     }
 
     func pause(_ task: DownloadTask) { Task { await scheduler?.pauseTask(task.id); await refresh() } }
@@ -931,8 +1004,9 @@ final class AppModel {
 
     // MARK: - Uploads (Finder Services)
 
-    /// «Upload to Google Drive (NaviDrive)» в Finder: выбор папки на диске, затем очередь отправки.
-    func upload(paths: [String]) {
+    /// «Upload to NaviDrive» в Finder: выбор облака и папки в нём, затем очередь отправки.
+    func upload(paths: [String], mainWindowWasClosed: Bool = false) {
+        serviceUploadOpensTarget = mainWindowWasClosed
         guard isSignedIn else {
             welcomeNotice = String(localized: "Connect Google Drive or Dropbox to upload files.")
             showWelcome()
@@ -965,6 +1039,17 @@ final class AppModel {
             result[kind] = Array(rows.prefix(kind.limit))
         }
         return result
+    }
+
+    /// Скорость скачивания для шапки и трея: «Paused» при общей паузе, «Connecting…», пока
+    /// возобновлённые потоки не получили первые байты, а не «Zero KB/s».
+    var downloadSpeedText: String {
+        if snapshot.isPaused { return String(localized: "Paused") }
+        if snapshot.bytesPerSecond == 0, snapshot.runningCount > 0,
+           snapshot.connecting.count == snapshot.runningCount {
+            return String(localized: "Connecting…")
+        }
+        return Format.speed(snapshot.bytesPerSecond)
     }
 
     /// «Активно потоков: X из Y», где Y — текущий лимит AIMD-балансировщика.

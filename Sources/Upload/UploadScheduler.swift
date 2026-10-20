@@ -295,12 +295,15 @@ actor UploadScheduler {
             return
         }
         switch outcome {
-        case .uploaded(let fileId, let hash, let size):
-            db.markUploadTransferred(id: task.id, driveFileId: fileId, checksum: hash, size: size)
+        case .uploaded(let fileId, let hash, let size, let name):
+            db.markUploadTransferred(id: task.id, driveFileId: fileId, checksum: hash, size: size, fileName: name)
             if let current = db.uploadTask(id: task.id) {
                 verificationQueue.append(current)
                 startVerifications()
             }
+        case .skipped:
+            db.updateUploadStatus(id: task.id, status: .cancelled,
+                                  error: String(localized: "Skipped: “\(task.fileName)” already exists in the folder"))
         case .failed(let message, let kind):
             db.updateUploadStatus(id: task.id, status: .failed, error: message, kind: kind)
         case .waitingForVolume(let message):
@@ -315,7 +318,8 @@ actor UploadScheduler {
             stopAll(.requeue, provider: task.provider)
         case .needsReauth:
             // Отправка встаёт целиком; задачи ждут в очереди повторного входа. Скачивание не затрагивается.
-            db.updateUploadStatus(id: task.id, status: .queued, error: String(localized: "Sign in to Google again to upload"))
+            db.updateUploadStatus(id: task.id, status: .queued,
+                                  error: String(localized: "Sign in to \(task.provider.displayName) again to upload"))
             if writeBlocked.insert(task.provider).inserted {
                 reauthRequests += 1
                 stopAll(.requeue, provider: task.provider)
@@ -377,7 +381,7 @@ actor UploadScheduler {
         case failed(String)
     }
 
-    /// Потоковый хеш локального файла алгоритмом облака (для Google — MD5) против хеша из ответа облака.
+    /// Потоковый хеш локального файла алгоритмом облака (Google — MD5, Dropbox — content_hash) против хеша из ответа облака.
     private static func verify(_ task: UploadTask, progress: @escaping @Sendable (Int64) -> Void) async -> Verification {
         guard let expected = task.checksum?.lowercased(), !expected.isEmpty else { return .unverifiable }
         do {
@@ -401,11 +405,11 @@ actor UploadScheduler {
             db.markUploadCompleted(id: task.id)
         case .mismatch(let expected, let actual):
             db.updateUploadStatus(id: task.id, status: .failed,
-                                  error: String(localized: "Checksum mismatch (Google: \(String(expected.prefix(8)))…, file: \(String(actual.prefix(8)))…)"),
+                                  error: String(localized: "Checksum mismatch (\(task.provider.displayName): \(String(expected.prefix(8)))…, file: \(String(actual.prefix(8)))…)"),
                                   kind: .checksumMismatch)
         case .failed(let message):
             if case .missing(let volumeMessage) = PathResolver.volumeState(for: task.localPath) {
-                // Файл уже на Google Drive; проверка продолжится после подключения диска (recheckVolumes).
+                // Файл уже в облаке; проверка продолжится после подключения диска (recheckVolumes).
                 db.updateUploadStatus(id: task.id, status: .verifying, error: volumeMessage)
             } else {
                 db.updateUploadStatus(id: task.id, status: .failed, error: String(localized: "Couldn’t verify the file: \(message)"),

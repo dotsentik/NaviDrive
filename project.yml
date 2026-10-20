@@ -93,8 +93,8 @@ targets:
         NaviDriveDropboxAppKey: $(DROPBOX_APP_KEY)
         NSServices:
           - NSMenuItem:
-              default: Upload to Google Drive (NaviDrive)
-            NSMessage: uploadToGoogleDrive
+              default: Upload to NaviDrive
+            NSMessage: uploadToNaviDrive
             NSPortName: NaviDrive
             NSRequiredContext: {}
             NSSendFileTypes:

@@ -37,11 +37,20 @@ actor DownloadScheduler {
     private var stopReasons: [String: StopReason] = [:]
     private var liveProgress: [String: Int64] = [:]
     private var meter = ThroughputMeter()
+    /// Скорость каждого файла — для подсказки у индикатора в браузере облака.
+    private var taskMeters: [String: ThroughputMeter] = [:]
     private var balancer: AdaptiveConcurrency
 
     private var started = false
-    private var isPaused = false
+    /// Перед перезапуском приложения новые задачи не запускаются.
+    private var isHalted = false
     private var isOnline = true
+    /// Начало общей паузы: после короткой паузы (< 60 с) AIMD-разгон не сбрасывается.
+    private var pausedAllAt: TimeInterval?
+    static let shortPause: TimeInterval = 60
+    /// Идущие задачи, по которым уже пришли байты (остальные показываются как «Подключение…»).
+    private var receivedBytes: Set<String> = []
+    private var stateVersion = 0
     /// Облака с действующим входом: задачи остальных ждут в очереди.
     private var authorized: Set<CloudProviderKind> = []
 
@@ -137,7 +146,11 @@ actor DownloadScheduler {
             Task { await retryWaiter.wakeAll() }
             schedule()
         } else {
-            stopAll(.network)
+            // Идущие задачи сразу показываются в ожидании сети, а не в «Скачивается».
+            for (id, _) in running where stopReasons[id] == nil {
+                stop(id, .network)
+                db.updateStatus(id: id, status: .waitingForNetwork, error: String(localized: "Waiting for network…"))
+            }
         }
     }
 
@@ -145,23 +158,42 @@ actor DownloadScheduler {
     /// в очередь (прогресс — в `.gdrive.part`), функция ждёт, пока потоки закроют файлы.
     /// После запуска очередь продолжается автоматически.
     func stopForRelaunch() async {
-        isPaused = true
+        isHalted = true
         let handles = running.values.map(\.handle)
         stopAll(.requeue)
         for handle in handles { await handle.value }
     }
 
-    func setPaused(_ paused: Bool) {
-        isPaused = paused
-        if paused {
-            stopAll(.pauseAll)
-        } else {
-            // «Возобновить все» в трее и в шапке возобновляет и файлы, приостановленные вручную.
-            // В остальных случаях (сеть, перезапуск, разгон потоков) задачи «На паузе» не трогаются.
-            db.resumeAllPaused()
+    /// Общая пауза: идущие и ожидающие задачи → `pausedAll` одной операцией. Идущие потоки
+    /// останавливаются и дописывают .part, но в списке и счётчиках уже считаются приостановленными.
+    func pauseAll() {
+        for (id, _) in running where stopReasons[id] == nil { stop(id, .pauseAll) }
+        db.pauseAll()
+        if pausedAllAt == nil { pausedAllAt = Date().timeIntervalSinceReferenceDate }
+    }
+
+    /// Снять общую паузу (кнопка тулбара и трей): `pausedAll` → очередь. Вручную приостановленные остаются.
+    func resumePausedAll() {
+        db.resumePausedAll()
+        resumeStopping(reasons: [.pauseAll])
+        afterResume()
+    }
+
+    /// После паузы короче минуты AIMD продолжает с достигнутого лимита.
+    private func afterResume() {
+        let now = Date().timeIntervalSinceReferenceDate
+        if let pausedAt = pausedAllAt, now - pausedAt >= Self.shortPause {
             balancer.reset(reason: String(localized: "Resumed"))
-            meter.reset()
-            schedule()
+        }
+        pausedAllAt = nil
+        schedule()
+    }
+
+    /// Задачу возобновили, пока её поток ещё останавливается: по завершении она вернётся в очередь,
+    /// а не в паузу.
+    private func resumeStopping(reasons: Set<StopReason>, id: String? = nil) {
+        for (taskId, reason) in stopReasons where reasons.contains(reason) && (id == nil || id == taskId) {
+            stopReasons[taskId] = .requeue
         }
     }
 
@@ -176,7 +208,9 @@ actor DownloadScheduler {
 
     /// Ставит объекты в очередь и возвращает итог, когда завершится обход всех выбранных папок.
     /// Файлы начинают скачиваться сразу, не дожидаясь конца обхода.
-    func enqueue(_ items: [CloudItem], destinationDir: String, projectName: String) async -> EnqueueReport {
+    /// - Parameter ancestorIds: папки облака над объектами (ID цели) — для общего прогресса у строк папок.
+    func enqueue(_ items: [CloudItem], destinationDir: String, projectName: String,
+                 ancestorIds: [String] = []) async -> EnqueueReport {
         session.active = true
         if !projectName.isEmpty, !session.projects.contains(projectName) { session.projects.append(projectName) }
         var report = EnqueueReport()
@@ -201,7 +235,7 @@ actor DownloadScheduler {
                     report.errors.append(CloudProviders.unavailableMessage)
                     continue
                 }
-                scans.append(startScan(item, provider: provider, destinationDir: destinationDir))
+                scans.append(startScan(item, provider: provider, destinationDir: destinationDir, ancestorIds: ancestorIds))
             } else if item.isDownloadable {
                 let name = freeFileName(for: item, in: destinationDir)
                 do {
@@ -211,7 +245,9 @@ actor DownloadScheduler {
                     report.errors.append(error.localizedDescription)
                     continue
                 }
-                files.append(.make(from: item, fileName: name, targetDir: destinationDir))
+                var task = DownloadTask.make(from: item, fileName: name, targetDir: destinationDir)
+                task.folderIds = ancestorIds
+                files.append(task)
             } else {
                 report.unsupported += 1
             }
@@ -238,25 +274,28 @@ actor DownloadScheduler {
     func pauseTask(_ id: String) {
         // Проверка хеша локальная и короткая — её не прерываем.
         if verifying[id] != nil || verificationQueue.contains(where: { $0.id == id }) { return }
-        if running[id] != nil { stop(id, .pauseTask) } else { db.updateStatus(id: id, status: .paused) }
+        if running[id] != nil { stop(id, .pauseTask) }
+        db.updateStatus(id: id, status: .paused)
     }
 
     /// «Возобновить» отдельный файл: в начало очереди, докачка с размера .gdrive.part через Range.
     func resumeTask(_ id: String) {
-        guard running[id] == nil else { return }
+        resumeStopping(reasons: [.pauseTask, .pauseAll], id: id)
         db.resume(id: id)
         schedule()
     }
 
-    /// Возобновить все файлы, приостановленные вручную.
+    /// «Возобновить все» в секции «На паузе»: и вручную приостановленные, и после общей паузы.
     func resumeAllPaused() {
         db.resumeAllPaused()
-        schedule()
+        resumeStopping(reasons: [.pauseTask, .pauseAll])
+        afterResume()
     }
 
     func cancelTask(_ id: String) {
         if running[id] != nil {
             stop(id, .cancel)
+            db.updateStatus(id: id, status: .cancelled)
         } else {
             db.updateStatus(id: id, status: .cancelled)
             removePartFile(id)
@@ -280,7 +319,7 @@ actor DownloadScheduler {
 
     /// Очередь предыдущего аккаунта после входа другим: незавершённое удаляется из очереди вместе с частями файлов.
     func cancelUnfinished(_ provider: CloudProviderKind) {
-        for task in db.tasks(statuses: Self.unfinishedStatuses + [.paused, .failed], limit: 1_000_000, provider: provider)
+        for task in db.tasks(statuses: Self.unfinishedStatuses + [.paused, .pausedAll, .failed], limit: 1_000_000, provider: provider)
         where running[task.id] == nil {
             db.updateStatus(id: task.id, status: .cancelled)
             try? FileManager.default.removeItem(atPath: task.partPath)
@@ -324,6 +363,7 @@ actor DownloadScheduler {
         var handles: [Task<Void, Never>] = []
         for (id, entry) in running where PathResolver.volumeKey(for: entry.task.targetDirPath) == root {
             stop(id, .pauseTask)
+            db.updateStatus(id: id, status: .paused)
             handles.append(entry.handle)
         }
         db.pauseTasks(volumeRoot: root)
@@ -371,7 +411,12 @@ actor DownloadScheduler {
     func report(id: String, delta: Int64, total: Int64) {
         guard running[id] != nil else { return }
         liveProgress[id] = total
-        if delta > 0 { meter.add(delta, at: Date().timeIntervalSinceReferenceDate) }
+        if delta > 0 {
+            receivedBytes.insert(id)
+            let now = Date().timeIntervalSinceReferenceDate
+            meter.add(delta, at: now)
+            taskMeters[id, default: ThroughputMeter()].add(delta, at: now)
+        }
     }
 
     /// Ответ 429 / 403 rateLimitExceeded от любого потока: лимит сразу делится пополам.
@@ -391,15 +436,28 @@ actor DownloadScheduler {
 
     func clearScanErrors() { scanErrors.removeAll() }
 
+    /// Снимок планировщика, счётчики и строки секций — одним вызовом актора. Все смены статусов
+    /// идут через этот актор, поэтому между чтениями ничего не меняется.
+    func state(sections kinds: [TaskSectionKind]) -> DownloadState {
+        let totals = db.totals()
+        var snapshot = snapshot()
+        snapshot.isPaused = !totals.hasPausable && totals.pausedAllCount > 0
+        stateVersion += 1
+        return DownloadState(version: stateVersion, snapshot: snapshot, totals: totals,
+                             sections: AppModel.loadSections(kinds, from: db))
+    }
+
     func snapshot() -> EngineSnapshot {
         let counts = runningCounts()
+        let active = running.keys.filter { stopReasons[$0] == nil }
         return EngineSnapshot(
-            isPaused: isPaused,
+            isPaused: false,
             isOnline: isOnline,
             isAuthorized: !authorized.isEmpty,
             bytesPerSecond: meter.bytesPerSecond(window: 3, now: Date().timeIntervalSinceReferenceDate),
             liveProgress: liveProgress,
-            runningCount: running.count,
+            // Останавливающиеся потоки уже не считаются: их задачи показаны в паузе / ожидании.
+            runningCount: active.count,
             adaptiveLimit: balancer.limit,
             userLimit: balancer.userLimit,
             runningSmall: counts.small,
@@ -407,6 +465,8 @@ actor DownloadScheduler {
             runningExports: counts.export,
             balancerStatus: balancer.status,
             verificationProgress: verifying,
+            connecting: Set(active.filter { !receivedBytes.contains($0) }),
+            speeds: taskMeters.mapValues { $0.bytesPerSecond(window: 3, now: Date().timeIntervalSinceReferenceDate) },
             lastSession: lastSession,
             scanningFolders: scanningFolders,
             scannedFiles: scannedFiles,
@@ -417,7 +477,8 @@ actor DownloadScheduler {
     // MARK: - Balancing
 
     private func rebalance() {
-        guard started, !authorized.isEmpty, isOnline, !isPaused else { return }
+        // Без идущих загрузок (общая пауза, пустая очередь) скорость не о чем судить.
+        guard started, !authorized.isEmpty, isOnline, !isHalted, !running.isEmpty else { return }
         let speed = meter.bytesPerSecond(window: AdaptiveConcurrency.evaluationWindowSeconds,
                                          now: Date().timeIntervalSinceReferenceDate)
         let saturated = running.count >= balancer.limit && !db.queueHeads(providers: authorized).isEmpty
@@ -429,7 +490,7 @@ actor DownloadScheduler {
 
     private func runningCounts() -> (small: Int, large: Int, export: Int) {
         var small = 0, large = 0, export = 0
-        for entry in running.values {
+        for entry in running.values where stopReasons[entry.task.id] == nil {
             switch entry.sizeClass {
             case .small: small += 1
             case .large: large += 1
@@ -458,7 +519,7 @@ actor DownloadScheduler {
     }
 
     private func schedule() {
-        guard started, !authorized.isEmpty, isOnline, !isPaused else { return }
+        guard started, !authorized.isEmpty, isOnline, !isHalted else { return }
         while running.count < balancer.limit {
             let task: DownloadTask
             let sizeClass: TaskSizeClass
@@ -499,6 +560,7 @@ actor DownloadScheduler {
 
     private func launch(_ task: DownloadTask, sizeClass: TaskSizeClass) {
         liveProgress[task.id] = task.downloadedSize
+        receivedBytes.remove(task.id)
         activePartPaths.insert(task.partPath)
         let provider = providers[task.provider]
         let worker = provider.map { DownloadWorker(db: db, provider: $0, scheduler: self, progress: progress, retryWaiter: retryWaiter) }
@@ -513,6 +575,8 @@ actor DownloadScheduler {
         running[task.id] = nil
         activePartPaths.remove(task.partPath)
         liveProgress[task.id] = nil
+        taskMeters[task.id] = nil
+        receivedBytes.remove(task.id)
         let reason = stopReasons.removeValue(forKey: task.id)
 
         switch outcome {
@@ -558,12 +622,14 @@ actor DownloadScheduler {
             switch reason {
             case .pauseTask:
                 db.updateStatus(id: task.id, status: .paused)
+            case .pauseAll:
+                db.updateStatus(id: task.id, status: .pausedAll)
             case .network:
                 db.updateStatus(id: task.id, status: .waitingForNetwork, error: String(localized: "Waiting for network…"))
             case .cancel:
                 db.updateStatus(id: task.id, status: .cancelled)
                 removePartFile(task.id)
-            case .pauseAll, .requeue, nil:
+            case .requeue, nil:
                 db.updateStatus(id: task.id, status: .queued)
             }
         case .signedOut:
@@ -591,6 +657,8 @@ actor DownloadScheduler {
 
     /// Вернуть в очередь задачи, у которых наступило время повтора после квоты.
     func requeueDueQuotaTasks(force: Bool = false) {
+        // Во время общей паузы плановый повтор не запускает скачивание (ручное «Попробовать сейчас» — да).
+        guard force || pausedAllAt == nil else { return }
         if db.requeueDueQuotaTasks(force: force) > 0 { schedule() }
     }
 
@@ -682,10 +750,11 @@ actor DownloadScheduler {
     /// Очередь опустела — итог сессии для уведомления «Проект скачан».
     private func checkIdle() {
         guard session.active, running.isEmpty, verifying.isEmpty, verificationQueue.isEmpty,
-              scanningFolders == 0, !isPaused else { return }
+              scanningFolders == 0, !isHalted else { return }
         let totals = db.totals()
         let counts = totals.countsByStatus
-        let stillWorking = [TaskStatus.queued, .downloading, .verifying, .waitingForNetwork]
+        // Общая пауза — очередь не закончилась, уведомление «скачано» не нужно.
+        let stillWorking = [TaskStatus.queued, .downloading, .verifying, .waitingForNetwork, .pausedAll]
             .reduce(0) { $0 + (counts[$1] ?? 0) }
         guard stillWorking == 0 else { return }
         defer { session = Session() }
@@ -725,11 +794,12 @@ actor DownloadScheduler {
 
     // MARK: - Folder scans
 
-    private func startScan(_ folder: CloudItem, provider: any CloudProvider, destinationDir: String) -> Task<EnqueueReport, Never> {
+    private func startScan(_ folder: CloudItem, provider: any CloudProvider, destinationDir: String,
+                           ancestorIds: [String]) -> Task<EnqueueReport, Never> {
         scanningFolders += 1
         let scanner = FolderScanner(db: db, provider: provider, scheduler: self)
         return Task.detached(priority: .utility) {
-            let report = await scanner.scan(folder, into: destinationDir)
+            let report = await scanner.scan(folder, into: destinationDir, ancestorIds: ancestorIds)
             await self.scanFinished()
             return report
         }

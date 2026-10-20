@@ -122,6 +122,12 @@ protocol CloudProvider: AnyObject, Sendable {
                      delegate: (any URLSessionTaskDelegate)?) async throws -> CloudUploadState
     /// Отмена сессии (лучшее усилие).
     func cancelUploadSession(_ session: String) async
+    /// Имена в папке сравниваются без учёта регистра.
+    var caseInsensitiveNames: Bool { get }
+    /// «Сохранить оба» решает само облако при фиксации файла (новое имя выбирает сервер).
+    var autorenamesOnConflict: Bool { get }
+    /// Имя задачи уже занято в целевой папке (проверка перед загрузкой для правила «Пропустить»).
+    func uploadDestinationExists(_ task: UploadTask) async throws -> Bool
 
     // MARK: Изменение
 
@@ -150,6 +156,12 @@ extension CloudProvider {
     }
 
     func permissions(for item: CloudItem) -> CloudPermissions { item.permissions }
+
+    var autorenamesOnConflict: Bool { false }
+    var caseInsensitiveNames: Bool { false }
+
+    /// Конфликты уже найдены при подготовке пачки по листингу папки.
+    func uploadDestinationExists(_ task: UploadTask) async throws -> Bool { false }
 
     func location(of folder: CloudItem) -> CloudLocation {
         .folder(id: folder.targetId, spaceId: folder.targetSpaceId)

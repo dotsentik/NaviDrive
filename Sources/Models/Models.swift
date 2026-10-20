@@ -5,7 +5,10 @@ import Foundation
 enum TaskStatus: String, Sendable, CaseIterable, Codable {
     case queued
     case downloading
+    /// Приостановлена вручную (этот файл).
     case paused
+    /// Приостановлена общей паузой: «Продолжить» в тулбаре возвращает в очередь только такие задачи.
+    case pausedAll = "paused_all"
     case completed
     case failed
     case cancelled
@@ -23,6 +26,7 @@ enum TaskStatus: String, Sendable, CaseIterable, Codable {
         case .queued: String(localized: "Queued")
         case .downloading: String(localized: "Downloading")
         case .paused: String(localized: "Paused")
+        case .pausedAll: String(localized: "All paused")
         case .completed: String(localized: "Completed")
         case .failed: String(localized: "Error")
         case .cancelled: String(localized: "Cancelled")
@@ -38,7 +42,7 @@ enum TaskStatus: String, Sendable, CaseIterable, Codable {
         switch self {
         case .queued: "clock"
         case .downloading: "arrow.down.circle"
-        case .paused: "pause.circle"
+        case .paused, .pausedAll: "pause.circle"
         case .completed: "checkmark.circle.fill"
         case .failed: "exclamationmark.triangle.fill"
         case .cancelled: "xmark.circle"
@@ -51,7 +55,9 @@ enum TaskStatus: String, Sendable, CaseIterable, Codable {
     }
 
     /// Статусы, которые считаются «живыми» (ещё не завершённая работа).
-    static let pending: [TaskStatus] = [.queued, .downloading, .paused, .waitingForVolume, .waitingForNetwork, .verifying, .waitingForQuota, .waitingForSpace]
+    static let pending: [TaskStatus] = [.queued, .downloading, .paused, .pausedAll, .waitingForVolume, .waitingForNetwork, .verifying, .waitingForQuota, .waitingForSpace]
+    /// Задачи, которые останавливает общая пауза (идут, ждут очереди, сети, диска или места).
+    static let pausable: [TaskStatus] = [.downloading, .queued, .waitingForNetwork, .waitingForVolume, .waitingForSpace]
 }
 
 struct DownloadTask: Sendable, Identifiable, Hashable {
@@ -85,6 +91,9 @@ struct DownloadTask: Sendable, Identifiable, Hashable {
     var provider: CloudProviderKind = .googleDrive
     /// Путь в облаке; для объектов из общей ссылки — путь относительно корня ссылки (`resourceKey` — сама ссылка).
     var cloudPath: String? = nil
+    /// Папки облака (ID цели), внутри которых лежит файл: заполняется при постановке в очередь
+    /// и сохраняется в `transfer_folders` (общий прогресс у строки папки в браузере). Из базы не читается.
+    var folderIds: [String] = []
 
     var finalPath: String { (targetDirPath as NSString).appendingPathComponent(fileName) }
     var hashKind: CloudHashKind { provider.hashKind }
@@ -246,6 +255,17 @@ struct CustomRoute: Sendable, Identifiable, Hashable {
     var id: RouteKey { RouteKey(provider: provider, id: driveId) }
 }
 
+/// Состояние «Менеджера загрузок» одним снимком: снимок планировщика, счётчики и строки секций
+/// читаются вместе внутри актора планировщика, поэтому секции, вкладки, шапка, трей и кнопки
+/// никогда не расходятся между собой.
+struct DownloadState: Sendable, Equatable {
+    /// Растёт с каждым снимком: ответ, пришедший позже более нового, отбрасывается.
+    var version = 0
+    var snapshot = EngineSnapshot()
+    var totals = QueueTotals()
+    var sections: [TaskSectionKind: [DownloadTask]] = [:]
+}
+
 struct QueueTotals: Sendable, Equatable {
     var taskCount: Int = 0
     var pendingCount: Int = 0
@@ -261,6 +281,11 @@ struct QueueTotals: Sendable, Equatable {
         guard expectedBytes > 0 else { return 0 }
         return min(1, Double(downloadedBytes) / Double(expectedBytes))
     }
+
+    func count(_ statuses: [TaskStatus]) -> Int { statuses.reduce(0) { $0 + (countsByStatus[$1] ?? 0) } }
+    /// Есть что ставить на общую паузу.
+    var hasPausable: Bool { count(TaskStatus.pausable) > 0 }
+    var pausedAllCount: Int { countsByStatus[.pausedAll] ?? 0 }
 }
 
 /// Итог завершённой очереди — для системного уведомления.
@@ -303,6 +328,7 @@ struct QueueSessionSummary: Sendable, Equatable {
 }
 
 struct EngineSnapshot: Sendable, Equatable {
+    /// Общая пауза: нет задач, которые можно остановить, и есть задачи «All paused».
     var isPaused = false
     var isOnline = true
     var isAuthorized = false
@@ -319,6 +345,10 @@ struct EngineSnapshot: Sendable, Equatable {
     var balancerStatus = ""
     /// id → прочитано байт при проверке MD5.
     var verificationProgress: [String: Int64] = [:]
+    /// Идущие задачи, по которым ещё не пришло ни одного байта («Подключение…»).
+    var connecting: Set<String> = []
+    /// id → скорость скачивания файла, байт/с.
+    var speeds: [String: Double] = [:]
     /// Последняя завершённая очередь (для уведомления «Проект скачан»).
     var lastSession: QueueSessionSummary?
     var scanningFolders = 0

@@ -185,8 +185,9 @@ struct CloudAuthorizedRequest: Sendable {
 enum CloudUploadState: Sendable {
     /// Сервер подтвердил байты до `nextOffset` (не включительно).
     case incomplete(nextOffset: Int64)
-    /// Файл загружен; `hash` — хеш содержимого по версии облака (тип — `CloudProviderKind.hashKind`).
-    case complete(fileId: String, hash: String?)
+    /// Файл загружен; `hash` — хеш содержимого по версии облака (тип — `CloudProviderKind.hashKind`),
+    /// `name` — имя, под которым облако сохранило файл, если оно его изменило (autorename).
+    case complete(fileId: String, hash: String?, name: String? = nil)
     /// Сессия истекла — нужна новая с нуля.
     case expired
 }

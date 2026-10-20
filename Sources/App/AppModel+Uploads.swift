@@ -148,11 +148,12 @@ extension AppModel {
     // MARK: - Upload
 
     /// Пачка файлов и папок в папку на диске: обход, один вопрос про конфликты имён,
-    /// создание дерева подпапок, затем очередь отправки.
-    func startUpload(_ urls: [URL], to target: UploadTarget) {
+    /// создание дерева подпапок, затем очередь отправки. Экран не переключается на «Отправку»:
+    /// прогресс показывается индикаторами в списке файлов облака.
+    /// - Parameter ancestorIds: папки над целевой (ID цели загрузки) — для общего прогресса у строк папок.
+    func startUpload(_ urls: [URL], to target: UploadTarget, ancestorIds: [String] = []) {
         guard let uploadScheduler, !urls.isEmpty else { return }
         let title = urls.count == 1 ? urls[0].lastPathComponent : String(localized: "\(urls.count) items")
-        selection = .uploads
         let providers = providers
         Task {
             let planner: UploadPlanner
@@ -177,7 +178,7 @@ extension AppModel {
                     policy = chosen
                 }
                 let result = try await Task.detached(priority: .userInitiated) {
-                    try await planner.materialize(plan, policy: policy)
+                    try await planner.materialize(plan, policy: policy, ancestorIds: ancestorIds)
                 }.value
                 let queued = try await uploadScheduler.enqueue(result.tasks)
                 var report = UploadEnqueueReport(title: title)
@@ -188,6 +189,8 @@ extension AppModel {
                 report.skipped = result.skipped
                 report.unreadable = plan.unreadable
                 showUploadBanner(report.message)
+                // Созданные папки должны появиться в списке текущей папки.
+                if result.foldersCreated > 0 { browserListingStaleToken += 1 }
             } catch {
                 reportEditError(error, forbidden: String(localized: "You don’t have permission to upload to folder “\(target.name)”"), cloud: target.provider)
             }
@@ -228,7 +231,7 @@ extension AppModel {
     }
 
     /// «Загрузить…»: выбор нескольких файлов и папок.
-    func chooseFilesToUpload(into target: UploadTarget) {
+    func chooseFilesToUpload(into target: UploadTarget, ancestorIds: [String] = []) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
@@ -237,7 +240,7 @@ extension AppModel {
         panel.message = String(localized: "Files and folders to upload to “\(target.name)”")
         NSApp.activate()
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
-        startUpload(panel.urls, to: target)
+        startUpload(panel.urls, to: target, ancestorIds: ancestorIds)
     }
 
     // MARK: - Queue control

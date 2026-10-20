@@ -38,19 +38,23 @@ struct MenuBarContent: View {
             // Общий прогресс очередей обоих облаков.
             status
         } else {
-            // Вместо статуса загрузок — вход: снова открывает окно приветствия.
-            Button("Connect a Cloud…") {
-                WindowOpener.openAction = { id in openWindow(id: id) }
-                WindowOpener.showWelcomeWindow()
+            // Вместо статуса загрузок — вход: окно приветствия показывает ожидание входа в браузере.
+            ForEach(CloudProviderKind.allCases, id: \.self) { cloud in
+                Button(String(localized: "Connect \(cloud.displayName)…")) {
+                    WindowOpener.openAction = { id in openWindow(id: id) }
+                    WindowOpener.showWelcomeWindow()
+                    model.signIn(cloud)
+                }
+                .disabled(!(model.providers[cloud]?.canSignIn ?? false) || model.account(cloud).isSigningIn)
             }
         }
 
         Divider()
 
-        Button(model.snapshot.isPaused ? String(localized: "Resume All") : String(localized: "Pause All")) {
+        Button(model.pauseAllAction == .resume ? String(localized: "Resume All") : String(localized: "Pause All")) {
             model.togglePauseAll()
         }
-        .disabled(!model.isSignedIn)
+        .disabled(!model.isSignedIn || model.pauseAllAction == .none)
         Button("Open Downloads Folder in Finder") {
             model.openDefaultFolder()
         }
@@ -72,7 +76,7 @@ struct MenuBarContent: View {
 
     @ViewBuilder
     private var status: some View {
-        Text("Speed: \(Format.speed(model.snapshot.isPaused ? 0 : model.snapshot.bytesPerSecond))")
+        Text("Speed: \(model.downloadSpeedText)")
         Text(model.threadsSummary)
         Text("Progress: \(model.progressSummary)")
         Text("Queued: \(model.totals.countsByStatus[.queued] ?? 0)")

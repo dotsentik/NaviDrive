@@ -51,7 +51,7 @@ struct UploadPlanner: Sendable {
     }
 
     private func add(_ urls: [URL], to folder: inout PlanFolder, remote: [CloudItem], plan: inout Plan, path: String) async throws {
-        let remoteByName = Dictionary(remote.map { ($0.name, $0) }, uniquingKeysWith: { first, second in
+        let remoteByName = Dictionary(remote.map { (nameKey($0.name), $0) }, uniquingKeysWith: { first, second in
             // Если есть и папка, и файл с одним именем, для слияния папок важна папка.
             first.isFolder ? first : second
         })
@@ -60,14 +60,16 @@ struct UploadPlanner: Sendable {
             let name = url.lastPathComponent
             let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isRegularFileKey])
             if values?.isSymbolicLink == true { continue }
-            let existing = remoteByName[name]
+            let existing = remoteByName[nameKey(name)]
             if values?.isDirectory == true {
                 let existingFolder = existing.flatMap { $0.isFolder && !$0.isAlias ? $0 : nil }
                 var innerRemote: [CloudItem] = []
                 if let existingFolder {
-                    innerRemote = try await provider.listAll(.folder(id: existingFolder.id, spaceId: existingFolder.spaceId))
+                    innerRemote = try await provider.listAll(provider.location(of: existingFolder))
                 }
-                var child = PlanFolder(name: name, existingId: existingFolder?.id, remoteNames: Set(innerRemote.map(\.name)))
+                // ID папки как цели загрузки (у Dropbox — путь).
+                var child = PlanFolder(name: name, existingId: existingFolder.map { provider.uploadTarget(for: $0).id },
+                                       remoteNames: Set(innerRemote.map(\.name)))
                 let contents: [URL]
                 do {
                     contents = try FileManager.default.contentsOfDirectory(
@@ -94,6 +96,11 @@ struct UploadPlanner: Sendable {
         }
     }
 
+    /// Ключ сравнения имён: в облаке без учёта регистра «Фото» и «фото» — одно и то же имя.
+    private func nameKey(_ name: String) -> String {
+        provider.caseInsensitiveNames ? name.lowercased() : name
+    }
+
     // MARK: - Materialize
 
     struct Result: Sendable {
@@ -103,14 +110,17 @@ struct UploadPlanner: Sendable {
     }
 
     /// Создаёт недостающие папки (всё дерево) и возвращает задачи для очереди.
-    func materialize(_ plan: Plan, policy: UploadConflictPolicy) async throws -> Result {
+    /// - Parameter ancestorIds: папки над целевой (ID цели загрузки) — для общего прогресса у строк папок.
+    func materialize(_ plan: Plan, policy: UploadConflictPolicy, ancestorIds: [String] = []) async throws -> Result {
         var result = Result()
-        try await place(plan.root, in: plan.target, display: plan.target.name, policy: policy, result: &result)
+        try await place(plan.root, in: plan.target, display: plan.target.name, policy: policy,
+                        ancestors: ancestorIds, result: &result)
         return result
     }
 
     private func place(_ folder: PlanFolder, in target: UploadTarget, display: String,
-                       policy: UploadConflictPolicy, result: inout Result) async throws {
+                       policy: UploadConflictPolicy, ancestors: [String], result: inout Result) async throws {
+        let chain = ancestors + [target.id]
         // Сначала подпапки — всё дерево создаётся до постановки файлов в очередь.
         for child in folder.folders {
             try Task.checkCancellation()
@@ -118,11 +128,12 @@ struct UploadPlanner: Sendable {
             if let existing = child.existingId {
                 childId = existing
             } else {
-                childId = try await provider.createFolder(named: child.name, in: target).id
+                childId = provider.uploadTarget(for: try await provider.createFolder(named: child.name, in: target)).id
                 result.foldersCreated += 1
             }
             let childTarget = UploadTarget(provider: target.provider, id: childId, name: child.name, spaceId: target.spaceId)
-            try await place(child, in: childTarget, display: display + " / " + child.name, policy: policy, result: &result)
+            try await place(child, in: childTarget, display: display + " / " + child.name, policy: policy,
+                            ancestors: chain, result: &result)
         }
         var used = folder.remoteNames
         for file in folder.files {
@@ -136,7 +147,8 @@ struct UploadPlanner: Sendable {
                 case .replace:
                     replaceId = existing
                 case .keepBoth:
-                    name = Self.keepBothName(file.name, used: used)
+                    // Облако с autorename само подберёт свободное имя при фиксации файла.
+                    if !provider.autorenamesOnConflict { name = Self.keepBothName(file.name, used: used) }
                 }
             }
             used.insert(name)
@@ -145,7 +157,7 @@ struct UploadPlanner: Sendable {
                 localModifiedAt: file.modifiedAt, parentDriveId: target.id, parentName: display, sharedDriveId: target.spaceId,
                 replaceFileId: replaceId, sessionURI: nil, sessionCreatedAt: nil, uploadedBytes: 0, status: .queued,
                 retryCount: 0, lastError: nil, errorKind: nil, driveFileId: nil, checksum: nil, updatedAt: 0,
-                provider: target.provider))
+                provider: target.provider, conflictPolicy: policy, folderIds: chain))
         }
     }
 

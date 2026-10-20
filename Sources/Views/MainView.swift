@@ -54,7 +54,8 @@ struct MainView: View {
                 CloudSwitcher()
                     .padding(.horizontal, 10)
                     .padding(.top, 8)
-                    .padding(.bottom, 4)
+                    // Как интервал между разделами sidebar: переключатель не касается выделенного пункта.
+                    .padding(.bottom, 11)
                 List(selection: $model.selection) {
                     Section {
                         ForEach(SidebarItem.cloudItems(for: model.activeCloud)) { item in
@@ -80,12 +81,13 @@ struct MainView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { focus = .sidebar }
             }
-            // Ширину, выставленную перетаскиванием, SwiftUI запоминает сам
-            // (UserDefaults «NSSplitView Subview Frames main, …») и восстанавливает при запуске.
-            .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
             // Как в Finder: кнопки sidebar в тулбаре нет, показ/скрытие — «Вид → Показать/Скрыть
             // боковую панель» (⌃⌘S), переключатель в настройках или перетаскивание разделителя.
             .toolbar(removing: .sidebarToggle)
+            // Пределы ширины — последним модификатором корня колонки. Ширину, выставленную перетаскиванием,
+            // SwiftUI запоминает сам (UserDefaults «NSSplitView Subview Frames main, …»); шире предела
+            // она приводится к нему при запуске (SidebarWidth.clampSavedWidth).
+            .navigationSplitViewColumnWidth(min: SidebarWidth.min, ideal: SidebarWidth.ideal, max: SidebarWidth.max)
         } detail: {
             // Стабильный контейнер detail-колонки: тулбар висит на нём один раз, а не на виде
             // внутри switch (у браузеров меняется .id), поэтому показ/скрытие sidebar его не пересоздаёт.
@@ -94,25 +96,23 @@ struct MainView: View {
             }
             .toolbar { MainToolbar(model: model) }
             .onChange(of: model.selection) { model.browserFilter = "" }
+            // Те же пределы на уровне NSSplitViewItem: SwiftUI не всегда передаёт их AppKit.
+            .background(SidebarSplitConstraints())
+            // Список файлов и тулбар не сжимаются: sidebar не может отнять у detail больше этого.
+            .navigationSplitViewColumnWidth(min: SidebarWidth.detailMin, ideal: SidebarWidth.detailIdeal)
         }
         .environment(\.mainFocus, $focus)
         .defaultFocus($focus, .content)
         .sheet(isPresented: $model.showAddLink) {
             AddLinkSheet().environment(model)
         }
-        // Finder Services «Upload to Google Drive (NaviDrive)»: выбор папки на диске.
+        // Finder Services «Upload to NaviDrive»: выбор облака, затем папки в нём.
         .sheet(isPresented: Binding(
             get: { model.pendingServiceUpload != nil },
             set: { if !$0 { model.pendingServiceUpload = nil } }
         )) {
-            let urls = model.pendingServiceUpload ?? []
-            FolderPickerSheet(title: urls.count == 1
-                                  ? String(localized: "Where should “\(urls[0].lastPathComponent)” be uploaded?")
-                                  : String(localized: "Where should \(urls.count) items be uploaded?"),
-                              actionTitle: String(localized: "Upload")) { target in
-                model.startUpload(urls, to: target)
-            }
-            .environment(model)
+            ServiceUploadSheet(urls: model.pendingServiceUpload ?? [])
+                .environment(model)
         }
         .alert("NaviDrive", isPresented: Binding(
             get: { model.errorMessage != nil },
@@ -192,48 +192,132 @@ struct MainView: View {
 }
 
 /// Переключатель облака вверху sidebar: сегменты «Google Drive | Dropbox», когда подключены оба;
-/// иначе — подключённое облако и кнопка подключения второго.
+/// иначе — строка подключённого облака и под ней такая же строка-кнопка подключения второго.
 private struct CloudSwitcher: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         @Bindable var model = model
         let connected = model.connectedClouds
-        if connected.count > 1 {
-            Picker("Cloud", selection: $model.activeCloud) {
-                ForEach(connected, id: \.self) { cloud in
-                    Label(cloud.displayName, systemImage: cloud.systemImage).tag(cloud)
+        Group {
+            if connected.count > 1 {
+                Picker("Cloud", selection: $model.activeCloud) {
+                    ForEach(connected, id: \.self) { cloud in
+                        Label(cloud.displayName, systemImage: cloud.systemImage).tag(cloud)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.large)
+                // Во всю ширину — вровень с пунктами списка.
+                .frame(maxWidth: .infinity)
+                .help("Cloud shown in the sidebar")
+                .transition(.opacity)
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    CloudHeaderRow(cloud: model.activeCloud) {
+                        Text(verbatim: model.activeCloud.displayName)
+                    }
+                    if let missing = CloudProviderKind.allCases.first(where: { !connected.contains($0) }) {
+                        ConnectCloudRow(cloud: missing)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.large)
-            .help("Cloud shown in the sidebar")
-        } else {
-            VStack(alignment: .leading, spacing: 4) {
-                Label(model.activeCloud.displayName, systemImage: model.activeCloud.systemImage)
-                    .font(.headline)
-                if let missing = CloudProviderKind.allCases.first(where: { !connected.contains($0) }) {
-                    HStack(spacing: 6) {
-                        Button(String(localized: "Connect \(missing.displayName)…")) { model.signIn(missing) }
-                            .buttonStyle(.link)
-                            .disabled(model.account(missing).isSigningIn)
-                        if model.account(missing).isSigningIn {
+        }
+        .animation(.easeInOut(duration: 0.25), value: connected.count > 1)
+    }
+}
+
+/// Строка заголовка облака: круглый значок с буквой и текст. Общая разметка для строки
+/// подключённого облака и кнопки подключения второго — отступы и высота у них одинаковые.
+private struct CloudHeaderRow<Content: View>: View {
+    let cloud: CloudProviderKind
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(spacing: 8) {
+            CloudLetterIcon(cloud: cloud)
+            content
+                .font(.headline)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 6)
+        .frame(height: 28)
+    }
+}
+
+/// Значок облака — простой круг с буквой (не логотип сервиса). Sidebar и окно приветствия.
+struct CloudLetterIcon: View {
+    let cloud: CloudProviderKind
+
+    var body: some View {
+        Circle()
+            .fill(cloud == .dropbox ? Color.blue : Color.gray)
+            .frame(width: 20, height: 20)
+            .overlay {
+                Text(verbatim: cloud == .dropbox ? "D" : "G")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// «Подключить Dropbox» / «Подключить Google Drive»: строка-кнопка, запускающая вход в облако.
+private struct ConnectCloudRow: View {
+    @Environment(AppModel.self) private var model
+    let cloud: CloudProviderKind
+    @State private var isHovered = false
+
+    private var isSigningIn: Bool { model.account(cloud).isSigningIn }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Button {
+                model.signIn(cloud)
+            } label: {
+                CloudHeaderRow(cloud: cloud) {
+                    if isSigningIn {
+                        HStack(spacing: 6) {
+                            Text("Connecting…")
                             ProgressView().controlSize(.mini)
-                            Button("Cancel") { model.cancelSignIn(missing) }
-                                .buttonStyle(.link)
                         }
-                    }
-                    .font(.caption)
-                    if let error = model.account(missing).signInError {
-                        Text(error)
-                            .font(.caption2).foregroundStyle(.orange)
-                            .lineLimit(3)
-                            .help(error)
+                        .foregroundStyle(.secondary)
+                    } else {
+                        Text(String(localized: "Connect \(cloud.displayName)"))
+                            .foregroundStyle(Color.accentColor)
                     }
                 }
+                .background(isHovered && !isSigningIn ? Color.primary.opacity(0.08) : .clear,
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(.plain)
+            .disabled(isSigningIn)
+            .pointerStyle(isSigningIn ? nil : .link)
+            .onHover { isHovered = $0 }
+            .overlay(alignment: .trailing) {
+                if isSigningIn {
+                    Button {
+                        model.cancelSignIn(cloud)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 6)
+                    .help("Cancel")
+                }
+            }
+            if let error = model.account(cloud).signInError {
+                Text(error)
+                    .font(.caption2).foregroundStyle(.orange)
+                    .lineLimit(3)
+                    .padding(.horizontal, 6)
+                    .help(error)
+            }
         }
     }
 }
