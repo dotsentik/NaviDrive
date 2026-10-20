@@ -162,8 +162,8 @@ private struct DownloadSettings: View {
             }
             LabeledContent("Now") {
                 Text("\(model.threadsSummary) · \(Format.speed(model.snapshot.bytesPerSecond))")
-                    .monospacedDigit()
                     .foregroundStyle(.secondary)
+                    .liveValue(model.snapshot.bytesPerSecond)
             }
         } footer: {
             Text("This is the upper limit. The engine starts with 4 threads and adds one every 15 seconds while total speed keeps growing. If Google reports rate limiting (429), the number of threads is halved immediately. Changes apply on the fly; running downloads are not interrupted.")
@@ -222,8 +222,8 @@ private struct UploadSettings: View {
             }
             LabeledContent("Now") {
                 Text("Active: \(model.uploadSnapshot.runningCount) of \(model.uploadSnapshot.limit) · \(Format.speed(model.uploadSnapshot.bytesPerSecond))")
-                    .monospacedDigit()
                     .foregroundStyle(.secondary)
+                    .liveValue(model.uploadSnapshot.bytesPerSecond)
             }
         } footer: {
             Text("Separate from download threads: downloads and uploads run at the same time. If Google rate-limits requests, the number of uploads is temporarily reduced. Files are sent in 32 MB parts and continue from where they stopped after a connection drop.")

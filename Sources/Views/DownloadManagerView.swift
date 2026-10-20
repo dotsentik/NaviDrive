@@ -34,28 +34,24 @@ struct DownloadManagerView: View {
     // MARK: - Summary
 
     private var summary: some View {
-        HStack(alignment: .center, spacing: 24) {
-            stat("Speed", model.downloadSpeedText)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Threads (limit \(model.snapshot.userLimit))").font(.caption).foregroundStyle(.secondary)
-                Text(model.threadsSummary).font(.headline).monospacedDigit()
-                Text(model.snapshot.balancerStatus).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                Text("small \(model.snapshot.runningSmall) · large \(model.snapshot.runningLarge) · export \(model.snapshot.runningExports)")
-                    .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-            }
-            .help("The number of threads is tuned automatically (AIMD): +1 every 15 s while speed grows; ×½ when Google rate-limits.")
-            stat("Network", model.networkStatusText, color: model.snapshot.isOnline ? .green : .orange)
-            // Свой счётчик Google за скользящие 24 часа — только когда в переключателе выбран Google Drive.
-            if model.activeCloud == .googleDrive, model.connectedClouds.contains(.googleDrive) {
-                stat("Google in 24 h", model.googleUsageText(.download), color: googleUsageColor)
-                    .help("Downloaded from Google Drive in the last 24 hours (rolling window). The limit is shared by everyone who uses this Google Client ID.")
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Overall progress").font(.caption).foregroundStyle(.secondary)
-                ProgressView(value: model.totals.fraction)
-                Text(model.progressSummary).font(.caption).monospacedDigit()
-            }
-            .frame(maxWidth: .infinity)
+        HStack(alignment: .center, spacing: TransferStatsLayout.spacing) {
+            DownloadStatsHeader(
+                speed: model.downloadSpeedText,
+                userLimit: model.snapshot.userLimit,
+                threads: model.threadsSummary,
+                balancerStatus: model.snapshot.balancerStatus,
+                runningSmall: model.snapshot.runningSmall,
+                runningLarge: model.snapshot.runningLarge,
+                runningExports: model.snapshot.runningExports,
+                network: model.networkStatusText,
+                isOnline: model.snapshot.isOnline,
+                // Свой счётчик Google за скользящие 24 часа — только когда в переключателе выбран Google Drive.
+                googleUsage: model.activeCloud == .googleDrive && model.connectedClouds.contains(.googleDrive)
+                    ? model.googleUsageText(.download) : nil,
+                googleUsageColor: googleUsageColor,
+                fraction: model.totals.fraction,
+                progress: model.progressSummary
+            )
             if let status = model.limit(.googleDrive, .download), status.isReached {
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Waiting for daily limit: \(status.waitingCount)", systemImage: "hourglass")
@@ -73,7 +69,7 @@ struct DownloadManagerView: View {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text("Scanning: \(model.snapshot.scannedFiles) files")
-                        .font(.caption).monospacedDigit()
+                        .font(.caption).liveValue(model.snapshot.scannedFiles)
                 }
             }
         }
@@ -85,13 +81,6 @@ struct DownloadManagerView: View {
         guard let status = model.limit(.googleDrive, .download) else { return .primary }
         if status.isReached || (status.fraction ?? 0) >= 0.95 { return .red }
         return (status.fraction ?? 0) >= 0.8 ? .orange : .primary
-    }
-
-    private func stat(_ title: LocalizedStringKey, _ value: String, color: Color = .primary) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.headline).monospacedDigit().foregroundStyle(color)
-        }
     }
 
     private var scanErrors: some View {
@@ -109,13 +98,9 @@ struct DownloadManagerView: View {
     // MARK: - Tasks
 
     private var filterBar: some View {
-        Picker("Show", selection: Binding(get: { model.downloadFilter }, set: { model.setFilter($0) })) {
-            ForEach(DownloadFilter.allCases) { filter in
-                Text(filterTitle(filter)).tag(filter)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+        EqualSegmentedPicker(accessibilityLabel: String(localized: "Show"), options: DownloadFilter.allCases,
+                             title: filterTitle,
+                             selection: Binding(get: { model.downloadFilter }, set: { model.setFilter($0) }))
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
     }
@@ -201,6 +186,89 @@ struct DownloadManagerView: View {
         }
         .font(.callout)
     }
+}
+
+/// Строка показателей шапки: колонки фиксированной ширины (`TransferStatsLayout`), «Общий прогресс» — всё остальное.
+private struct DownloadStatsHeader: View {
+    let speed: String
+    let userLimit: Int
+    let threads: String
+    let balancerStatus: String
+    let runningSmall: Int
+    let runningLarge: Int
+    let runningExports: Int
+    let network: String
+    let isOnline: Bool
+    let googleUsage: String?
+    let googleUsageColor: Color
+    let fraction: Double
+    let progress: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: TransferStatsLayout.spacing) {
+            TransferStatCell(title: "Speed", value: speed, width: TransferStatsLayout.speedWidth)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Threads (limit \(userLimit))").font(.caption).foregroundStyle(.secondary).liveValue(userLimit)
+                Text(threads).font(.headline).liveValue(threads)
+                Text(balancerStatus).font(.caption2).foregroundStyle(.secondary).liveValue(balancerStatus)
+                Text("small \(runningSmall) · large \(runningLarge) · export \(runningExports)")
+                    .font(.caption2).foregroundStyle(.secondary).liveValue([runningSmall, runningLarge, runningExports])
+            }
+            .frame(width: TransferStatsLayout.threadsWidth, alignment: .leading)
+            .help("The number of threads is tuned automatically (AIMD): +1 every 15 s while speed grows; ×½ when Google rate-limits.")
+            TransferStatCell(title: "Network", value: network, color: isOnline ? .green : .orange,
+                             width: TransferStatsLayout.networkWidth)
+            if let googleUsage {
+                TransferStatCell(title: "Google in 24 h", value: googleUsage, color: googleUsageColor,
+                                 width: TransferStatsLayout.googleWidth)
+                    .help("Downloaded from Google Drive in the last 24 hours (rolling window). The limit is shared by everyone who uses this Google Client ID.")
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Overall progress").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                ProgressView(value: fraction)
+                    .animation(nil, value: fraction)
+                Text(progress).font(.caption).liveValue(progress)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+#Preview("Download stats header") {
+    let gb: Int64 = 1_000_000_000
+    let mb = 1024.0 * 1024.0
+    VStack(alignment: .leading, spacing: 0) {
+        // Минимальные, средние и максимальные значения: колонки и левый край прогресса должны стоять на месте.
+        DownloadStatsHeader(speed: Format.speed(0), userLimit: 1,
+                            threads: String(localized: "Active threads: \(0) of \(1)"),
+                            balancerStatus: String(localized: "Start: \(1)"),
+                            runningSmall: 0, runningLarge: 0, runningExports: 0,
+                            network: String(localized: "Online"), isOnline: true,
+                            googleUsage: Format.diskBytes(0), googleUsageColor: .primary,
+                            fraction: 0, progress: String(localized: "No downloads"))
+        Divider()
+        DownloadStatsHeader(speed: Format.speed(46.7 * mb), userLimit: 8,
+                            threads: String(localized: "Active threads: \(6) of \(8)"),
+                            balancerStatus: String(localized: "Speed is increasing: +1 → \(7)"),
+                            runningSmall: 3, runningLarge: 2, runningExports: 1,
+                            network: String(localized: "Online"), isOnline: true,
+                            googleUsage: String(localized: "\(Format.diskBytes(471_100_000_000)) of \(Format.diskBytes(900 * gb))"),
+                            googleUsageColor: .orange,
+                            fraction: 0.523,
+                            progress: "\(Format.bytes(471 * gb)) / \(Format.bytes(900 * gb)) (\(Format.percent(0.523)))")
+        Divider()
+        DownloadStatsHeader(speed: Format.speed(999.9 * mb), userLimit: 16,
+                            threads: String(localized: "Active threads: \(16) of \(16)"),
+                            balancerStatus: String(localized: "Link saturated: holding at \(8)"),
+                            runningSmall: 16, runningLarge: 16, runningExports: 16,
+                            network: String(localized: "Waiting for network…"), isOnline: false,
+                            googleUsage: String(localized: "\(Format.diskBytes(999_950_000_000)) of \(Format.diskBytes(1000 * gb))"),
+                            googleUsageColor: .red,
+                            fraction: 0.999,
+                            progress: "\(Format.bytes(999 * gb)) / \(Format.bytes(1000 * gb)) (\(Format.percent(0.999)))")
+    }
+    .padding(16)
+    .frame(width: 1100)
 }
 
 private struct DownloadTaskRow: View, Equatable {

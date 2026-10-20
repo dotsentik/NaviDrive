@@ -36,28 +36,34 @@ struct UploadManagerView: View {
 
     private var summary: some View {
         let snapshot = model.uploadSnapshot
-        return HStack(alignment: .center, spacing: 24) {
-            stat("Speed", snapshot.isPaused ? String(localized: "Paused") : Format.speed(snapshot.bytesPerSecond))
+        let speed = snapshot.isPaused ? String(localized: "Paused") : Format.speed(snapshot.bytesPerSecond)
+        return HStack(alignment: .center, spacing: TransferStatsLayout.spacing) {
+            TransferStatCell(title: "Speed", value: speed, width: TransferStatsLayout.speedWidth)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Uploads (limit \(snapshot.userLimit))").font(.caption).foregroundStyle(.secondary)
-                Text("Active: \(snapshot.runningCount) of \(snapshot.limit)").font(.headline).monospacedDigit()
+                Text("Uploads (limit \(snapshot.userLimit))").font(.caption).foregroundStyle(.secondary).liveValue(snapshot.userLimit)
+                Text("Active: \(snapshot.runningCount) of \(snapshot.limit)").font(.headline)
+                    .liveValue([snapshot.runningCount, snapshot.limit])
                 if snapshot.limit < snapshot.userLimit {
                     Text("Google is rate-limiting requests — the limit is temporarily reduced")
-                        .font(.caption2).foregroundStyle(.orange).lineLimit(1)
+                        .font(.caption2).foregroundStyle(.orange).lineLimit(1).truncationMode(.tail)
                 }
             }
+            .frame(width: TransferStatsLayout.threadsWidth, alignment: .leading)
             .help("The number of simultaneous uploads is set in Settings (1–6). Downloads run in parallel with their own limit.")
-            stat("Network", snapshot.isOnline ? String(localized: "Online") : String(localized: "Waiting for network…"), color: snapshot.isOnline ? .green : .orange)
+            TransferStatCell(title: "Network",
+                             value: snapshot.isOnline ? String(localized: "Online") : String(localized: "Waiting for network…"),
+                             color: snapshot.isOnline ? .green : .orange, width: TransferStatsLayout.networkWidth)
             if model.activeCloud == .googleDrive, model.connectedClouds.contains(.googleDrive) {
-                stat("Google in 24 h", model.googleUsageText(.upload))
+                TransferStatCell(title: "Google in 24 h", value: model.googleUsageText(.upload), width: TransferStatsLayout.googleWidth)
                     .help("Uploaded to Google Drive in the last 24 hours (rolling window). The limit is shared by everyone who uses this Google Client ID.")
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text("Overall progress").font(.caption).foregroundStyle(.secondary)
+                Text("Overall progress").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 ProgressView(value: model.uploadTotals.fraction)
-                Text(model.uploadProgressSummary).font(.caption).monospacedDigit()
+                    .animation(nil, value: model.uploadTotals.fraction)
+                Text(model.uploadProgressSummary).font(.caption).liveValue(model.uploadProgressSummary)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
             if !snapshot.preparing.isEmpty {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
@@ -70,23 +76,12 @@ struct UploadManagerView: View {
         .padding(16)
     }
 
-    private func stat(_ title: LocalizedStringKey, _ value: String, color: Color = .primary) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.headline).monospacedDigit().foregroundStyle(color)
-        }
-    }
-
     // MARK: - List
 
     private var filterBar: some View {
-        Picker("Show", selection: Binding(get: { model.uploadFilter }, set: { model.setUploadFilter($0) })) {
-            ForEach(DownloadFilter.allCases) { filter in
-                Text(filterTitle(filter)).tag(filter)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+        EqualSegmentedPicker(accessibilityLabel: String(localized: "Show"), options: DownloadFilter.allCases,
+                             title: filterTitle,
+                             selection: Binding(get: { model.uploadFilter }, set: { model.setUploadFilter($0) }))
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
     }
