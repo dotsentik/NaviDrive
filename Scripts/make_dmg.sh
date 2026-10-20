@@ -2,21 +2,25 @@
 # Собирает установочный DMG NaviDrive: приложение слева, ярлык Applications справа, фон со стрелкой.
 # Только встроенные инструменты macOS: hdiutil, ditto, osascript, sips, tiffutil, PlistBuddy, swift.
 # Запуск из любой папки: scripts/make_dmg.sh
-# Результат: ~/Desktop/NaviDrive-<версия>.dmg (существующий файл с тем же именем перезаписывается).
+# Результат: ~/Desktop/NaviDrive-<версия>.dmg (или $NAVIDRIVE_DMG_DIR) (существующий файл с тем же именем перезаписывается).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-APP="$ROOT/DerivedData/Build/Products/Release/NaviDrive.app"
+# NAVIDRIVE_APP и NAVIDRIVE_DMG_DIR переопределяют собранное приложение и папку результата (release.sh, тесты).
+APP="${NAVIDRIVE_APP:-$ROOT/DerivedData/Build/Products/Release/NaviDrive.app}"
 VOLUME_NAME="NaviDrive"
 BACKGROUND="$SCRIPT_DIR/dmg-background.png"
 BACKGROUND_2X="$SCRIPT_DIR/dmg-background@2x.png"
 BACKGROUND_SOURCE="$SCRIPT_DIR/make_dmg_background.swift"
+README_SOURCE="$SCRIPT_DIR/first-launch.txt"
+README_NAME="READ ME FIRST.txt"
 # Окно 600×400 и центры иконок — те же, что в make_dmg_background.swift.
 WINDOW_W=600
 WINDOW_H=400
 APP_POS="150, 190"
 APPLICATIONS_POS="450, 190"
+README_POS="300, 70"  # над стрелкой: внизу фона — подпись «Перетащите…»
 
 fail() { echo "Ошибка: $*" >&2; exit 1; }
 step() { echo "==> $*"; }
@@ -27,7 +31,7 @@ step() { echo "==> $*"; }
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null)" \
     || fail "в $APP/Contents/Info.plist нет CFBundleShortVersionString"
-DMG="$HOME/Desktop/NaviDrive-$VERSION.dmg"
+DMG="${NAVIDRIVE_DMG_DIR:-$HOME/Desktop}/NaviDrive-$VERSION.dmg"
 
 if [ -d "/Volumes/$VOLUME_NAME" ]; then
     fail "уже подключён том /Volumes/$VOLUME_NAME (например, старый DMG). Извлеките его в Finder и запустите скрипт снова."
@@ -56,6 +60,9 @@ STAGING="$WORK/staging"
 mkdir -p "$STAGING/.background"
 ditto "$APP" "$STAGING/NaviDrive.app"
 ln -s /Applications "$STAGING/Applications"
+# Как открыть неподписанную Apple сборку на другом Mac (Gatekeeper) — на английском и русском.
+[ -f "$README_SOURCE" ] || fail "не найден $README_SOURCE"
+cp "$README_SOURCE" "$STAGING/$README_NAME"
 # Один TIFF с 1x и @2x: Finder сам выбирает нужное разрешение на Retina.
 tiffutil -cathidpicheck "$BACKGROUND" "$BACKGROUND_2X" -out "$STAGING/.background/background.tiff" >/dev/null 2>&1
 ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$APP/Contents/Info.plist" 2>/dev/null || echo AppIcon)"
@@ -93,6 +100,7 @@ tell application "Finder"
         set background picture of viewOptions to file ".background:background.tiff"
         set position of item "NaviDrive.app" of container window to {$APP_POS}
         set position of item "Applications" of container window to {$APPLICATIONS_POS}
+        set position of item "$README_NAME" of container window to {$README_POS}
         update without registering applications
         delay 2
         close

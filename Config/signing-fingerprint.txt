@@ -1,0 +1,4 @@
+# SHA-256 fingerprint of the leaf certificate "NaviDrive Signing" (public data, not a secret).
+# Taken from the signature of a Release build: codesign -d --extract-certificates + openssl x509 -fingerprint -sha256.
+# Scripts/release.sh refuses to publish a build signed with any other certificate. See docs/SIGNING.md.
+02D0DB17A0845C1F9BFFE83748155601D7B7C0DA065336F413E580BFAA9B3E77
