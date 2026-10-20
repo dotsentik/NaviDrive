@@ -237,6 +237,8 @@ private struct GeneralSettings: View {
     @Environment(AppModel.self) private var model
     /// То же состояние, что у columnVisibility главного окна и пункта меню «Вид → Показать/Скрыть боковую панель».
     @AppStorage(AppSettings.showSidebarKey) private var showSidebar = true
+    @AppStorage(AppSettings.holdToQuitKey) private var holdToQuit = true
+    @AppStorage(AppSettings.warnOnQuitKey) private var warnOnQuit = true
 
     /// «English», «Русский» — название языка на нём самом.
     static func languageName(_ code: String) -> String {
@@ -269,6 +271,12 @@ private struct GeneralSettings: View {
         Section {
             Toggle("Keep the Mac awake during downloads and uploads", isOn: $model.preventSleep)
                 .help("While there are active or pending transfers, the system won’t sleep. The display still turns off as usual.")
+        }
+        Section {
+            Toggle("Hold ⌘Q to quit", isOn: $holdToQuit)
+                .help("Press and hold ⌘Q for 1.5 seconds to quit. Quit NaviDrive in the menu works right away.")
+            Toggle("Warn before quitting during transfers", isOn: $warnOnQuit)
+                .help("Asks for confirmation if downloads, uploads, moves to the Trash or size calculations are in progress.")
         }
         Section("Storage") {
             LabeledContent("State database") {

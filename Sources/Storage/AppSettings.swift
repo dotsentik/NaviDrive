@@ -149,6 +149,22 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue, forKey: preventSleepKey) }
     }
 
+    static let holdToQuitKey = "holdCommandQToQuit"
+
+    /// «Удерживать ⌘Q для выхода» (по умолчанию включено): ⌘Q с клавиатуры нужно держать 1,5 секунды.
+    static var holdToQuit: Bool {
+        get { UserDefaults.standard.object(forKey: holdToQuitKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: holdToQuitKey) }
+    }
+
+    static let warnOnQuitKey = "warnOnQuitDuringTransfers"
+
+    /// «Предупреждать при выходе во время передач» (по умолчанию включено).
+    static var warnOnQuitDuringTransfers: Bool {
+        get { UserDefaults.standard.object(forKey: warnOnQuitKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: warnOnQuitKey) }
+    }
+
     // MARK: - Язык интерфейса
 
     /// Выбор языка в настройках. «Как в системе» — ключ AppleLanguages приложения не задан,

@@ -80,7 +80,7 @@ struct MenuBarContent: View {
         .keyboardShortcut(",", modifiers: .command)
 
         Button("Quit NaviDrive") {
-            NSApp.terminate(nil)
+            QuitController.shared.quitFromMenu()
         }
         .keyboardShortcut("q", modifiers: .command)
     }

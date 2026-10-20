@@ -286,6 +286,8 @@ final class AppModel {
     @ObservationIgnored var trashOperation: TrashOperation?
     /// Перемещение с ошибками: красное сообщение, пока список причин не открыли.
     @ObservationIgnored var trashFailures: TrashOperation?
+    /// «Выйти после завершения»: приложение закроется само, когда закончатся передачи.
+    var quitWhenDone = false
     @ObservationIgnored var trashCounter = 0
     @ObservationIgnored var lastBytesFlowAt: Date?
     /// Строка диска, к которой ведёт сообщение карточки (подсвечивается в разделе «Диски»).
@@ -573,6 +575,7 @@ final class AppModel {
         } else {
             rebuildStatusFeed()
         }
+        quitIfTransfersFinished()
     }
 
     // MARK: - Sleep & notifications
@@ -1095,7 +1098,7 @@ final class AppModel {
                 errorMessage = String(localized: "Couldn’t restart NaviDrive: \(error.localizedDescription). Quit and open it again manually.")
                 return
             }
-            NSApp.terminate(nil)
+            QuitController.shared.terminateWithoutPrompt()
         }
     }
 

@@ -282,6 +282,7 @@ struct StatusCard: View {
         switch action {
         case .signIn: return String(localized: "Sign In")
         case .undoTrash: return String(localized: "Undo")
+        case .cancelQuitWhenDone: return String(localized: "Cancel")
         default: return String(localized: "Try Now")
         }
     }

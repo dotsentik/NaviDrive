@@ -30,6 +30,8 @@ struct StatusMessage: Identifiable, Equatable, Sendable {
         case signIn(CloudProviderKind)
         /// «Отменить» перемещение в корзину (Google).
         case undoTrash
+        /// Отменить «Выйти после завершения».
+        case cancelQuitWhenDone
     }
 
     /// Стабильный ключ: при обновлении цифр текст меняется на месте, ротация не сбрасывается.
@@ -216,6 +218,12 @@ extension AppModel {
 
         if let failed = trashFailureMessage() { critical.append(failed) }
         var messages = critical + warnings + trashMessages(now: Date()) + (completionMessage.map { [$0] } ?? []) + normal
+        if quitWhenDone {
+            // Первым: пока ждём завершения, это главное, что происходит с приложением.
+            messages.insert(StatusMessage(id: "quit.whenDone", symbol: "power",
+                                          title: String(localized: "NaviDrive will quit when transfers finish"),
+                                          action: .cancelQuitWhenDone), at: 0)
+        }
         if messages.isEmpty {
             messages = [StatusMessage(id: "idle", symbol: online ? "checkmark.circle" : "wifi.slash", title: networkWord(online),
                                       subtitle: String(localized: "No active transfers"))]
@@ -418,6 +426,7 @@ extension AppModel {
         case .recheckSpace: Task { await scheduler?.recheckSpace(); await refresh() }
         case .signIn(let cloud): signIn(cloud)
         case .undoTrash: undoTrash()
+        case .cancelQuitWhenDone: cancelQuitWhenDone()
         }
     }
 

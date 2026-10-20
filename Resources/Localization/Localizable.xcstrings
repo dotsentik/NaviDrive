@@ -351,6 +351,58 @@
         }
       }
     },
+    "%lld downloads": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld download"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld downloads"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld скачивания"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld скачиваний"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld скачивание"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld скачивания"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld files": {
       "localizations": {
         "en": {
@@ -513,6 +565,162 @@
           "stringUnit": {
             "state": "translated",
             "value": "Объекты не поддерживаются: %lld"
+          }
+        }
+      }
+    },
+    "%lld moves to the Trash": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld move to the Trash"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld moves to the Trash"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld перемещения в корзину"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld перемещений в корзину"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld перемещение в корзину"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld перемещения в корзину"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld size calculations": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld size calculation"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld size calculations"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld подсчёта размера"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld подсчётов размера"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld подсчёт размера"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld подсчёта размера"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld uploads": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld upload"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld uploads"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отправки"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отправок"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отправка"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отправки"
+                }
+              }
+            }
           }
         }
       }
@@ -813,6 +1021,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "В файл «%@» уже пишет другая загрузка (совпадают имена в одной папке)"
+          }
+        }
+      }
+    },
+    "Asks for confirmation if downloads, uploads, moves to the Trash or size calculations are in progress.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спрашивать подтверждение, если идут скачивания, отправки, перемещения в корзину или подсчёт размера."
           }
         }
       }
@@ -2826,6 +3044,36 @@
         }
       }
     },
+    "Hold ⌘Q to Quit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удерживайте ⌘Q для выхода"
+          }
+        }
+      }
+    },
+    "Hold ⌘Q to quit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удерживать ⌘Q для выхода"
+          }
+        }
+      }
+    },
+    "In progress: %@. Progress will be saved, and transfers will continue the next time NaviDrive starts.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сейчас идут: %@. Прогресс сохранится, и передачи продолжатся при следующем запуске."
+          }
+        }
+      }
+    },
     "Internal disk": {
       "localizations": {
         "ru": {
@@ -3385,6 +3633,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "NaviDrive продолжит автоматически около %@."
+          }
+        }
+      }
+    },
+    "NaviDrive will quit when transfers finish": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive закроется после завершения передач"
           }
         }
       }
@@ -4132,6 +4390,16 @@
         }
       }
     },
+    "Press and hold ⌘Q for 1.5 seconds to quit. Quit NaviDrive in the menu works right away.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чтобы выйти, удерживайте ⌘Q 1,5 секунды. Пункт «Выйти из NaviDrive» в меню срабатывает сразу."
+          }
+        }
+      }
+    },
     "Progress is saved · %@ waiting": {
       "localizations": {
         "ru": {
@@ -4252,12 +4520,42 @@
         }
       }
     },
+    "Quit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выйти"
+          }
+        }
+      }
+    },
     "Quit NaviDrive": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Выход"
+          }
+        }
+      }
+    },
+    "Quit NaviDrive?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершить NaviDrive?"
+          }
+        }
+      }
+    },
+    "Quit When Done": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выйти после завершения"
           }
         }
       }
@@ -6076,6 +6374,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ожидает подсчёта размера…"
+          }
+        }
+      }
+    },
+    "Warn before quitting during transfers": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предупреждать при выходе во время передач"
           }
         }
       }

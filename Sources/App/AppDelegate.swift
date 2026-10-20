@@ -7,7 +7,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
+        QuitController.shared.install()
         AppModel.shared.startIfNeeded()
+    }
+
+    /// Удержание ⌘Q, подтверждение при активных передачах, аккуратная остановка (см. QuitController).
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        QuitController.shared.shouldTerminate()
     }
 
     /// Закрытие окна не завершает приложение: загрузки продолжаются в фоне, управление — из трея.
