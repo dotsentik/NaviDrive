@@ -1,6 +1,6 @@
 import SwiftUI
 
-@main
+/// Запускается из `NaviDriveMain`.
 struct NaviDriveApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel.shared

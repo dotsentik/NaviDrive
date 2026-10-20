@@ -216,16 +216,10 @@ final class UpdateController {
             let work = try UpdateInstaller.workDirectory()
             let dmg = work.appendingPathComponent(release.dmgName)
 
-            let checksumData = try await UpdateNetwork.fetchSmallFile(release.checksumURL, limit: UpdatePolicy.maxChecksumBytes)
-            let expected: String
-            do {
-                expected = try UpdatePolicy.parseChecksum(checksumData, expectedFileName: release.dmgName)
-            } catch let error as UpdateCoreError {
-                throw UpdateError.core(error)
-            }
+            let expected = try await UpdateInstaller.expectedChecksum(for: release)
 
             // Уже скачанный и проверенный образ (например, после «Later» в вопросе о загрузках) не качается заново.
-            if !(await Self.fileMatches(dmg, sha256: expected)) {
+            if !(await UpdateInstaller.fileMatches(dmg, sha256: expected)) {
                 let limit = min(UpdatePolicy.maxDownloadBytes, release.dmgSize + 1024 * 1024)
                 try await UpdateNetwork.download(release.dmgURL, to: dmg, maxBytes: limit) { written, total in
                     let fraction = total > 0 ? Double(written) / Double(total) : nil
@@ -238,7 +232,7 @@ final class UpdateController {
                 }
                 try Task.checkCancellation()
                 windowState = .verifying(release)
-                guard await Self.fileMatches(dmg, sha256: expected) else {
+                guard await UpdateInstaller.fileMatches(dmg, sha256: expected) else {
                     try? FileManager.default.removeItem(at: dmg)
                     throw UpdateError.core(.checksumMismatch)
                 }
@@ -248,15 +242,8 @@ final class UpdateController {
 
             let location = UpdateInstaller.currentLocation()
             let current = currentVersion
-            stagedURL = try await Task.detached(priority: .userInitiated) { () throws -> URL? in
-                let image = try UpdateInstaller.mount(dmg, under: work)
-                defer { UpdateInstaller.detach(image) }
-                let app = try UpdateInstaller.appInImage(image)
-                try UpdateInstaller.verifySignature(of: app)
-                try UpdateInstaller.verifyVersion(of: app, expected: release.version, current: current)
-                guard case .writable(let appURL) = location else { return nil }
-                return try UpdateInstaller.stage(app, nextTo: appURL, version: release.version)
-            }.value
+            stagedURL = try await UpdateInstaller.verifyAndStage(dmg: dmg, work: work, version: release.version,
+                                                                 current: current, location: location)
             try Task.checkCancellation()
 
             guard let staged = stagedURL, case .writable(let appURL) = location else {
@@ -293,13 +280,6 @@ final class UpdateController {
             UpdateLog.logger.error("Update failed: \(error.localizedDescription, privacy: .public)")
             windowState = .failed(release, message: error.localizedDescription)
         }
-    }
-
-    private nonisolated static func fileMatches(_ url: URL, sha256 expected: String) async -> Bool {
-        guard FileManager.default.fileExists(atPath: url.path) else { return false }
-        return await Task.detached(priority: .userInitiated) {
-            (try? UpdatePolicy.verifySHA256(ofFileAt: url, expected: expected)) != nil
-        }.value
     }
 
     private func downloadsCopyURL(for release: UpdateRelease?) -> URL? {

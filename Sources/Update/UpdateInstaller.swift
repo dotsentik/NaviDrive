@@ -83,8 +83,11 @@ enum UpdateNetwork {
     }
 
     static func fetchLatestRelease(repo: String, etag: String?) async throws -> LatestResult {
-        guard let url = URL(string: "https://api.github.com/repos/\(repo)/releases/latest"),
-              UpdatePolicy.isAllowed(url) else { throw UpdateError.notConfigured }
+        var feed = URL(string: "https://api.github.com/repos/\(repo)/releases/latest")
+        #if DEBUG
+        if let debugFeed = UpdatePolicy.debugFeedURL { feed = debugFeed }
+        #endif
+        guard let url = feed, UpdatePolicy.isAllowed(url) else { throw UpdateError.notConfigured }
         var request = URLRequest(url: url)
         if let etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
         let session = URLSession(configuration: makeConfiguration())
@@ -295,7 +298,14 @@ enum UpdateInstaller {
     }
 
     private static var workDirectoryURL: URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent("com.navidrive.NaviDrive.update", isDirectory: true)
+        var base = FileManager.default.temporaryDirectory
+        #if DEBUG
+        // Сквозная проверка обновления: рабочая папка — в TMPDIR теста (temporaryDirectory его не учитывает).
+        if UpdatePolicy.debugFeedURL != nil, let tmp = ProcessInfo.processInfo.environment["TMPDIR"], !tmp.isEmpty {
+            base = URL(fileURLWithPath: tmp, isDirectory: true)
+        }
+        #endif
+        return base.appendingPathComponent("com.navidrive.NaviDrive.update", isDirectory: true)
     }
 
     static let helperLogName = "replace.log"
@@ -426,20 +436,57 @@ enum UpdateInstaller {
         return staged
     }
 
+    // MARK: Общие шаги обновления (окно обновления и режим проверки обновления в Debug)
+
+    /// SHA-256 образа из ассета .sha256 релиза.
+    static func expectedChecksum(for release: UpdateRelease) async throws -> String {
+        let data = try await UpdateNetwork.fetchSmallFile(release.checksumURL, limit: UpdatePolicy.maxChecksumBytes)
+        do {
+            return try UpdatePolicy.parseChecksum(data, expectedFileName: release.dmgName)
+        } catch let error as UpdateCoreError {
+            throw UpdateError.core(error)
+        }
+    }
+
+    static func fileMatches(_ url: URL, sha256 expected: String) async -> Bool {
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        return await Task.detached(priority: .userInitiated) {
+            (try? UpdatePolicy.verifySHA256(ofFileAt: url, expected: expected)) != nil
+        }.value
+    }
+
+    /// Образ подключается только для чтения; подпись и версия .app проверяются, копия кладётся рядом с текущей.
+    /// nil — место установки только для чтения: обновить на месте нельзя.
+    static func verifyAndStage(dmg: URL, work: URL, version: SemanticVersion, current: SemanticVersion,
+                               location: Location) async throws -> URL? {
+        try await Task.detached(priority: .userInitiated) { () throws -> URL? in
+            let image = try mount(dmg, under: work)
+            defer { detach(image) }
+            let app = try appInImage(image)
+            try verifySignature(of: app)
+            try verifyVersion(of: app, expected: version, current: current)
+            guard case .writable(let appURL) = location else { return nil }
+            return try stage(app, nextTo: appURL, version: version)
+        }.value
+    }
+
     // MARK: Замена после выхода
 
     /// Вспомогательный процесс: ждёт выхода NaviDrive по PID, переименовывает старую копию в NaviDrive.app.old,
     /// ставит новую, запускает её; при успешном запуске удаляет .old, иначе возвращает старую копию.
     /// Этапы пишет в `helperLogName` (из shell в os_log не попасть); запущенная после замены копия
     /// пересылает их в os_log — `forwardHelperLog()`.
+    /// Режим «direct» (только проверка обновления в Debug): новая копия запускается напрямую, с окружением
+    /// вспомогательного процесса, и должна завершиться с кодом 0; `open` не вызывается.
     private static let helperScript = #"""
     #!/bin/sh
-    PID="$1"; APP="$2"; NEW="$3"; LOG="$4"; OLD="$2.old"
+    PID="$1"; APP="$2"; NEW="$3"; LOG="$4"; MODE="${5:-open}"; OLD="$2.old"
     log() { printf '%s %s\n' "$(/bin/date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG"; }
+    reopen() { [ "$MODE" = "direct" ] || /usr/bin/open "$APP"; }
     restore() {
         log "restoring the previous version"
         [ -e "$APP" ] && /bin/rm -rf "$APP"
-        /bin/mv "$OLD" "$APP" && /usr/bin/open "$APP"
+        /bin/mv "$OLD" "$APP" && reopen
     }
     log "waiting for NaviDrive (pid $PID) to quit"
     i=0
@@ -451,14 +498,20 @@ enum UpdateInstaller {
     [ -e "$OLD" ] && /bin/rm -rf "$OLD"
     if ! /bin/mv "$APP" "$OLD"; then
         log "could not move the old version aside, update cancelled"
-        /bin/rm -rf "$NEW"; /usr/bin/open "$APP"; exit 1
+        /bin/rm -rf "$NEW"; reopen; exit 1
     fi
     if ! /bin/mv "$NEW" "$APP"; then
         log "could not put the new version in place"
-        /bin/mv "$OLD" "$APP"; /bin/rm -rf "$NEW"; /usr/bin/open "$APP"; exit 1
+        /bin/mv "$OLD" "$APP"; /bin/rm -rf "$NEW"; reopen; exit 1
     fi
     log "new version installed, launching"
-    if /usr/bin/open "$APP"; then
+    if [ "$MODE" = "direct" ]; then
+        if "$APP/Contents/MacOS/NaviDrive" </dev/null >/dev/null 2>&1; then
+            /bin/rm -rf "$OLD"
+            log "new version launched, previous version removed"
+            exit 0
+        fi
+    elif /usr/bin/open "$APP"; then
         j=0
         while [ "$j" -lt 30 ]; do
             if /usr/bin/pgrep -x NaviDrive >/dev/null 2>&1; then
@@ -475,7 +528,8 @@ enum UpdateInstaller {
     """#
 
     /// Запуск вспомогательного процесса; после этого приложение должно завершиться.
-    static func launchReplacementHelper(appURL: URL, stagedURL: URL, workDirectory: URL) throws {
+    static func launchReplacementHelper(appURL: URL, stagedURL: URL, workDirectory: URL,
+                                        directLaunch: Bool = false) throws {
         let script = workDirectory.appendingPathComponent("replace.sh")
         try? FileManager.default.removeItem(at: script)
         guard FileManager.default.createFile(atPath: script.path, contents: Data(helperScript.utf8),
@@ -485,7 +539,7 @@ enum UpdateInstaller {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [script.path, String(getpid()), appURL.path, stagedURL.path,
-                             workDirectory.appendingPathComponent(helperLogName).path]
+                             workDirectory.appendingPathComponent(helperLogName).path] + (directLaunch ? ["direct"] : [])
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice

@@ -106,9 +106,27 @@ enum UpdatePolicy {
     /// Файл .sha256 — одна строка.
     static let maxChecksumBytes = 4096
 
+    #if DEBUG
+    /// Только Debug (Scripts/test-update-e2e.sh): NAVIDRIVE_UPDATE_FEED — адрес мока releases/latest вместо
+    /// api.github.com. Принимается только http://127.0.0.1:<порт>/…; тот же хост и порт разрешаются
+    /// для ссылок на ассеты. Без переменной список хостов прежний.
+    static let debugFeedURL: URL? = {
+        guard let text = ProcessInfo.processInfo.environment["NAVIDRIVE_UPDATE_FEED"],
+              let components = URLComponents(string: text),
+              components.scheme == "http", components.host == "127.0.0.1", components.port != nil else { return nil }
+        return components.url
+    }()
+    #endif
+
     static func isAllowed(_ url: URL?) -> Bool {
-        guard let url, let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              components.scheme?.lowercased() == "https",
+        guard let url, let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
+        #if DEBUG
+        if let feed = debugFeedURL, components.scheme == "http", components.host == "127.0.0.1",
+           components.port == feed.port, components.user == nil, components.password == nil {
+            return true
+        }
+        #endif
+        guard components.scheme?.lowercased() == "https",
               components.user == nil, components.password == nil,
               components.port == nil || components.port == 443,
               let host = components.host?.lowercased() else { return false }
