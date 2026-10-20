@@ -1,10 +1,12 @@
 # NaviDrive
 
+<p align="center"><img src="docs/screenshots/navidrive-hero.png" alt="NaviDrive: клиент Google Drive и Dropbox для macOS" width="880"></p>
+
+<p align="center">A native macOS client for Google Drive and Dropbox, focused on fast, resumable downloads and uploads of large files and folders.</p>
+
 A native macOS client for Google Drive and Dropbox, focused on fast, resumable downloads and uploads of large files and folders.
 
 [Русская версия](README.ru.md)
-
-<!-- Screenshots: add images here (for example docs/screenshots/main.png) -->
 
 ## Features
 

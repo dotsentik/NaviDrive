@@ -1,5 +1,9 @@
 # NaviDrive
 
+<p align="center"><img src="docs/screenshots/navidrive-hero.png" alt="NaviDrive: клиент Google Drive и Dropbox для macOS" width="880"></p>
+
+<p align="center">Нативный клиент Google Drive и Dropbox для macOS: быстрое скачивание и отправка больших файлов и папок с докачкой.</p>
+
 Нативный клиент Google Drive и Dropbox для macOS: быстрое скачивание и отправка больших файлов и папок с докачкой.
 
 Подробная документация — в [README.md](README.md) (на английском).
