@@ -11,6 +11,7 @@ so macOS Gatekeeper blocks the first launch on another Mac.
    sudo xattr -cr /Applications/NaviDrive.app
 
 Tip: download the DMG from GitHub Releases in a browser or send it over AirDrop.
+Later updates installed from inside NaviDrive need none of these steps.
 
 ----------------------------------------------------------------
 
@@ -27,3 +28,4 @@ NaviDrive подписан собственным сертификатом и н
    sudo xattr -cr /Applications/NaviDrive.app
 
 Совет: скачивайте DMG из GitHub Releases в браузере или передавайте по AirDrop.
+Обновления, установленные из самого NaviDrive, этих шагов не требуют.

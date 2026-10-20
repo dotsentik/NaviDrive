@@ -18,12 +18,13 @@ A native macOS client for Google Drive and Dropbox, focused on fast, resumable d
 - Folder size calculation, new folder, move, move to Trash.
 - Tracks Google Drive daily transfer limits and resumes transfers automatically when they reset.
 - Menu bar status, optional "keep the Mac awake during transfers", "Quit When Done", hold ⌘Q to quit.
+- In-app updates from GitHub Releases: weekly or manual check; the download is verified (SHA-256, signing certificate, version) before installing.
 - English and Russian interface.
 
 ## Requirements
 
 - macOS 15 or later.
-- Apple silicon (the project builds for `arm64`).
+- Apple silicon or Intel: release DMGs built by `Scripts/release.sh` are universal (`arm64` + `x86_64`); a plain local build is `arm64` only.
 - To build: Xcode 16 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
 ## Installation
@@ -42,6 +43,8 @@ Release builds are signed with the project's own certificate and are not notariz
 
 Download the DMG from GitHub Releases in a browser or send it over AirDrop to avoid step 3.
 
+These steps are needed only once. Updates installed from inside the app (NaviDrive → Check for Updates…) do not need them.
+
 ## Building from source
 
 ```sh
@@ -51,6 +54,8 @@ xcodebuild -project NaviDrive.xcodeproj -scheme NaviDrive -configuration Release
   -derivedDataPath ./DerivedData -quiet build
 Scripts/make_dmg.sh   # ~/Desktop/NaviDrive-<version>.dmg
 ```
+
+Releases are made with `Scripts/release.sh X.Y.Z` from a clean `main`: it builds a universal app, checks the signing certificate against `Config/signing-fingerprint.txt`, creates `NaviDrive-X.Y.Z.dmg` and `NaviDrive-X.Y.Z.dmg.sha256`, takes the notes from `CHANGELOG.md` and publishes them with `gh`. `Scripts/release.sh --dry-run X.Y.Z` builds and checks the files without publishing.
 
 `NaviDrive.xcodeproj` is generated from `project.yml`; change build settings there, not in the Xcode project.
 
@@ -66,7 +71,7 @@ Cloud credentials are not stored in the repository. `Config/NaviDrive.xcconfig` 
 ## Security and privacy
 
 - OAuth tokens and user-entered credentials are stored in the macOS Keychain.
-- The app talks only to Google (accounts.google.com, oauth2.googleapis.com, www.googleapis.com) and Dropbox (dropbox.com, api.dropboxapi.com, content.dropboxapi.com). There is no analytics or telemetry.
+- The app talks only to Google (accounts.google.com, oauth2.googleapis.com, www.googleapis.com) and Dropbox (dropbox.com, api.dropboxapi.com, content.dropboxapi.com), plus GitHub (api.github.com and its release download hosts) when checking for updates. There is no analytics or telemetry.
 - Sign-in uses a local loopback server on 127.0.0.1 to receive the OAuth response.
 - The queue, history and folder sizes are kept in a local SQLite database in `~/Library/Application Support/NaviDrive`.
 
@@ -80,13 +85,15 @@ Sources/
   Cloud/      cloud-agnostic item and provider types
   Download/   download scheduler, workers, chunk writing, verification
   Upload/     upload planner, scheduler, workers
+  Update/     update check, verification and installation
   Storage/    SQLite database, settings, Keychain
   Models/     shared models and formatters
   Views/      SwiftUI views
 Resources/    asset catalog, localization (en, ru), design sources
 Support/      Info.plist
 Config/       xcconfig files, signing fingerprint
-Scripts/      DMG and icon tooling
+Scripts/      release, DMG and icon tooling
+Tests/        unit tests (update logic)
 docs/         signing and maintenance documentation
 project.yml   XcodeGen project definition
 ```
