@@ -316,6 +316,11 @@ final class AppModel {
     @ObservationIgnored var browserTransferContext: BrowserTransferContext?
     /// Индикаторы передач и строки-заглушки загружаемых файлов для текущей папки.
     var browserTransfers = BrowserTransfers()
+    /// Строки текущей папки с локальными путями — для пометок «скачано на этот Mac».
+    @ObservationIgnored var browserPresenceContext: LocalPresenceContext?
+    /// ID строки → есть ли объект на этом Mac.
+    var browserPresence: [String: LocalPresence] = [:]
+    @ObservationIgnored let presenceChecker = LocalPresenceChecker()
     /// Растёт, когда список папки устарел (отправленный файл уже в облаке, в очередь добавлены папки).
     var browserListingStaleToken = 0
     /// Отправки, после завершения которых список папки уже обновлялся.

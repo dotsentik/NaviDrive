@@ -82,6 +82,8 @@ struct DriveBrowserView: View {
                         .zIndex(1)
                     table
                         .mainContentFocus()
+                    Divider()
+                    PresenceLegend()
                 }
                 .dropDestination(for: URL.self) { urls, _ in
                     let files = urls.filter(\.isFileURL)
@@ -160,11 +162,13 @@ struct DriveBrowserView: View {
         // Индикаторы передач: модель читает очереди для строк текущей папки.
         .onChange(of: items, initial: true) { publishTransferContext() }
         .onChange(of: stack) { publishTransferContext() }
+        .modifier(PresenceRefresh(model: model, publish: publishPresenceContext))
         // Отправленный файл уже в облаке или созданы папки — список папки обновляется тихо, без мерцания.
         .onChange(of: model.browserListingStaleToken) { if !isLoading { refresh() } }
         .onDisappear {
             cancelLoading()
             model.browserTransferContext = nil
+            model.browserPresenceContext = nil
         }
     }
 
@@ -198,6 +202,11 @@ struct DriveBrowserView: View {
         Table(displayedItems, selection: $selection, sortOrder: $sortOrder) {
             TableColumn("Name", value: \.name, comparator: .localizedStandard) { item in
                 HStack(spacing: 8) {
+                    if !AppModel.isUploadPlaceholder(item.id) {
+                        PresenceBadge(presence: model.browserPresence[item.id] ?? .notDownloaded)
+                    } else {
+                        Color.clear.frame(width: 14)
+                    }
                     Image(systemName: Self.icon(for: item))
                         .foregroundStyle(item.isFolder ? Color.accentColor : .secondary)
                         .frame(width: 18)
@@ -439,9 +448,26 @@ struct DriveBrowserView: View {
         }
         let context = BrowserTransferContext(provider: provider.kind, uploadParentId: uploadTarget?.id,
                                              caseInsensitiveNames: provider.caseInsensitiveNames, rows: rows)
+        publishPresenceContext()
         guard model.browserTransferContext != context else { return }
         model.browserTransferContext = context
         Task { await model.refreshBrowserTransfers() }
+    }
+
+    /// Пути строк по тем же правилам (маршруты, папка по умолчанию), что и при скачивании.
+    private func publishPresenceContext() {
+        let routes = model.routeMap, defaultPath = model.defaultDownloadPath
+        let rows = items.map { item in
+            LocalPresenceContext.Row(
+                id: item.id, isFolder: item.isFolder, downloadId: item.targetId,
+                cloudSize: item.isFolder || item.isAlias || item.isCloudDocument ? nil : item.size,
+                localPath: PathResolver.localPath(for: item, ancestors: stack, routes: routes, defaultPath: defaultPath),
+                routeKey: item.routeKey)
+        }
+        let context = LocalPresenceContext(provider: model.provider.kind, rows: rows)
+        guard model.browserPresenceContext != context else { return }
+        model.browserPresenceContext = context
+        Task { await model.refreshBrowserPresence() }
     }
 
     // MARK: - Editing
@@ -680,6 +706,7 @@ struct DriveBrowserView: View {
 
     private func refresh() {
         reload(resetting: false)
+        Task { await model.refreshBrowserPresence(invalidate: true) }
     }
 
     /// - Parameter resetting: true — переход в другую папку (список очищается сразу);
@@ -820,6 +847,121 @@ struct DriveBrowserView: View {
         case .other, nil:
             let ext = (item.name as NSString).pathExtension.uppercased()
             return ext.isEmpty ? String(localized: "File") : ext
+        }
+    }
+}
+
+/// Пометка «скачано на этот Mac»: значок и цвет, подсказка с процентом, подпись для VoiceOver.
+private struct PresenceBadge: View {
+    @Environment(AppModel.self) private var model
+    let presence: LocalPresence
+
+    var body: some View {
+        Image(systemName: Self.symbol(presence.state))
+            .foregroundStyle(Self.color(presence.state))
+            .font(.caption)
+            .frame(width: 14)
+            .help(help)
+            .accessibilityLabel(accessibilityText)
+    }
+
+    static func symbol(_ state: LocalPresence.State) -> String {
+        switch state {
+        case .downloaded: "checkmark.circle.fill"
+        case .partial: "circle.lefthalf.filled"
+        case .notDownloaded: "circle"
+        }
+    }
+
+    static func color(_ state: LocalPresence.State) -> Color {
+        switch state {
+        case .downloaded: .green
+        case .partial: .orange
+        case .notDownloaded: .secondary
+        }
+    }
+
+    private var done: Int64 { model.presenceDoneBytes(presence) }
+
+    private var fraction: Double? {
+        presence.totalBytes > 0 ? min(1, Double(done) / Double(presence.totalBytes)) : nil
+    }
+
+    private var help: String {
+        if presence.isFolder, presence.totalFiles > 0 {
+            let summary = String(localized: "Downloaded files: \(presence.doneFiles) of \(presence.totalFiles) · \(Format.bytes(presence.doneBytes)) of \(Format.bytes(presence.totalBytes))")
+            return presence.state == .notDownloaded ? String(localized: "Not downloaded to this Mac") + "\n" + summary : summary
+        }
+        switch presence.state {
+        case .downloaded:
+            return presence.verified
+                ? String(localized: "Downloaded to this Mac · checksum verified")
+                : String(localized: "Downloaded to this Mac")
+        case .partial:
+            guard let fraction else { return String(localized: "Partially downloaded: \(Format.bytes(done))") }
+            return String(localized: "Partially downloaded: \(Format.percent(fraction)) — \(Format.bytes(done)) of \(Format.bytes(presence.totalBytes))")
+        case .notDownloaded:
+            return String(localized: "Not downloaded to this Mac")
+        }
+    }
+
+    private var accessibilityText: String {
+        switch presence.state {
+        case .downloaded:
+            return String(localized: "Downloaded")
+        case .partial:
+            let percent = presence.isFolder && presence.totalFiles > 0 && presence.totalBytes == 0
+                ? Int((Double(presence.doneFiles) / Double(presence.totalFiles) * 100).rounded(.down))
+                : Int(((fraction ?? 0) * 100).rounded(.down))
+            return String(localized: "Partially downloaded, \(percent) percent")
+        case .notDownloaded:
+            return String(localized: "Not downloaded")
+        }
+    }
+}
+
+/// Когда перепроверять пометки «скачано»: смена маршрутов, конец загрузок и по таймеру.
+private struct PresenceRefresh: ViewModifier {
+    let model: AppModel
+    let publish: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            // Новый маршрут меняет путь, по которому ищется файл на диске.
+            .onChange(of: model.routeMap) { publish() }
+            .onChange(of: model.hasActiveDownloads) { Task { await model.refreshBrowserPresence() } }
+            .task {
+                // Часто, пока идут загрузки; иначе — чтобы заметить удалённые и перемещённые файлы.
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(model.hasActiveDownloads ? 2 : 10))
+                    await model.refreshBrowserPresence()
+                }
+            }
+    }
+}
+
+/// Легенда пометок под списком файлов.
+private struct PresenceLegend: View {
+    var body: some View {
+        HStack(spacing: 14) {
+            item(.downloaded, String(localized: "Downloaded"))
+            item(.partial, String(localized: "Partially"))
+            item(.notDownloaded, String(localized: "Not downloaded"))
+            Spacer()
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Download status legend")
+    }
+
+    private func item(_ state: LocalPresence.State, _ title: String) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: PresenceBadge.symbol(state)).foregroundStyle(PresenceBadge.color(state))
         }
     }
 }

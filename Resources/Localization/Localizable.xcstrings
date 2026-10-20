@@ -2297,6 +2297,22 @@
         }
       }
     },
+    "Download status legend": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download status legend"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обозначения состояния скачивания"
+          }
+        }
+      }
+    },
     "Download to Custom Folder / External SSD…": {
       "localizations": {
         "ru": {
@@ -2349,12 +2365,76 @@
         }
       }
     },
+    "Downloaded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloaded"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачано"
+          }
+        }
+      }
+    },
+    "Downloaded files: %lld of %lld · %@ of %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloaded files: %lld of %lld · %@ of %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачано файлов: %lld из %lld · %@ из %@"
+          }
+        }
+      }
+    },
     "Downloaded from Google Drive in the last 24 hours (rolling window). The limit is shared by everyone who uses this Google Client ID.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Скачано из Google Drive за последние 24 часа (скользящее окно). Лимит общий для всех, кто использует этот Client ID Google."
+          }
+        }
+      }
+    },
+    "Downloaded to this Mac": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloaded to this Mac"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачано на этот Mac"
+          }
+        }
+      }
+    },
+    "Downloaded to this Mac · checksum verified": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloaded to this Mac · checksum verified"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачано на этот Mac · хеш проверен"
           }
         }
       }
@@ -4081,6 +4161,38 @@
         }
       }
     },
+    "Not downloaded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not downloaded"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не скачано"
+          }
+        }
+      }
+    },
+    "Not downloaded to this Mac": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not downloaded to this Mac"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не скачано на этот Mac"
+          }
+        }
+      }
+    },
     "Not enough disk space": {
       "localizations": {
         "ru": {
@@ -4324,6 +4436,106 @@
           "stringUnit": {
             "state": "translated",
             "value": "Общий прогресс"
+          }
+        }
+      }
+    },
+    "Partially": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partially"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Частично"
+          }
+        }
+      }
+    },
+    "Partially downloaded, %lld percent": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Partially downloaded, %lld percent"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Partially downloaded, %lld percent"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Скачано частично, %lld процент"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Скачано частично, %lld процента"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Скачано частично, %lld процентов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Скачано частично, %lld процента"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Partially downloaded: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partially downloaded: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачано частично: %@"
+          }
+        }
+      }
+    },
+    "Partially downloaded: %@ — %@ of %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partially downloaded: %@ — %@ of %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачано частично: %@ — %@ из %@"
           }
         }
       }

@@ -1261,6 +1261,47 @@ extension DatabaseManager {
         return result
     }
 
+    /// Задачи скачивания файлов `fileIds` в любом статусе, кроме отменённых (пометки «скачано» в браузере).
+    func downloadTasks(provider: CloudProviderKind, fileIds: [String]) -> [DownloadTask] {
+        guard !fileIds.isEmpty else { return [] }
+        var result: [DownloadTask] = []
+        for chunk in stride(from: 0, to: fileIds.count, by: 500).map({ Array(fileIds[$0..<min($0 + 500, fileIds.count)]) }) {
+            result += (try? query("""
+                SELECT \(Self.taskColumns) FROM download_tasks
+                WHERE provider = ? AND drive_file_id IN (\(Self.placeholders(chunk.count))) AND status != 'cancelled'
+                """, [.text(provider.rawValue)] + chunk.map { .text($0) }, reader: true, map: Self.task)) ?? []
+        }
+        return result
+    }
+
+    /// Задачи скачивания внутри папок `folderIds` на любой глубине, кроме отменённых: ID папки → задачи.
+    func downloadTasks(provider: CloudProviderKind, inFolders folderIds: [String]) -> [String: [DownloadTask]] {
+        guard !folderIds.isEmpty else { return [:] }
+        var pairs: [(folderId: String, taskId: String)] = []
+        for chunk in stride(from: 0, to: folderIds.count, by: 500).map({ Array(folderIds[$0..<min($0 + 500, folderIds.count)]) }) {
+            pairs += (try? query("""
+                SELECT folder_id, task_id FROM transfer_folders
+                WHERE kind = 'd' AND provider = ? AND folder_id IN (\(Self.placeholders(chunk.count)))
+                """, [.text(provider.rawValue)] + chunk.map { .text($0) }, reader: true) { s in
+                (folderId: Self.text(s, 0) ?? "", taskId: Self.text(s, 1) ?? "")
+            }) ?? []
+        }
+        let taskIds = Array(Set(pairs.map(\.taskId)))
+        var tasks: [String: DownloadTask] = [:]
+        for chunk in stride(from: 0, to: taskIds.count, by: 500).map({ Array(taskIds[$0..<min($0 + 500, taskIds.count)]) }) {
+            let rows = (try? query("""
+                SELECT \(Self.taskColumns) FROM download_tasks
+                WHERE provider = ? AND id IN (\(Self.placeholders(chunk.count))) AND status != 'cancelled'
+                """, [.text(provider.rawValue)] + chunk.map { .text($0) }, reader: true, map: Self.task)) ?? []
+            for task in rows { tasks[task.id] = task }
+        }
+        var result: [String: [DownloadTask]] = [:]
+        for pair in pairs {
+            if let task = tasks[pair.taskId] { result[pair.folderId, default: []].append(task) }
+        }
+        return result
+    }
+
     /// Отправки в папку `parentId`: незавершённые и завершённые за последние `recentSeconds` секунд
     /// (строка-заглушка держится, пока обновлённый список папки не покажет настоящий файл).
     func uploadsInFolder(provider: CloudProviderKind, parentId: String, recentSeconds: Int64 = 120) -> [UploadTask] {
