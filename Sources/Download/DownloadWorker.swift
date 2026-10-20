@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Скачивание одного файла: потоково, чанками по 1 МБ в `<file_name>.gdrive.part`, с докачкой через HTTP Range.
 /// Каждый поток независим: его ошибка, пауза или отмена не затрагивают остальные.
@@ -16,6 +17,12 @@ struct DownloadWorker: Sendable {
     static let rateLimitMaxDelay: Double = 64
     /// Переполнения буфера чаще, чем раз в 64 МБ, означают, что диск устойчиво медленнее сети.
     static let overflowWindow: Int64 = 64 * 1_048_576
+    /// Докачка с большого смещения: сервер может долго готовить ответ, 60 с сессии не хватает.
+    static let resumeResponseTimeout: TimeInterval = 5 * 60
+
+    static let logger = Logger(subsystem: "com.navidrive.NaviDrive", category: "download")
+
+    private static func unix(_ date: Date) -> Int64 { Int64(date.timeIntervalSince1970) }
 
     /// Экспоненциальная пауза со случайным разбросом ±50%, чтобы потоки не повторяли запросы синхронно.
     static func jitteredDelay(attempt: Int, cap: Double) -> Double {
@@ -90,8 +97,10 @@ struct DownloadWorker: Sendable {
                 guard rateLimitRetries <= Self.maxRateLimitRetries else { return .failed(message) }
                 // Пауза, назначенная сервером (Retry-After), соблюдается всегда.
                 let delay = max(Self.jitteredDelay(attempt: rateLimitRetries, cap: Self.rateLimitMaxDelay), retryAfter ?? 0)
+                Self.logger.error("Download \(task.id, privacy: .public) rate-limited: \(message, privacy: .public)")
                 db.recordRetry(id: task.id, retryCount: retries + rateLimitRetries,
-                               error: String(localized: "\(message) — retrying in \(Int(delay.rounded())) s"))
+                               error: String(localized: "\(message) — retrying in \(Int(delay.rounded())) s"),
+                               nextAttemptAt: Self.unix(Date().addingTimeInterval(delay)))
                 do {
                     try await retryWaiter.sleep(seconds: delay)
                 } catch {
@@ -132,7 +141,11 @@ struct DownloadWorker: Sendable {
                     unlimited = false
                 } else if CloudNetwork.isTransientError(error) {
                     // Обрывы сети повторяем бесконечно (с паузой до 32 с) — файл докачается с места обрыва.
-                    message = error.localizedDescription
+                    if (error as? URLError)?.code == .timedOut {
+                        message = String(localized: "No response from the server (timed out)")
+                    } else {
+                        message = error.localizedDescription
+                    }
                     unlimited = true
                 } else {
                     message = error.localizedDescription
@@ -140,9 +153,11 @@ struct DownloadWorker: Sendable {
                 }
 
                 retries += 1
-                db.recordRetry(id: task.id, retryCount: retries, error: message)
-                if !unlimited && retries > Self.maxHTTPRetries { return .failed(message) }
                 let delay = Self.jitteredDelay(attempt: retries, cap: 32)
+                Self.logger.error("Download \(task.id, privacy: .public) attempt \(retries) failed: \(message, privacy: .public)")
+                db.recordRetry(id: task.id, retryCount: retries, error: message,
+                               nextAttemptAt: Self.unix(Date().addingTimeInterval(delay)))
+                if !unlimited && retries > Self.maxHTTPRetries { return .failed(message) }
                 do {
                     // Досрочно прерывается после пробуждения Mac или возврата сети.
                     try await retryWaiter.sleep(seconds: delay)
@@ -202,7 +217,8 @@ struct DownloadWorker: Sendable {
 
         // 4–6. Подписанный провайдером запрос с Range.
         let authorized = try await provider.downloadRequest(for: task, offset: localBytes)
-        let request = authorized.request
+        var request = authorized.request
+        if localBytes > 0 { request.timeoutInterval = max(request.timeoutInterval, Self.resumeResponseTimeout) }
         let token = authorized.credential
 
         let stream: any ResponseBodyStream
@@ -237,6 +253,9 @@ struct DownloadWorker: Sendable {
         case 200:
             guard let opened = FileHandle(forUpdatingAtPath: partPath) else { throw AttemptError.fatal(String(localized: "Couldn’t open \(partPath)")) }
             if localBytes > 0 {
+                // Сервер проигнорировал Range и отдаёт файл целиком: продолжить нельзя, начинаем заново — открыто.
+                Self.logger.warning("Download \(task.id, privacy: .public): HTTP 200 instead of 206 for Range from \(localBytes), restarting")
+                db.setLastError(id: task.id, error: String(localized: "The server doesn’t support resuming — the download was restarted"))
                 try opened.truncate(atOffset: 0)
                 localBytes = 0
                 await scheduler.report(id: task.id, delta: 0, total: 0)
@@ -251,6 +270,7 @@ struct DownloadWorker: Sendable {
             throw AttemptError.restart
         default:
             let body = await Self.readBody(stream, limit: 16_384)
+            Self.logger.error("Download \(task.id, privacy: .public): HTTP \(http.statusCode) for offset \(localBytes)")
             switch provider.downloadFailure(http, body: body, task: task, credential: token) {
             case .unauthorized(let credential): throw AttemptError.unauthorized(credential)
             case .rateLimited(let message, let retryAfter): throw AttemptError.rateLimited(message, retryAfter: retryAfter)

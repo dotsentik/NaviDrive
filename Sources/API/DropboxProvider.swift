@@ -269,6 +269,7 @@ final class DropboxProvider: CloudProvider {
     func downloadFailure(_ response: HTTPURLResponse, body: Data, task: DownloadTask, credential: String) -> CloudTransferError {
         let summary = DropboxAPIClient.errorSummary(body)
         let message = "HTTP \(response.statusCode): \(summary)"
+        DownloadWorker.logger.error("Dropbox download \(task.id, privacy: .public): HTTP \(response.statusCode) error_summary=\(summary, privacy: .public)")
         switch response.statusCode {
         case 401:
             return .unauthorized(credential: credential)

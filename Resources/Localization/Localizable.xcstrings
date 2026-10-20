@@ -1045,6 +1045,38 @@
         }
       }
     },
+    "Attempt %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attempt %lld"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попытка %lld"
+          }
+        }
+      }
+    },
+    "Attempt %lld: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attempt %lld: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попытка %lld: %@"
+          }
+        }
+      }
+    },
     "Authorization cancelled": {
       "localizations": {
         "ru": {
@@ -3801,6 +3833,22 @@
         }
       }
     },
+    "Next attempt in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next attempt in %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Следующая попытка через %@"
+          }
+        }
+      }
+    },
     "Next attempt: %@": {
       "localizations": {
         "ru": {
@@ -3973,6 +4021,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Google не ответил за 5 минут. Попробуйте войти ещё раз."
+          }
+        }
+      }
+    },
+    "No response from the server (timed out)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No response from the server (timed out)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет ответа от сервера (истекло время ожидания)"
           }
         }
       }
@@ -5882,6 +5946,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сервер не поддерживает докачку (Range)"
+          }
+        }
+      }
+    },
+    "The server doesn’t support resuming — the download was restarted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server doesn’t support resuming — the download was restarted"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер не поддерживает докачку — скачивание начато заново"
           }
         }
       }

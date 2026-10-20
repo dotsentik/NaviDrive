@@ -814,9 +814,16 @@ final class DatabaseManager: @unchecked Sendable {
                   .int(Int64(failures)), .text(error), .int(Self.now), .text(id)])
     }
 
-    func recordRetry(id: String, retryCount: Int, error: String) {
-        _ = try? run("UPDATE download_tasks SET retry_count = ?, last_error = ?, updated_at = ? WHERE id = ?",
-                 [.int(Int64(retryCount)), .text(error), .int(Self.now), .text(id)])
+    /// - Parameter nextAttemptAt: когда будет следующая попытка (для обратного отсчёта в статусе).
+    func recordRetry(id: String, retryCount: Int, error: String, nextAttemptAt: Int64? = nil) {
+        _ = try? run("UPDATE download_tasks SET retry_count = ?, last_error = ?, next_attempt_at = ?, updated_at = ? WHERE id = ?",
+                 [.int(Int64(retryCount)), .text(error), nextAttemptAt.map { .int($0) } ?? .text(nil), .int(Self.now), .text(id)])
+    }
+
+    /// Пояснение к идущему скачиванию без изменения счётчика повторов (например, «начато заново»).
+    func setLastError(id: String, error: String) {
+        _ = try? run("UPDATE download_tasks SET last_error = ?, next_attempt_at = NULL, updated_at = ? WHERE id = ?",
+                 [.text(error), .int(Self.now), .text(id)])
     }
 
     /// Переводит задачи из одних статусов в другой (например, после перезапуска приложения).

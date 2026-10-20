@@ -255,6 +255,10 @@ private struct DownloadTaskRow: View, Equatable {
                     if task.retryCount > 0 && ![.completed, .paused, .pausedAll].contains(task.status) {
                         Text("Retries: \(task.retryCount)")
                     }
+                    // Пауза перед повтором: обратный отсчёт до следующей попытки.
+                    if let retryWindow {
+                        Text("Next attempt in \(Text(timerInterval: retryWindow, countsDown: true))")
+                    }
                 }
                 .font(.caption).foregroundStyle(.secondary)
                 if task.status == .waitingDailyLimit, let next = task.nextAttemptAt {
@@ -330,9 +334,18 @@ private struct DownloadTaskRow: View, Equatable {
         }
     }
 
-    /// «На паузе · 160 МБ из 2,89 ГБ · 5,4%»
+    /// Поток ждёт повтора после ошибки: от записи ошибки до следующей попытки.
+    private var retryWindow: ClosedRange<Date>? {
+        guard task.status == .downloading, isConnecting, task.retryCount > 0,
+              let next = task.nextAttemptAt, next > task.updatedAt else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(task.updatedAt))...Date(timeIntervalSince1970: TimeInterval(next))
+    }
+
+    /// «На паузе · 160 МБ из 2,89 ГБ · 5,4%»; после неудачной попытки — «Попытка 3» вместо «Подключение…»,
+    /// причина показывается строкой ошибки ниже.
     private var statusLine: String {
-        var parts = [task.status == .downloading && isConnecting ? String(localized: "Connecting…") : task.status.title]
+        let connecting = task.retryCount > 0 ? String(localized: "Attempt \(task.retryCount + 1)") : String(localized: "Connecting…")
+        var parts = [task.status == .downloading && isConnecting ? connecting : task.status.title]
         if task.expectedSize > 0, task.status != .completed || downloaded > 0 {
             parts.append(String(localized: "\(Format.bytes(downloaded)) of \(Format.bytes(task.expectedSize))"))
             if let fraction, task.status != .completed { parts.append(Format.percent(fraction)) }

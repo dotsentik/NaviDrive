@@ -191,8 +191,11 @@ extension AppModel {
             let done = snapshot.liveProgress[task.id] ?? task.downloadedSize
             let live = task.expectedSize > 0 ? min(1, Double(done) / Double(task.expectedSize)) : nil
             let title = String(localized: "Downloading to \(PathResolver.displayPath(task.targetDirPath))")
+            let connecting = task.retryCount > 0 && task.lastError != nil
+                ? String(localized: "Attempt \(task.retryCount + 1): \(task.lastError ?? "")")
+                : String(localized: "Connecting…")
             let help = snapshot.connecting.contains(task.id)
-                ? title + " · " + String(localized: "Connecting…")
+                ? title + " · " + connecting
                 : Self.progressHelp(title, done: done, total: task.expectedSize, speed: snapshot.speeds[task.id])
             return TransferIndicator(subject: subject, phase: .active, fraction: live, help: help)
         }
