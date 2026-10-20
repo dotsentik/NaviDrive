@@ -140,7 +140,7 @@ enum OAuthService {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = formEncode(["token": token])
-        _ = try? await GoogleDriveAPIClient.sharedSession.data(for: request)
+        _ = try? await CloudNetwork.sharedSession.data(for: request)
     }
 
     private static func postToken(_ parameters: [String: String]) async throws -> TokenResponse {
@@ -149,7 +149,7 @@ enum OAuthService {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = formEncode(parameters)
         request.timeoutInterval = 30
-        let (data, _) = try await GoogleDriveAPIClient.sharedSession.data(for: request)
+        let (data, _) = try await CloudNetwork.sharedSession.data(for: request)
         do {
             return try JSONDecoder().decode(TokenResponse.self, from: data)
         } catch {

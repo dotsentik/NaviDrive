@@ -203,7 +203,7 @@ private struct UploadTaskRow: View, Equatable {
                     if task.retryCount > 0 && ![.completed, .paused].contains(task.status) {
                         Text("Retries: \(task.retryCount)")
                     }
-                    if task.status == .completed && task.md5Checksum != nil {
+                    if task.status == .completed && task.checksum != nil {
                         Text("verified ✓").foregroundStyle(.green)
                             .help("The MD5 of the file on this Mac matches the Google Drive checksum")
                     }

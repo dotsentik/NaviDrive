@@ -103,7 +103,7 @@ enum DownloadFilter: String, CaseIterable, Identifiable {
     var statuses: [TaskStatus] { sections.flatMap(\.statuses) }
 }
 
-/// Состояние кнопок тулбара браузера Drive (публикует открытый DriveBrowserView).
+/// Состояние кнопок тулбара браузера облака (публикует открытый DriveBrowserView).
 struct BrowserToolbarState: Equatable {
     var canGoBack = false
     /// Текущая папка, в которую можно создавать и загружать (nil — нельзя).
@@ -128,8 +128,10 @@ final class AppModel {
 
     // Сервисы
     let keychain = KeychainStore()
-    let tokenManager: TokenManager
-    let api: GoogleDriveAPIClient
+    /// Подключённые облака; очереди исполняют задачи провайдером из их колонки `provider`.
+    let providers: CloudProviders
+    /// Облако, с которым работают браузер, вход и отправка.
+    var provider: any CloudProvider { providers.primary }
     let db: DatabaseManager?
     let scheduler: DownloadScheduler?
     let uploadScheduler: UploadScheduler?
@@ -209,9 +211,9 @@ final class AppModel {
     /// Задачи по секциям для текущего фильтра (загружаются в фоне).
     var sections: [TaskSectionKind: [DownloadTask]] = [:]
     var routes: [CustomRoute] = []
-    var routeMap: [String: String] = [:]
+    var routeMap: [RouteKey: String] = [:]
     /// Маршруты, чей внешний диск сейчас не подключён (проверяется в фоне, не в body).
-    var routeVolumeMissing: Set<String> = []
+    var routeVolumeMissing: Set<RouteKey> = []
     /// Есть ли активная работа (загрузки, обход, проверка). Меняется только на переходах —
     /// в отличие от счётчиков, которые при скачивании мелких файлов меняются несколько раз в секунду.
     var hasActiveDownloads = false
@@ -250,7 +252,7 @@ final class AppModel {
     var driveReloadToken = 0
     /// Путь навигации в браузерах Drive: сохраняется при переключении разделов
     /// (например, после «Скачать» — переход в «Менеджер загрузок» и обратно).
-    var browserStacks: [BrowserScope: [DriveItem]] = [:]
+    var browserStacks: [BrowserScope: [CloudItem]] = [:]
     /// Увеличивается, когда браузер должен перейти к `browserStacks[scope]` (например, из карточки ссылки).
     var browserNavigationToken = 0
     /// Объекты, добавленные по ссылке.
@@ -285,15 +287,15 @@ final class AppModel {
             clientSecret = ""
             notices.append(String(localized: "Couldn’t read the Client ID / Client Secret from the Keychain: \(error.localizedDescription)"))
         }
-        tokenManager = TokenManager(keychain: store)
-        launchedSignedIn = tokenManager.hadTokensAtLaunch
+        let google = GoogleDriveProvider(keychain: store)
+        providers = CloudProviders([google])
+        launchedSignedIn = google.hadSessionAtLaunch
         isSignedIn = launchedSignedIn
-        api = GoogleDriveAPIClient(tokenManager: tokenManager)
         do {
             let database = try DatabaseManager()
             db = database
-            scheduler = DownloadScheduler(db: database, api: api)
-            uploadScheduler = UploadScheduler(db: database, api: api)
+            scheduler = DownloadScheduler(db: database, providers: providers)
+            uploadScheduler = UploadScheduler(db: database, providers: providers)
         } catch {
             db = nil
             scheduler = nil
@@ -321,11 +323,11 @@ final class AppModel {
         reloadLinked()
 
         Task {
-            await tokenManager.setAccessRevokedHandler {
+            await provider.setAccessRevokedHandler {
                 Task { @MainActor in AppModel.shared.handleAccessRevoked() }
             }
-            isSignedIn = await tokenManager.isSignedIn
-            if let keychainError = await tokenManager.keychainLoadError {
+            isSignedIn = await provider.isSignedIn()
+            if let keychainError = await provider.credentialLoadError() {
                 // Нет доступа ≠ нет входа: запись не удаляем, а объясняем, что произошло.
                 let message = String(localized: "Couldn’t read the saved sign-in from the Keychain: \(keychainError)\n\nThe sign-in was not deleted. Restart NaviDrive and, if macOS asks for Keychain access, click “Always Allow”.")
                 errorMessage = [errorMessage, message].compactMap { $0 }.joined(separator: "\n\n")
@@ -482,29 +484,20 @@ final class AppModel {
         signInError = nil
         // Свои учётные данные сохраняются в Keychain: без них токен нельзя будет обновить после перезапуска.
         if useCustomCredentials { guard saveCredentials() else { return } }
-        let credentials: OAuthCredentials
-        do {
-            credentials = try OAuthCredentials.forSignIn(keychain)
-        } catch {
-            signInError = Self.describeSignInError(error)
-            return
-        }
         isSigningIn = true
+        let provider = provider
         signInTask = Task {
             defer {
                 isSigningIn = false
                 signInURL = nil
             }
             do {
-                let tokens = try await OAuthService.signIn(clientId: credentials.clientId,
-                                                           clientSecret: credentials.clientSecret) { url in
+                let result = try await provider.signIn { url in
                     self.signInURL = url
                     NSWorkspace.shared.open(url)
                 }
-                do {
-                    try await tokenManager.store(tokens)
-                } catch {
-                    errorMessage = String(localized: "Couldn’t save the sign-in to the Keychain: \(error.localizedDescription)\n\nYou stay signed in until you quit NaviDrive; after a restart you’ll need to sign in again.")
+                if let failure = result.persistenceError {
+                    errorMessage = String(localized: "Couldn’t save the sign-in to the Keychain: \(failure)\n\nYou stay signed in until you quit NaviDrive; after a restart you’ll need to sign in again.")
                 }
                 isSignedIn = true
                 welcomeNotice = nil
@@ -541,7 +534,7 @@ final class AppModel {
             return String(localized: "Google refused the sign-in (\(reason)).")
         case LoopbackServer.ServerError.timedOut:
             return String(localized: "Google didn’t respond within 5 minutes — perhaps the sign-in tab was closed. Try again.")
-        case let urlError as URLError where GoogleDriveAPIClient.isTransientNetworkError(urlError):
+        case let urlError as URLError where CloudNetwork.isTransientError(urlError):
             return String(localized: "Can’t reach Google. Check your internet connection and try again.")
         default:
             return error.localizedDescription
@@ -558,7 +551,7 @@ final class AppModel {
         Task {
             await scheduler?.setAuthorized(false)
             await uploadScheduler?.setAuthorized(false)
-            await tokenManager.signOut()
+            await provider.signOut()
             isSignedIn = false
             userName = nil
             userEmail = nil
@@ -635,9 +628,9 @@ final class AppModel {
     }
 
     private func loadUser() async {
-        if let user = try? await api.currentUser() {
-            userName = user.displayName
-            userEmail = user.emailAddress
+        if let account = try? await provider.currentAccount() {
+            userName = account.displayName
+            userEmail = account.email
         }
     }
 
@@ -670,20 +663,21 @@ final class AppModel {
 
     private func reloadLinkedNow() async {
         guard let linked = await inBackground({ $0.linkedItems() }) else { return }
-        for item in linked { api.resourceKeys.register(id: item.driveId, key: item.resourceKey) }
+        for item in linked { provider.rememberAccessKey(item.resourceKey, for: item.driveId) }
         if linked != linkedItems { linkedItems = linked }
     }
 
     /// Находит объект по ссылке (files.get), раскрывает ярлык и сохраняет в «Добавленные по ссылке».
-    func lookupLink(_ text: String) async throws -> DriveItem {
-        guard let link = DriveLink.parse(text) else { throw LinkLookupError.invalidLink }
-        var item: DriveItem
+    func lookupLink(_ text: String) async throws -> CloudItem {
+        let provider = provider
+        guard let link = provider.parseLink(text) else { throw LinkLookupError.invalidLink }
+        var item: CloudItem
         do {
-            item = try await api.file(id: link.id, resourceKey: link.resourceKey)
-            if item.isShortcut { item = try await api.resolveShortcut(item) }
-        } catch DriveAPIError.http(404, _) {
-            throw LinkLookupError.notFound(hasResourceKey: link.resourceKey != nil)
-        } catch DriveAPIError.http(403, let message) where !message.lowercased().contains("ratelimit") {
+            item = try await provider.item(id: link.id, accessKey: link.accessKey)
+            if item.isAlias { item = try await provider.resolveAlias(item) }
+        } catch CloudAPIError.http(404, _, _) {
+            throw LinkLookupError.notFound(hasResourceKey: link.accessKey != nil)
+        } catch CloudAPIError.http(403, let message, _) where !message.lowercased().contains("ratelimit") {
             throw LinkLookupError.noAccess
         }
         let linked = LinkedItem(item)
@@ -695,7 +689,7 @@ final class AppModel {
         return item
     }
 
-    func removeLinked(_ item: DriveItem) {
+    func removeLinked(_ item: CloudItem) {
         let id = item.id
         Task {
             _ = await inBackground { try? $0.deleteLinked(driveId: id) }
@@ -704,14 +698,14 @@ final class AppModel {
     }
 
     /// «Открыть в браузере NaviDrive»: раздел «Добавленные по ссылке», внутри папки.
-    func openInBrowser(_ item: DriveItem) {
+    func openInBrowser(_ item: CloudItem) {
         browserStacks[.linked] = item.isFolder ? [item] : []
         browserNavigationToken += 1
         selection = .linked
     }
 
     /// Скачивание из карточки ссылки с проверкой свободного места.
-    func downloadLinked(_ item: DriveItem, chooseFolder: Bool, requiredBytes: Int64?) {
+    func downloadLinked(_ item: CloudItem, chooseFolder: Bool, requiredBytes: Int64?) {
         if chooseFolder {
             guard let path = chooseDirectory(message: String(localized: "Where should “\(item.name)” be downloaded? You can choose an external disk in /Volumes.")) else { return }
             guard confirmFreeSpace(requiredBytes, at: path) else { return }
@@ -748,16 +742,16 @@ final class AppModel {
     }
 
     private func reloadRoutesNow() async {
-        guard let (newRoutes, missing) = await inBackground({ db -> ([CustomRoute], Set<String>) in
+        guard let (newRoutes, missing) = await inBackground({ db -> ([CustomRoute], Set<RouteKey>) in
             let routes = db.allRoutes()
             let missing = routes.filter {
                 if case .missing = PathResolver.volumeState(for: $0.localPath) { return true }
                 return false
             }
-            return (routes, Set(missing.map(\.driveId)))
+            return (routes, Set(missing.map(\.id)))
         }) else { return }
         if newRoutes != routes { routes = newRoutes }
-        let map = Dictionary(newRoutes.map { ($0.driveId, $0.localPath) }, uniquingKeysWith: { a, _ in a })
+        let map = Dictionary(newRoutes.map { ($0.id, $0.localPath) }, uniquingKeysWith: { a, _ in a })
         if map != routeMap { routeMap = map }
         if missing != routeVolumeMissing { routeVolumeMissing = missing }
     }
@@ -773,27 +767,32 @@ final class AppModel {
         }
     }
 
-    func setRoute(for item: DriveItem, path: String) {
-        routeMap[item.id] = path
-        let id = item.id, name = item.name
-        writeRoute { try $0.setRoute(driveId: id, driveName: name, localPath: path) }
+    func setRoute(for item: CloudItem, path: String) {
+        routeMap[item.routeKey] = path
+        let provider = item.provider, id = item.id, name = item.name
+        writeRoute { try $0.setRoute(provider: provider, driveId: id, driveName: name, localPath: path) }
     }
 
     func changeRoute(_ route: CustomRoute) {
         guard let path = chooseDirectory(message: String(localized: "New location for “\(route.driveName)”"), initial: route.localPath) else { return }
-        routeMap[route.driveId] = path
-        writeRoute { try $0.setRoute(driveId: route.driveId, driveName: route.driveName, localPath: path) }
+        routeMap[route.id] = path
+        writeRoute { try $0.setRoute(provider: route.provider, driveId: route.driveId, driveName: route.driveName, localPath: path) }
     }
 
     func deleteRoute(_ route: CustomRoute) {
-        routeMap[route.driveId] = nil
-        writeRoute { try $0.deleteRoute(driveId: route.driveId) }
+        routeMap[route.id] = nil
+        writeRoute { try $0.deleteRoute(provider: route.provider, driveId: route.driveId) }
     }
 
-    // MARK: - Drive actions (context menu)
+    /// Маршрут самого объекта (без учёта предков).
+    func route(for item: CloudItem) -> CustomRoute? {
+        routes.first { $0.id == item.routeKey }
+    }
 
-    func downloadToDefault(_ items: [DriveItem], ancestors: [DriveItem]) {
-        var groups: [String: [DriveItem]] = [:]
+    // MARK: - Cloud actions (context menu)
+
+    func downloadToDefault(_ items: [CloudItem], ancestors: [CloudItem]) {
+        var groups: [String: [CloudItem]] = [:]
         for item in items {
             let dir = PathResolver.destinationDirectory(for: item, ancestors: ancestors, routes: routeMap,
                                                         defaultPath: defaultDownloadPath)
@@ -803,7 +802,7 @@ final class AppModel {
     }
 
     /// Постановка в очередь, переход в «Менеджер загрузок» и баннер с итогом.
-    private func enqueue(_ items: [DriveItem], groups: [String: [DriveItem]]) {
+    private func enqueue(_ items: [CloudItem], groups: [String: [CloudItem]]) {
         guard let scheduler, !items.isEmpty else { return }
         let title = Self.title(for: items)
         selection = .downloads
@@ -816,7 +815,7 @@ final class AppModel {
         }
     }
 
-    func downloadToCustom(_ items: [DriveItem], ancestors: [DriveItem]) {
+    func downloadToCustom(_ items: [CloudItem], ancestors: [CloudItem]) {
         guard !items.isEmpty else { return }
         let message = items.count == 1
             ? String(localized: "Where should “\(items[0].name)” be downloaded? You can choose an external disk in /Volumes.")
@@ -826,7 +825,7 @@ final class AppModel {
         enqueue(items, groups: [path: items])
     }
 
-    private static func title(for items: [DriveItem]) -> String {
+    private static func title(for items: [CloudItem]) -> String {
         items.count == 1 ? items[0].name : String(localized: "\(items.count) items")
     }
 
@@ -842,7 +841,7 @@ final class AppModel {
         Task { await refresh() }
     }
 
-    func setPermanentRoute(_ items: [DriveItem]) {
+    func setPermanentRoute(_ items: [CloudItem]) {
         guard !items.isEmpty else { return }
         let message = items.count == 1
             ? String(localized: "Permanent save location for “\(items[0].name)”")
@@ -851,7 +850,7 @@ final class AppModel {
         for item in items { setRoute(for: item, path: path) }
     }
 
-    func revealInFinder(_ item: DriveItem, ancestors: [DriveItem]) {
+    func revealInFinder(_ item: CloudItem, ancestors: [CloudItem]) {
         let path = PathResolver.localPath(for: item, ancestors: ancestors, routes: routeMap, defaultPath: defaultDownloadPath)
         revealPath(path, alternatives: [path + ".gdrive.part"])
     }

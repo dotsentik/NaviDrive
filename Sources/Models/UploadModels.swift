@@ -8,7 +8,7 @@ enum UploadStatus: String, Sendable, CaseIterable, Codable {
     case paused
     case waitingForNetwork = "waiting_for_network"
     case waitingForVolume = "waiting_for_volume"
-    /// Файл передан, идёт сверка MD5 локального файла с md5Checksum из ответа Google.
+    /// Файл передан, идёт сверка хеша локального файла с хешем из ответа облака.
     case verifying
     case completed
     case failed
@@ -86,19 +86,14 @@ struct UploadTask: Sendable, Identifiable, Hashable {
     var lastError: String?
     var errorKind: UploadErrorKind?
     var driveFileId: String?
-    var md5Checksum: String?
+    /// Хеш от облака после загрузки; алгоритм — `provider.hashKind`.
+    var checksum: String?
     var updatedAt: Int64
+    var provider: CloudProviderKind = .googleDrive
 
     var fraction: Double? {
         guard fileSize > 0 else { return status == .completed ? 1 : nil }
         return min(1, Double(uploadedBytes) / Double(fileSize))
-    }
-
-    /// Ссылка на целевую папку в веб-интерфейсе Google Drive.
-    var parentWebURL: URL? {
-        URL(string: parentDriveId == "root"
-            ? "https://drive.google.com/drive/my-drive"
-            : "https://drive.google.com/drive/folders/\(parentDriveId)")
     }
 
     static func modificationMillis(_ date: Date?) -> Int64 {
@@ -200,19 +195,19 @@ struct UploadSnapshot: Sendable, Equatable {
 
 // MARK: - Planning
 
-/// Папка Google Drive, в которую отправляются файлы.
+/// Папка в облаке, в которую отправляются файлы и создаются папки.
 struct UploadTarget: Sendable, Hashable {
+    let provider: CloudProviderKind
     let id: String
     let name: String
-    let driveId: String?
-
-    static var myDriveRoot: UploadTarget { UploadTarget(id: "root", name: String(localized: "My Drive"), driveId: nil) }
+    /// Пространство (общий диск), в котором лежит папка.
+    let spaceId: String?
 }
 
 /// Что делать с файлами, имя которых уже занято в целевой папке.
 enum UploadConflictPolicy: Sendable {
     case skip
-    /// Новая версия того же файла через files.update.
+    /// Новая версия того же файла.
     case replace
     /// Добавить « (1)» к имени.
     case keepBoth

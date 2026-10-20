@@ -115,7 +115,7 @@ actor TokenManager {
                     throw OAuthError.reauthenticationRequired
                 } catch {
                     lastError = error
-                    try await Task.sleep(for: GoogleDriveAPIClient.backoffDelay(attempt))
+                    try await Task.sleep(for: CloudNetwork.backoffDelay(attempt))
                 }
             }
             throw lastError

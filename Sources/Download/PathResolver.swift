@@ -1,21 +1,22 @@
 import Foundation
 
-/// Определяет локальную папку для объекта Google Drive.
+/// Определяет локальную папку для объекта облака.
 ///
 /// Приоритет: кастомный путь самого объекта → ближайшего предка (с сохранением структуры подпапок
 /// от этого предка) → глобальный дефолтный путь. Кастомный путь означает «куда поместить объект»:
 /// папка `X` с маршрутом `/Volumes/SSD` скачивается в `/Volumes/SSD/X/...`.
+/// Маршруты ищутся по паре (провайдер, ID объекта).
 enum PathResolver {
     /// - Parameters:
     ///   - item: скачиваемый объект.
     ///   - ancestors: цепочка родительских папок от корня браузера до непосредственного родителя.
-    ///   - routes: таблица кастомных маршрутов `drive_id → local_path`.
+    ///   - routes: таблица кастомных маршрутов `(provider, drive_id) → local_path`.
     /// - Returns: директория, в которую будет помещён объект.
-    static func destinationDirectory(for item: DriveItem, ancestors: [DriveItem],
-                                     routes: [String: String], defaultPath: String) -> String {
-        if let own = routes[item.id] { return expand(own) }
+    static func destinationDirectory(for item: CloudItem, ancestors: [CloudItem],
+                                     routes: [RouteKey: String], defaultPath: String) -> String {
+        if let own = routes[item.routeKey] { return expand(own) }
         for index in ancestors.indices.reversed() {
-            guard let base = routes[ancestors[index].id] else { continue }
+            guard let base = routes[ancestors[index].routeKey] else { continue }
             var path = expand(base)
             for folder in ancestors[index...] {
                 path = (path as NSString).appendingPathComponent(sanitize(folder.name))
@@ -26,8 +27,8 @@ enum PathResolver {
     }
 
     /// Локальный путь самого объекта (файла или папки).
-    static func localPath(for item: DriveItem, ancestors: [DriveItem],
-                          routes: [String: String], defaultPath: String) -> String {
+    static func localPath(for item: CloudItem, ancestors: [CloudItem],
+                          routes: [RouteKey: String], defaultPath: String) -> String {
         let dir = destinationDirectory(for: item, ancestors: ancestors, routes: routes, defaultPath: defaultPath)
         return (dir as NSString).appendingPathComponent(item.isFolder ? sanitize(item.name) : item.localFileName)
     }
@@ -53,7 +54,7 @@ enum PathResolver {
         return result
     }
 
-    /// Уникальное имя в пределах одной папки (Drive допускает одинаковые имена).
+    /// Уникальное имя в пределах одной папки (облако может допускать одинаковые имена).
     static func uniqueName(_ name: String, used: inout Set<String>) -> String {
         var candidate = name
         var counter = 2

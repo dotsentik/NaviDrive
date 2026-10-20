@@ -1,9 +1,9 @@
 import Foundation
 
-/// Очередь отправки в Google Drive. Работает независимо от `DownloadScheduler`:
+/// Очередь отправки в облако. Работает независимо от `DownloadScheduler`:
 /// свой лимит (по умолчанию 3, от 1 до 6), свои слоты, общая только сеть и токен.
 ///
-/// - При ответе Google об ограничении частоты лимит сразу делится пополам и потом
+/// - При ответе облака об ограничении частоты лимит сразу делится пополам и потом
 ///   восстанавливается по одному слоту в минуту.
 /// - Потеря сети: идущие отправки останавливаются (`waiting_for_network`) и продолжаются
 ///   после восстановления с подтверждённого сервером байта.
@@ -19,7 +19,7 @@ actor UploadScheduler {
     }
 
     private let db: DatabaseManager
-    private let api: GoogleDriveAPIClient
+    private let providers: CloudProviders
     private let retryWaiter = RetryWaiter()
 
     private var running: [String: Running] = [:]
@@ -46,9 +46,9 @@ actor UploadScheduler {
     private var verifying: [String: Int64] = [:]
     private var timers: [Task<Void, Never>] = []
 
-    init(db: DatabaseManager, api: GoogleDriveAPIClient) {
+    init(db: DatabaseManager, providers: CloudProviders) {
         self.db = db
-        self.api = api
+        self.providers = providers
         let limit = AppSettings.maxConcurrentUploads
         self.userLimit = limit
         self.limit = limit
@@ -57,7 +57,7 @@ actor UploadScheduler {
     // MARK: - Lifecycle
 
     /// После перезапуска: прерванные отправки снова в очереди (продолжатся с подтверждённого сервером байта),
-    /// прерванные проверки MD5 — снова в проверке.
+    /// прерванные проверки хеша — снова в проверке.
     func start(authorized: Bool) {
         guard !started else { return }
         started = true
@@ -135,7 +135,7 @@ actor UploadScheduler {
                 db.requeueUploadsWaitingForVolume(volumeRoot: root)
             }
         }
-        // Проверки MD5, прерванные отключением диска.
+        // Проверки хеша, прерванные отключением диска.
         for task in db.uploads(statuses: [.verifying])
         where verifying[task.id] == nil && !verificationQueue.contains(where: { $0.id == task.id }) {
             if case .available = PathResolver.volumeState(for: task.localPath) { verificationQueue.append(task) }
@@ -176,9 +176,8 @@ actor UploadScheduler {
                                   error: String(localized: "Source file not found: \(PathResolver.displayPath(task.localPath))"))
             return
         }
-        if let uri = task.sessionURI.flatMap(URL.init(string:)) {
-            let api = api
-            Task { await api.cancelUploadSession(uri) }
+        if let session = task.sessionURI, let provider = providers[task.provider] {
+            Task { await provider.cancelUploadSession(session) }
         }
         db.restartUpload(id: id, size: attributes.size, modifiedAt: attributes.modifiedAt)
         schedule()
@@ -271,9 +270,10 @@ actor UploadScheduler {
 
     private func launch(_ task: UploadTask) {
         liveProgress[task.id] = task.uploadedBytes
-        let worker = UploadWorker(db: db, api: api, scheduler: self, retryWaiter: retryWaiter)
+        let provider = providers[task.provider]
+        let worker = provider.map { UploadWorker(db: db, provider: $0, scheduler: self, retryWaiter: retryWaiter) }
         let handle = Task.detached(priority: .utility) {
-            let outcome = await worker.run(task)
+            let outcome = await worker?.run(task) ?? .failed(CloudProviders.unavailableMessage, nil)
             await self.finish(task, outcome: outcome)
         }
         running[task.id] = Running(task: task, handle: handle)
@@ -292,8 +292,8 @@ actor UploadScheduler {
             return
         }
         switch outcome {
-        case .uploaded(let fileId, let md5, let size):
-            db.markUploadTransferred(id: task.id, driveFileId: fileId, md5: md5, size: size)
+        case .uploaded(let fileId, let hash, let size):
+            db.markUploadTransferred(id: task.id, driveFileId: fileId, checksum: hash, size: size)
             if let current = db.uploadTask(id: task.id) {
                 verificationQueue.append(current)
                 startVerifications()
@@ -347,9 +347,9 @@ actor UploadScheduler {
     }
 
     private func cancelSession(of id: String) {
-        guard let uri = db.uploadTask(id: id)?.sessionURI.flatMap(URL.init(string:)) else { return }
-        let api = api
-        Task { await api.cancelUploadSession(uri) }
+        guard let task = db.uploadTask(id: id), let session = task.sessionURI,
+              let provider = providers[task.provider] else { return }
+        Task { await provider.cancelUploadSession(session) }
     }
 
     // MARK: - Integrity
@@ -375,11 +375,11 @@ actor UploadScheduler {
         case failed(String)
     }
 
-    /// Потоковый MD5 локального файла (CryptoKit Insecure.MD5, блоками по 8 МБ) против md5Checksum от Google.
+    /// Потоковый хеш локального файла алгоритмом облака (для Google — MD5) против хеша из ответа облака.
     private static func verify(_ task: UploadTask, progress: @escaping @Sendable (Int64) -> Void) async -> Verification {
-        guard let expected = task.md5Checksum?.lowercased(), !expected.isEmpty else { return .unverifiable }
+        guard let expected = task.checksum?.lowercased(), !expected.isEmpty else { return .unverifiable }
         do {
-            let actual = try await FileFinalizer.md5(ofFileAt: task.localPath, progress: progress)
+            let actual = try await ContentHasher.hash(ofFileAt: task.localPath, kind: task.provider.hashKind, progress: progress)
             return actual == expected ? .verified : .mismatch(expected: expected, actual: actual)
         } catch {
             return .failed(error.localizedDescription)

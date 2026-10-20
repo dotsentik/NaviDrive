@@ -1,14 +1,14 @@
 import Foundation
 
 /// Подготовка пачки к отправке в два шага:
-/// 1. `scan` — обход локальных файлов и папок и поиск имён, уже занятых на Google Drive
+/// 1. `scan` — обход локальных файлов и папок и поиск имён, уже занятых в облаке
 ///    (ничего не создаёт, чтобы спросить про конфликты один раз на всю пачку);
 /// 2. `materialize` — создание на диске всего дерева подпапок, затем задачи в очередь.
 ///
 /// Папка с тем же именем, что уже есть на диске, не дублируется: файлы попадают в существующую,
 /// а конфликты имён файлов внутри неё решаются выбранным правилом.
 struct UploadPlanner: Sendable {
-    let api: GoogleDriveAPIClient
+    let provider: any CloudProvider
 
     struct PlanFile: Sendable {
         let path: String
@@ -41,7 +41,7 @@ struct UploadPlanner: Sendable {
     // MARK: - Scan
 
     func scan(_ urls: [URL], into target: UploadTarget) async throws -> Plan {
-        let remote = try await api.children(of: target.id, driveId: target.driveId)
+        let remote = try await provider.listAll(.folder(id: target.id, spaceId: target.spaceId))
         var plan = Plan(target: target, root: PlanFolder(name: target.name, existingId: target.id,
                                                          remoteNames: Set(remote.map(\.name))))
         var root = plan.root
@@ -50,7 +50,7 @@ struct UploadPlanner: Sendable {
         return plan
     }
 
-    private func add(_ urls: [URL], to folder: inout PlanFolder, remote: [DriveItem], plan: inout Plan, path: String) async throws {
+    private func add(_ urls: [URL], to folder: inout PlanFolder, remote: [CloudItem], plan: inout Plan, path: String) async throws {
         let remoteByName = Dictionary(remote.map { ($0.name, $0) }, uniquingKeysWith: { first, second in
             // Если есть и папка, и файл с одним именем, для слияния папок важна папка.
             first.isFolder ? first : second
@@ -62,10 +62,10 @@ struct UploadPlanner: Sendable {
             if values?.isSymbolicLink == true { continue }
             let existing = remoteByName[name]
             if values?.isDirectory == true {
-                let existingFolder = existing.flatMap { $0.isFolder && !$0.isShortcut ? $0 : nil }
-                var innerRemote: [DriveItem] = []
+                let existingFolder = existing.flatMap { $0.isFolder && !$0.isAlias ? $0 : nil }
+                var innerRemote: [CloudItem] = []
                 if let existingFolder {
-                    innerRemote = try await api.children(of: existingFolder.id, driveId: existingFolder.driveId)
+                    innerRemote = try await provider.listAll(.folder(id: existingFolder.id, spaceId: existingFolder.spaceId))
                 }
                 var child = PlanFolder(name: name, existingId: existingFolder?.id, remoteNames: Set(innerRemote.map(\.name)))
                 let contents: [URL]
@@ -105,12 +105,11 @@ struct UploadPlanner: Sendable {
     /// Создаёт недостающие папки (всё дерево) и возвращает задачи для очереди.
     func materialize(_ plan: Plan, policy: UploadConflictPolicy) async throws -> Result {
         var result = Result()
-        try await place(plan.root, folderId: plan.target.id, display: plan.target.name, driveId: plan.target.driveId,
-                        policy: policy, result: &result)
+        try await place(plan.root, in: plan.target, display: plan.target.name, policy: policy, result: &result)
         return result
     }
 
-    private func place(_ folder: PlanFolder, folderId: String, display: String, driveId: String?,
+    private func place(_ folder: PlanFolder, in target: UploadTarget, display: String,
                        policy: UploadConflictPolicy, result: inout Result) async throws {
         // Сначала подпапки — всё дерево создаётся до постановки файлов в очередь.
         for child in folder.folders {
@@ -119,11 +118,11 @@ struct UploadPlanner: Sendable {
             if let existing = child.existingId {
                 childId = existing
             } else {
-                childId = try await api.createFolder(name: child.name, parentId: folderId).id
+                childId = try await provider.createFolder(named: child.name, in: target).id
                 result.foldersCreated += 1
             }
-            try await place(child, folderId: childId, display: display + " / " + child.name, driveId: driveId,
-                            policy: policy, result: &result)
+            let childTarget = UploadTarget(provider: target.provider, id: childId, name: child.name, spaceId: target.spaceId)
+            try await place(child, in: childTarget, display: display + " / " + child.name, policy: policy, result: &result)
         }
         var used = folder.remoteNames
         for file in folder.files {
@@ -143,9 +142,10 @@ struct UploadPlanner: Sendable {
             used.insert(name)
             result.tasks.append(UploadTask(
                 id: UUID().uuidString, localPath: file.path, fileName: name, fileSize: file.size,
-                localModifiedAt: file.modifiedAt, parentDriveId: folderId, parentName: display, sharedDriveId: driveId,
+                localModifiedAt: file.modifiedAt, parentDriveId: target.id, parentName: display, sharedDriveId: target.spaceId,
                 replaceFileId: replaceId, sessionURI: nil, sessionCreatedAt: nil, uploadedBytes: 0, status: .queued,
-                retryCount: 0, lastError: nil, errorKind: nil, driveFileId: nil, md5Checksum: nil, updatedAt: 0))
+                retryCount: 0, lastError: nil, errorKind: nil, driveFileId: nil, checksum: nil, updatedAt: 0,
+                provider: target.provider))
         }
     }
 

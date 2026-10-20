@@ -1,26 +1,22 @@
 import Foundation
 
-/// Отправка одного файла через resumable upload Drive API.
+/// Отправка одного файла загрузкой с возобновлением через `CloudProvider`.
 ///
-/// - Файл читается с диска частями по 32 МБ через FileHandle — целиком в память не загружается.
+/// - Файл читается с диска частями (`provider.uploadChunkSize`) через FileHandle — целиком в память не загружается.
 /// - После каждой подтверждённой части `uploaded_bytes` сохраняется в SQLite.
-/// - При возобновлении (обрыв сети, ошибка, перезапуск) смещение берётся у сервера:
-///   PUT с пустым телом и `Content-Range: bytes */<размер>` → 308 + Range, а не локальный счётчик.
+/// - При возобновлении (обрыв сети, ошибка, перезапуск) смещение берётся у сервера
+///   (`provider.uploadState`), а не из локального счётчика.
 struct UploadWorker: Sendable {
     let db: DatabaseManager
-    let api: GoogleDriveAPIClient
+    let provider: any CloudProvider
     let scheduler: UploadScheduler
     let retryWaiter: RetryWaiter
 
-    /// 32 МБ — кратно 256 КБ, как требует Drive API для всех частей, кроме последней.
-    static let chunkSize: Int64 = 32 * 1_048_576
-    /// Google держит сессию около недели; старше 6 дней — новая сессия.
-    static let sessionLifetime: TimeInterval = 6 * 24 * 3600
     static let maxRetries = 8
     static let maxRateLimitRetries = 10
 
     enum Outcome: Sendable {
-        case uploaded(fileId: String, md5: String?, size: Int64)
+        case uploaded(fileId: String, hash: String?, size: Int64)
         case failed(String, UploadErrorKind?)
         case waitingForVolume(String)
         /// Вход без права записи — задача остаётся в очереди до повторного входа.
@@ -34,9 +30,7 @@ struct UploadWorker: Sendable {
         case fatal(String, UploadErrorKind?)
         case volume(String)
         case transient(String)
-        case rateLimited(String)
         case sessionExpired
-        case unauthorized(String)
     }
 
     static var sourceChangedMessage: String { String(localized: "The file changed during upload") }
@@ -66,18 +60,18 @@ struct UploadWorker: Sendable {
                 task.sessionCreatedAt = nil
                 task.uploadedBytes = 0
                 continue
-            } catch AttemptError.unauthorized(let token) {
+            } catch CloudTransferError.unauthorized(let token) {
                 unauthorizedRefreshes += 1
                 guard unauthorizedRefreshes <= 2 else { return .failed(String(localized: "HTTP 401: access denied"), nil) }
                 do {
-                    _ = try await api.tokenManager.refreshAfterUnauthorized(failedToken: token)
+                    try await provider.refreshAuthorization(after: token)
                 } catch {
                     if Task.isCancelled { return .stopped }
-                    if (error as? OAuthError)?.meansSignedOut == true { return .signedOut }
+                    if provider.isSignedOutError(error) { return .signedOut }
                     return .failed(error.localizedDescription, nil)
                 }
                 continue
-            } catch AttemptError.rateLimited(let message) {
+            } catch CloudTransferError.rateLimited(let message) {
                 await scheduler.reportRateLimit()
                 rateLimitRetries += 1
                 guard rateLimitRetries <= Self.maxRateLimitRetries else { return .failed(message, nil) }
@@ -85,7 +79,9 @@ struct UploadWorker: Sendable {
                 db.recordUploadRetry(id: task.id, retryCount: retries + rateLimitRetries,
                                      error: String(localized: "\(message) — retrying in \(Int(delay.rounded())) s"))
                 do { try await retryWaiter.sleep(seconds: delay) } catch { return .stopped }
-            } catch DriveAPIError.insufficientScope {
+            } catch CloudTransferError.fatal(let message), CloudTransferError.quotaExceeded(let message) {
+                return .failed(message, nil)
+            } catch CloudAPIError.insufficientScope {
                 return .needsReauth
             } catch {
                 if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled {
@@ -94,17 +90,18 @@ struct UploadWorker: Sendable {
                 if case .missing(let message) = PathResolver.volumeState(for: task.localPath) {
                     return .waitingForVolume(message)
                 }
-                if let error = error as? OAuthError {
-                    return error.meansSignedOut ? .signedOut : .failed(error.localizedDescription, nil)
-                }
+                if provider.isSignedOutError(error) { return .signedOut }
+                if error is OAuthError { return .failed(error.localizedDescription, nil) }
 
                 // Часть подтверждена — счётчик повторов начинается заново.
                 if task.uploadedBytes > confirmedBefore { retries = 0 }
-                let networkDrop = GoogleDriveAPIClient.isTransientNetworkError(error)
+                let networkDrop = CloudNetwork.isTransientError(error)
                 let message: String
-                if case AttemptError.transient(let text) = error {
+                if case CloudTransferError.transient(let text) = error {
                     message = text
-                } else if networkDrop || (error as? DriveAPIError)?.isTransient == true {
+                } else if case AttemptError.transient(let text) = error {
+                    message = text
+                } else if networkDrop || (error as? CloudAPIError)?.isTransient == true {
                     message = error.localizedDescription
                 } else {
                     return .failed(error.localizedDescription, nil)
@@ -125,38 +122,37 @@ struct UploadWorker: Sendable {
     private func attempt(_ task: inout UploadTask) async throws -> Outcome {
         try checkSource(task)
 
-        // 1. Сессия: новая, если её нет или она старше 6 дней; иначе — спросить у сервера, сколько он принял.
+        // 1. Сессия: новая, если её нет или она устарела; иначе — спросить у сервера, сколько он принял.
         var offset: Int64 = 0
         let sessionAge = task.sessionCreatedAt.map { Date().timeIntervalSince1970 - TimeInterval($0) } ?? .infinity
-        if let uri = task.sessionURI.flatMap(URL.init(string:)), sessionAge < Self.sessionLifetime {
-            switch try await send(uri, range: "bytes */\(task.fileSize)", body: nil, task: task, base: 0) {
+        if let session = task.sessionURI, sessionAge < provider.uploadSessionLifetime {
+            switch try await provider.uploadState(session: session, task: task) {
             case .incomplete(let next):
                 offset = next
-            case .complete(let fileId, let md5):
-                return .uploaded(fileId: fileId, md5: md5, size: task.fileSize)
+            case .complete(let fileId, let hash):
+                return .uploaded(fileId: fileId, hash: hash, size: task.fileSize)
             case .expired:
                 throw AttemptError.sessionExpired
             }
         } else {
-            let uri = try await api.startUploadSession(name: task.fileName, parentId: task.parentDriveId,
-                                                       size: task.fileSize, replaceFileId: task.replaceFileId)
+            let session = try await provider.startUploadSession(for: task)
             let created = Int64(Date().timeIntervalSince1970)
-            db.saveUploadSession(id: task.id, uri: uri.absoluteString, createdAt: created)
-            task.sessionURI = uri.absoluteString
+            db.saveUploadSession(id: task.id, uri: session, createdAt: created)
+            task.sessionURI = session
             task.sessionCreatedAt = created
         }
-        guard let uri = task.sessionURI.flatMap(URL.init(string:)) else { throw DriveAPIError.uploadSessionMissing }
+        guard let session = task.sessionURI else { throw CloudAPIError.uploadSessionMissing }
         record(&task, confirmed: offset)
 
         // Пустой файл: один запрос без тела.
         if task.fileSize == 0 {
-            if case .complete(let fileId, let md5) = try await send(uri, range: "bytes */0", body: nil, task: task, base: 0) {
-                return .uploaded(fileId: fileId, md5: md5, size: 0)
+            if case .complete(let fileId, let hash) = try await provider.uploadState(session: session, task: task) {
+                return .uploaded(fileId: fileId, hash: hash, size: 0)
             }
             throw AttemptError.transient(String(localized: "The server didn’t confirm the empty file upload"))
         }
 
-        // 2. Части по 32 МБ, потоковое чтение через FileHandle.
+        // 2. Части фиксированного размера, потоковое чтение через FileHandle.
         guard let handle = FileHandle(forReadingAtPath: task.localPath) else {
             if case .missing(let message) = PathResolver.volumeState(for: task.localPath) { throw AttemptError.volume(message) }
             throw AttemptError.fatal(String(localized: "Can’t open file “\(task.fileName)”"), nil)
@@ -166,7 +162,7 @@ struct UploadWorker: Sendable {
         while offset < task.fileSize {
             try Task.checkCancellation()
             try checkSource(task)
-            let length = min(Self.chunkSize, task.fileSize - offset)
+            let length = min(provider.uploadChunkSize, task.fileSize - offset)
             let data: Data
             do {
                 try handle.seek(toOffset: UInt64(offset))
@@ -177,22 +173,22 @@ struct UploadWorker: Sendable {
             }
             guard Int64(data.count) == length else { throw AttemptError.fatal(Self.sourceChangedMessage, .sourceChanged) }
 
-            let range = "bytes \(offset)-\(offset + length - 1)/\(task.fileSize)"
-            switch try await send(uri, range: range, body: data, task: task, base: offset) {
+            let delegate = UploadProgressDelegate(id: task.id, base: offset, scheduler: scheduler)
+            switch try await provider.uploadChunk(data, at: offset, session: session, task: task, delegate: delegate) {
             case .incomplete(let next):
                 // Верим серверу: он мог принять меньше, чем мы отправили.
                 offset = next
                 record(&task, confirmed: offset)
-            case .complete(let fileId, let md5):
+            case .complete(let fileId, let hash):
                 try checkSource(task)
-                return .uploaded(fileId: fileId, md5: md5, size: task.fileSize)
+                return .uploaded(fileId: fileId, hash: hash, size: task.fileSize)
             case .expired:
                 throw AttemptError.sessionExpired
             }
         }
         // Все байты подтверждены, но финальный ответ не получен — спросим состояние.
-        switch try await send(uri, range: "bytes */\(task.fileSize)", body: nil, task: task, base: offset) {
-        case .complete(let fileId, let md5): return .uploaded(fileId: fileId, md5: md5, size: task.fileSize)
+        switch try await provider.uploadState(session: session, task: task) {
+        case .complete(let fileId, let hash): return .uploaded(fileId: fileId, hash: hash, size: task.fileSize)
         case .expired: throw AttemptError.sessionExpired
         case .incomplete: throw AttemptError.transient(String(localized: "The server didn’t confirm the upload finished"))
         }
@@ -213,34 +209,6 @@ struct UploadWorker: Sendable {
         }
         guard current.size == task.fileSize, current.modifiedAt == task.localModifiedAt else {
             throw AttemptError.fatal(Self.sourceChangedMessage, .sourceChanged)
-        }
-    }
-
-    /// Один запрос к session URI и разбор ответа.
-    private func send(_ uri: URL, range: String, body: Data?, task: UploadTask, base: Int64) async throws
-        -> GoogleDriveAPIClient.ResumableState {
-        let delegate = UploadProgressDelegate(id: task.id, base: base, scheduler: scheduler)
-        let (data, http, token) = try await api.sessionRequest(uri, contentRange: range, body: body,
-                                                               delegate: body == nil ? nil : delegate)
-        if let state = GoogleDriveAPIClient.resumableState(data, http) { return state }
-        let message = GoogleDriveAPIClient.errorMessage(from: data)
-        switch http.statusCode {
-        case 401:
-            throw AttemptError.unauthorized(token)
-        case 403 where GoogleDriveAPIClient.isInsufficientScope(status: 403, data: data):
-            throw DriveAPIError.insufficientScope
-        case 403 where !Set(GoogleDriveAPIClient.errorReasons(from: data)).isDisjoint(with: DownloadWorker.rateLimitReasons):
-            throw AttemptError.rateLimited(String(localized: "Google rate-limited requests (HTTP 403)"))
-        case 429:
-            throw AttemptError.rateLimited(String(localized: "Google rate-limited requests (HTTP 429)"))
-        case 403 where GoogleDriveAPIClient.errorReasons(from: data).contains("storageQuotaExceeded"):
-            throw AttemptError.fatal(String(localized: "Google Drive is out of storage"), nil)
-        case 403:
-            throw AttemptError.fatal(String(localized: "You don’t have permission to upload to this folder"), nil)
-        case 500, 502, 503, 504:
-            throw AttemptError.transient(String(localized: "Google Drive server is temporarily unavailable (HTTP \(http.statusCode))"))
-        default:
-            throw AttemptError.fatal("Google Drive API: HTTP \(http.statusCode) — \(message)", nil)
         }
     }
 }

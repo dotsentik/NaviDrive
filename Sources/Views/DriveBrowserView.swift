@@ -17,8 +17,8 @@ struct DriveBrowserView: View {
     @Environment(AppModel.self) private var model
     let scope: BrowserScope
 
-    @State private var stack: [DriveItem] = []
-    @State private var items: [DriveItem] = []
+    @State private var stack: [CloudItem] = []
+    @State private var items: [CloudItem] = []
     @State private var isLoading = false
     /// Ошибка, когда показать нечего (полноэкранный ContentUnavailableView).
     @State private var loadError: String?
@@ -33,16 +33,16 @@ struct DriveBrowserView: View {
     @State private var linkText = ""
     @State private var linkError: String?
     @State private var isOpeningLink = false
-    @State private var selection = Set<DriveItem.ID>()
-    @State private var sortOrder = [KeyPathComparator(\DriveItem.name, comparator: .localizedStandard)]
+    @State private var selection = Set<CloudItem.ID>()
+    @State private var sortOrder = [KeyPathComparator(\CloudItem.name, comparator: .localizedStandard)]
     @State private var loadTask: Task<Void, Never>?
     // Редактирование диска
-    @State private var renamingId: DriveItem.ID?
+    @State private var renamingId: CloudItem.ID?
     @State private var renameText = ""
     @FocusState private var renameFocused: Bool
-    @State private var trashCandidates: [DriveItem] = []
+    @State private var trashCandidates: [CloudItem] = []
     @State private var confirmTrash = false
-    @State private var moveCandidates: [DriveItem] = []
+    @State private var moveCandidates: [CloudItem] = []
     @State private var showMovePicker = false
     @State private var isDropTargeted = false
 
@@ -181,15 +181,15 @@ struct DriveBrowserView: View {
                     } else {
                         Text(item.name).lineLimit(1)
                     }
-                    if item.isShortcut {
+                    if item.isAlias {
                         Image(systemName: "arrow.turn.up.right")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .help("Shortcut — its target is downloaded and opened")
                     }
                     // Путь берётся из словаря маршрутов в модели (загружен в фоне), а не из SQLite в body.
-                    if let path = model.routeMap[item.id] {
-                        RouteBadge(path: path, volumeMissing: model.routeVolumeMissing.contains(item.id))
+                    if let path = model.routeMap[item.routeKey] {
+                        RouteBadge(path: path, volumeMissing: model.routeVolumeMissing.contains(item.routeKey))
                     }
                 }
             }
@@ -201,7 +201,7 @@ struct DriveBrowserView: View {
             .width(min: 70, ideal: 100)
 
             TableColumn("Modified") { item in
-                Text(Format.date(item.modifiedDate)).foregroundStyle(.secondary)
+                Text(Format.date(item.modifiedAt)).foregroundStyle(.secondary)
             }
             .width(min: 120, ideal: 160)
 
@@ -210,7 +210,7 @@ struct DriveBrowserView: View {
             }
             .width(min: 80, ideal: 120)
         }
-        .contextMenu(forSelectionType: DriveItem.ID.self) { ids in
+        .contextMenu(forSelectionType: CloudItem.ID.self) { ids in
             contextMenu(for: items(for: ids))
         } primaryAction: { ids in
             let selected = items(for: ids)
@@ -250,7 +250,7 @@ struct DriveBrowserView: View {
     }
 
     @ViewBuilder
-    private func contextMenu(for selected: [DriveItem]) -> some View {
+    private func contextMenu(for selected: [CloudItem]) -> some View {
         if selected.isEmpty, let target = uploadTarget {
             // Пустое место списка: действия с текущей папкой.
             Button("New Folder") { createFolder() }
@@ -267,7 +267,7 @@ struct DriveBrowserView: View {
             Button("Set Permanent Custom Location…") {
                 model.setPermanentRoute(selected)
             }
-            if selected.count == 1, let item = selected.first, let route = model.routes.first(where: { $0.driveId == item.id }) {
+            if selected.count == 1, let item = selected.first, let route = model.route(for: item) {
                 Button("Remove Custom Location") { model.deleteRoute(route) }
             }
             Divider()
@@ -312,9 +312,9 @@ struct DriveBrowserView: View {
     private var uploadTarget: UploadTarget? {
         if let folder = stack.last {
             guard folder.canAddChildren else { return nil }
-            return UploadTarget(id: folder.targetId, name: folder.name, driveId: folder.targetDriveId)
+            return UploadTarget(provider: folder.provider, id: folder.targetId, name: folder.name, spaceId: folder.targetSpaceId)
         }
-        return scope == .myDrive ? .myDriveRoot : nil
+        return scope == .myDrive ? model.provider.rootFolder : nil
     }
 
     private var trashTitle: String {
@@ -341,7 +341,7 @@ struct DriveBrowserView: View {
         }
     }
 
-    private func beginRename(_ item: DriveItem) {
+    private func beginRename(_ item: CloudItem) {
         renameText = item.name
         renamingId = item.id
         Task {
@@ -351,7 +351,7 @@ struct DriveBrowserView: View {
         }
     }
 
-    private func commitRename(_ item: DriveItem) {
+    private func commitRename(_ item: CloudItem) {
         guard renamingId == item.id else { return }
         renamingId = nil
         let newName = renameText
@@ -362,7 +362,7 @@ struct DriveBrowserView: View {
         }
     }
 
-    private func move(_ selected: [DriveItem], to target: UploadTarget) {
+    private func move(_ selected: [CloudItem], to target: UploadTarget) {
         Task {
             let moved = await model.move(selected, to: target)
             guard !moved.isEmpty else { return }
@@ -372,7 +372,7 @@ struct DriveBrowserView: View {
         }
     }
 
-    private func trash(_ selected: [DriveItem]) {
+    private func trash(_ selected: [CloudItem]) {
         Task {
             let trashed = await model.trash(selected)
             guard !trashed.isEmpty else { return }
@@ -384,7 +384,7 @@ struct DriveBrowserView: View {
 
     // MARK: - Data
 
-    private var displayedItems: [DriveItem] {
+    private var displayedItems: [CloudItem] {
         let filter = model.browserFilter
         let filtered = filter.isEmpty ? items : items.filter { $0.name.localizedCaseInsensitiveContains(filter) }
         let folders = filtered.filter(\.isFolder).sorted(using: sortOrder)
@@ -392,29 +392,28 @@ struct DriveBrowserView: View {
         return folders + files
     }
 
-    private var selectedItems: [DriveItem] { items(for: selection) }
+    private var selectedItems: [CloudItem] { items(for: selection) }
 
-    private func items(for ids: Set<DriveItem.ID>) -> [DriveItem] {
+    private func items(for ids: Set<CloudItem.ID>) -> [CloudItem] {
         items.filter { ids.contains($0.id) }
     }
 
     private var currentFolderRoute: String? {
         guard let folder = stack.last else { return nil }
         let ancestors = Array(stack.dropLast())
-        let hasRoute = (ancestors + [folder]).contains { model.routeMap[$0.id] != nil }
+        let hasRoute = (ancestors + [folder]).contains { model.routeMap[$0.routeKey] != nil }
         guard hasRoute else { return nil }
         return PathResolver.localPath(for: folder, ancestors: ancestors, routes: model.routeMap,
                                       defaultPath: model.defaultDownloadPath)
     }
 
-    private func sizeText(_ item: DriveItem) -> String {
+    private func sizeText(_ item: CloudItem) -> String {
         if item.isFolder { return "—" }
-        if item.isShortcut { return item.exportFormat.map { ".\($0.fileExtension)" } ?? "—" }
-        if item.isGoogleWorkspaceDocument { return item.exportFormat.map { ".\($0.fileExtension)" } ?? "—" }
+        if item.isAlias || item.isCloudDocument { return item.exportFormat.map { ".\($0.fileExtension)" } ?? "—" }
         return Format.bytes(item.sizeValue)
     }
 
-    private func open(_ folder: DriveItem) {
+    private func open(_ folder: CloudItem) {
         stack.append(folder)
         reload(resetting: true)
     }
@@ -496,7 +495,7 @@ struct DriveBrowserView: View {
 
         // Корень «Добавленные по ссылке» — локальный список из БД, без запроса к API.
         if isLinkedRoot {
-            let linked = model.linkedItems.map(\.driveItem)
+            let linked = model.linkedItems.map(\.cloudItem)
             let ids = Set(linked.map(\.id))
             selection = selection.filter { ids.contains($0) }
             items = linked
@@ -514,32 +513,32 @@ struct DriveBrowserView: View {
             }
         }
 
-        let listScope: GoogleDriveAPIClient.ListScope
+        let location: CloudLocation
         if let folder = stack.last {
-            listScope = .children(of: folder.targetId, driveId: folder.targetDriveId)
+            location = .folder(id: folder.targetId, spaceId: folder.targetSpaceId)
         } else {
             switch scope {
-            case .myDrive: listScope = .folder("root")
-            case .sharedWithMe: listScope = .sharedWithMe
-            case .sharedDrives: listScope = .drives
-            case .linked: listScope = .folder("root")   // корень «Добавленные по ссылке» читается из БД выше
+            case .myDrive: location = .root
+            case .sharedWithMe: location = .sharedWithMe
+            case .sharedDrives: location = .sharedSpaces
+            case .linked: location = .root   // корень «Добавленные по ссылке» читается из БД выше
             }
         }
-        let api = model.api
+        let provider = model.provider
         loadTask = Task {
-            var collected: [DriveItem] = []
+            var collected: [CloudItem] = []
             do {
                 var token: String?
                 repeat {
-                    let page = try await api.listPage(listScope, pageToken: token)
+                    let page = try await provider.listPage(location, pageToken: token)
                     // После каждого await: если пользователь уже ушёл в другую папку — результат отбрасывается.
                     guard !Task.isCancelled, generation == loadGeneration else { return }
                     if progressive {
                         // Пустой экран заполняется постранично — первые строки видны сразу.
-                        items.append(contentsOf: page.files)
+                        items.append(contentsOf: page.items)
                         showsSpinner = false
                     } else {
-                        collected.append(contentsOf: page.files)
+                        collected.append(contentsOf: page.items)
                     }
                     token = page.nextPageToken
                 } while token != nil
@@ -581,37 +580,39 @@ struct DriveBrowserView: View {
 
     // MARK: - Presentation
 
-    static func icon(for item: DriveItem) -> String {
-        if item.isShortcut && item.shortcutDetails?.targetId == nil { return "questionmark.folder" }
+    static func icon(for item: CloudItem) -> String {
+        if item.isAlias && item.aliasTargetId == nil { return "questionmark.folder" }
         if item.isFolder { return "folder.fill" }
-        switch item.effectiveMimeType {
-        case "application/vnd.google-apps.document": return "doc.text"
-        case "application/vnd.google-apps.spreadsheet": return "tablecells"
-        case "application/vnd.google-apps.presentation": return "rectangle.on.rectangle"
+        switch item.documentType {
+        case .document: return "doc.text"
+        case .spreadsheet: return "tablecells"
+        case .presentation: return "rectangle.on.rectangle"
+        case .drawing, .other: return "questionmark.square.dashed"
+        case nil: break
+        }
+        switch item.contentType ?? "" {
         case "application/pdf": return "doc.richtext"
         case let m where m.hasPrefix("image/"): return "photo"
         case let m where m.hasPrefix("video/"): return "film"
         case let m where m.hasPrefix("audio/"): return "waveform"
         case let m where m.contains("zip") || m.contains("compressed") || m.contains("tar"): return "doc.zipper"
-        case let m where m.hasPrefix("application/vnd.google-apps."): return "questionmark.square.dashed"
         default: return "doc"
         }
     }
 
-    static func kind(for item: DriveItem) -> String {
-        if item.isShortcut {
+    static func kind(for item: CloudItem) -> String {
+        if item.isAlias {
             if item.isFolder { return String(localized: "Shortcut to folder") }
-            if item.shortcutDetails?.targetId == nil { return String(localized: "Shortcut (no target)") }
+            if item.aliasTargetId == nil { return String(localized: "Shortcut (no target)") }
             return String(localized: "Shortcut to file")
         }
         if item.isFolder { return String(localized: "Folder") }
-        switch item.mimeType {
-        case "application/vnd.google-apps.document": return String(localized: "Google Doc")
-        case "application/vnd.google-apps.spreadsheet": return String(localized: "Google Sheet")
-        case "application/vnd.google-apps.presentation": return String(localized: "Google Slides")
-        case "application/vnd.google-apps.drawing": return String(localized: "Google Drawing")
-        case "application/vnd.google-apps.shortcut": return String(localized: "Shortcut")
-        default:
+        switch item.documentType {
+        case .document: return String(localized: "Google Doc")
+        case .spreadsheet: return String(localized: "Google Sheet")
+        case .presentation: return String(localized: "Google Slides")
+        case .drawing: return String(localized: "Google Drawing")
+        case .other, nil:
             let ext = (item.name as NSString).pathExtension.uppercased()
             return ext.isEmpty ? String(localized: "File") : ext
         }

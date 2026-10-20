@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// «Маршруты сохранения»: все объекты Google Drive с назначенным кастомным путём.
+/// «Маршруты сохранения»: все объекты облака с назначенным кастомным путём (ключ — провайдер и ID).
 /// Данные — `model.routes` (загружаются из custom_routes в фоне), статус диска — `model.routeVolumeMissing`.
 struct RoutesView: View {
     @Environment(AppModel.self) private var model
@@ -26,7 +26,7 @@ struct RoutesView: View {
             .width(min: 200, ideal: 340)
 
             TableColumn("Disk Status") { route in
-                DiskStatusLabel(path: route.localPath, missing: model.routeVolumeMissing.contains(route.driveId))
+                DiskStatusLabel(path: route.localPath, missing: model.routeVolumeMissing.contains(route.id))
             }
             .width(min: 120, ideal: 140)
 

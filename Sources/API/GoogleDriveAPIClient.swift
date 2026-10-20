@@ -1,29 +1,5 @@
 import Foundation
 
-enum DriveAPIError: LocalizedError {
-    case http(Int, String)
-    case invalidResponse
-    case uploadSessionMissing
-    /// Сохранённый вход выдан без права записи (scope только для чтения).
-    case insufficientScope
-
-    var errorDescription: String? {
-        switch self {
-        case .http(let code, let message): "Google Drive API: HTTP \(code) — \(message)"
-        case .invalidResponse: String(localized: "Invalid server response")
-        case .uploadSessionMissing: String(localized: "The server didn’t return an upload session URL")
-        case .insufficientScope: String(localized: "Sign in to Google again to upload and edit files")
-        }
-    }
-
-    var isTransient: Bool {
-        if case .http(let code, let message) = self {
-            return [429, 500, 502, 503, 504].contains(code) || (code == 403 && message.lowercased().contains("ratelimit"))
-        }
-        return false
-    }
-}
-
 enum ShortcutError: LocalizedError {
     case missingTarget
     case targetUnavailable(Int)
@@ -35,11 +11,6 @@ enum ShortcutError: LocalizedError {
         case .targetUnavailable(let code): String(localized: "no access to the shortcut target (HTTP \(code))")
         }
     }
-}
-
-struct DriveUser: Decodable, Sendable {
-    let displayName: String?
-    let emailAddress: String?
 }
 
 /// Клиент Google Drive API v3.
@@ -55,44 +26,10 @@ final class GoogleDriveAPIClient: Sendable {
     static let itemFields = "id,name,mimeType,size,md5Checksum,modifiedTime,resourceKey,driveId,capabilities(canDownload,canAddChildren,canRename,canTrash,canMoveItemWithinDrive),shortcutDetails(targetId,targetMimeType)"
     static let listFields = "nextPageToken,files(\(itemFields))"
     static let fileFields = itemFields
-    static let backoff: [Double] = [2, 4, 8, 16, 32]
-    /// Общая сессия приложения: API, OAuth, скачивание и загрузка.
-    static let sharedSession: URLSession = {
-        let configuration = URLSessionConfiguration.default
-        configuration.timeoutIntervalForRequest = 60
-        // Файл на сотни гигабайт может качаться сутками.
-        configuration.timeoutIntervalForResource = 60 * 60 * 24 * 7
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.urlCache = nil
-        configuration.httpMaximumConnectionsPerHost = maxConnectionsPerHost
-        return URLSession(configuration: configuration)
-    }()
-
-    /// Не меньше максимального предела потоков (16) плюс запас под листинг папок и обновление токена.
-    /// Скачивание (до 16) и отправка (до 6) работают одновременно и не отнимают соединения друг у друга.
-    static let maxConnectionsPerHost = AppSettings.concurrencyRange.upperBound + AppSettings.uploadConcurrencyRange.upperBound + 8
-
-    /// Пауза перед повтором со случайным разбросом ±50%, чтобы параллельные запросы не повторялись синхронно.
-    static func backoffDelay(_ attempt: Int) -> Duration {
-        .seconds(backoff[min(attempt, backoff.count - 1)] * Double.random(in: 0.5...1.5))
-    }
 
     init(tokenManager: TokenManager) {
         self.tokenManager = tokenManager
-
-        session = Self.sharedSession
-    }
-
-    static func isTransientNetworkError(_ error: Error) -> Bool {
-        guard let urlError = error as? URLError else { return false }
-        switch urlError.code {
-        case .timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost,
-             .cannotFindHost, .dnsLookupFailed, .secureConnectionFailed, .resourceUnavailable,
-             .internationalRoamingOff, .dataNotAllowed, .badServerResponse:
-            return true
-        default:
-            return false
-        }
+        session = CloudNetwork.sharedSession
     }
 
     /// Значения `error.errors[].reason` из тела ошибки Google API.
@@ -143,20 +80,20 @@ final class GoogleDriveAPIClient: Sendable {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             do {
                 let (data, response) = try await session.data(for: request)
-                guard let http = response as? HTTPURLResponse else { throw DriveAPIError.invalidResponse }
+                guard let http = response as? HTTPURLResponse else { throw CloudAPIError.invalidResponse }
                 if (200..<300).contains(http.statusCode) { return (data, http) }
                 if http.statusCode == 401, !refreshedAfter401 {
                     refreshedAfter401 = true
                     _ = try await tokenManager.refreshAfterUnauthorized(failedToken: token)
                     continue
                 }
-                if Self.isInsufficientScope(status: http.statusCode, data: data) { throw DriveAPIError.insufficientScope }
-                let error = DriveAPIError.http(http.statusCode, Self.errorMessage(from: data))
-                guard error.isTransient, attempt < Self.backoff.count else { throw error }
-            } catch let error where Self.isTransientNetworkError(error) {
-                guard attempt < Self.backoff.count else { throw error }
+                if Self.isInsufficientScope(status: http.statusCode, data: data) { throw CloudAPIError.insufficientScope }
+                let error = CloudAPIError.http(status: http.statusCode, message: Self.errorMessage(from: data), provider: .googleDrive)
+                guard error.isTransient, attempt < CloudNetwork.backoff.count else { throw error }
+            } catch let error where CloudNetwork.isTransientError(error) {
+                guard attempt < CloudNetwork.backoff.count else { throw error }
             }
-            try await Task.sleep(for: Self.backoffDelay(attempt))
+            try await Task.sleep(for: CloudNetwork.backoffDelay(attempt))
             attempt += 1
         }
     }
@@ -198,7 +135,7 @@ final class GoogleDriveAPIClient: Sendable {
         ]
         if let pageToken { items.append(URLQueryItem(name: "pageToken", value: pageToken)) }
         components.queryItems = items
-        guard let url = components.url else { throw DriveAPIError.invalidResponse }
+        guard let url = components.url else { throw CloudAPIError.invalidResponse }
         let (data, _) = try await send { URLRequest(url: url) }
         let list = try JSONDecoder().decode(DriveList.self, from: data)
         let folders = (list.drives ?? []).map {
@@ -249,7 +186,7 @@ final class GoogleDriveAPIClient: Sendable {
 
     func listPage(_ scope: ListScope, pageToken: String?, orderBy: String = "folder,name") async throws -> DriveFileList {
         if case .drives = scope { return try await drivesPage(pageToken: pageToken) }
-        guard let url = Self.listURL(scope, pageToken: pageToken, orderBy: orderBy) else { throw DriveAPIError.invalidResponse }
+        guard let url = Self.listURL(scope, pageToken: pageToken, orderBy: orderBy) else { throw CloudAPIError.invalidResponse }
 
         var keyIds: [String] = []
         switch scope {
@@ -290,7 +227,7 @@ final class GoogleDriveAPIClient: Sendable {
             URLQueryItem(name: "fields", value: Self.fileFields),
             URLQueryItem(name: "supportsAllDrives", value: "true"),
         ]
-        guard let url = components.url else { throw DriveAPIError.invalidResponse }
+        guard let url = components.url else { throw CloudAPIError.invalidResponse }
         let keyHeader = resourceKeys.headerValue(for: [id])
         let (data, _) = try await send { Self.request(url, resourceKeys: keyHeader) }
         let item = try JSONDecoder().decode(DriveItem.self, from: data)
@@ -306,7 +243,7 @@ final class GoogleDriveAPIClient: Sendable {
         let target: DriveItem
         do {
             target = try await file(id: targetId)
-        } catch DriveAPIError.http(let code, _) where code == 404 || code == 403 {
+        } catch CloudAPIError.http(let code, _, _) where code == 404 || code == 403 {
             throw ShortcutError.targetUnavailable(code)
         }
         guard !target.isShortcut else { throw ShortcutError.missingTarget }
@@ -324,11 +261,11 @@ final class GoogleDriveAPIClient: Sendable {
 
     // MARK: - Download request
 
-    func downloadURL(for task: DownloadTask) -> URL {
-        let encodedId = task.driveFileId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? task.driveFileId
-        if let format = task.exportFormat {
+    func downloadURL(fileId: String, export: CloudExportFormat?) -> URL {
+        let encodedId = fileId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? fileId
+        if let export {
             var components = URLComponents(string: "\(Self.baseURL)/files/\(encodedId)/export")!
-            components.queryItems = [URLQueryItem(name: "mimeType", value: format.mimeType)]
+            components.queryItems = [URLQueryItem(name: "mimeType", value: export.mimeType)]
             return components.url!
         }
         return URL(string: "\(Self.baseURL)/files/\(encodedId)?alt=media&acknowledgeAbuse=true&supportsAllDrives=true")!

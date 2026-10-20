@@ -62,9 +62,8 @@ final class DatabaseManager: @unchecked Sendable {
                 updated_at INTEGER
             );
             """)
-        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON download_tasks(status);")
-        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_updated ON download_tasks(updated_at);")
         try migrate()
+        try createIndexes()
 
         let readFlags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
         if sqlite3_open_v2(path, &readDB, readFlags, nil) == SQLITE_OK {
@@ -93,11 +92,6 @@ final class DatabaseManager: @unchecked Sendable {
                 ) VIRTUAL;
                 """)
         }
-        // Записи индекса с одинаковым ключом упорядочены по rowid, поэтому выборка
-        // «WHERE status = 'queued' AND size_class = ? ORDER BY rowid» идёт без сортировки.
-        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_status_class ON download_tasks(status, size_class);")
-        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_target ON download_tasks(target_dir_path, file_name);")
-
         // v3: resourceKey, проверка MD5, дата изменения из Drive, ожидание квоты Google.
         let addedColumns: [(String, String)] = [
             ("resource_key", "TEXT"),
@@ -113,12 +107,7 @@ final class DatabaseManager: @unchecked Sendable {
             try execute("ALTER TABLE download_tasks ADD COLUMN \(name) \(definition);")
         }
 
-        // Приоритетных задач единицы — частичный индекс почти ничего не стоит.
-        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_priority ON download_tasks(status, size_class) WHERE priority > 0;")
-        // История и ошибки показываются «новые сверху» без сортировки всей таблицы.
-        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_status_updated ON download_tasks(status, updated_at);")
-
-        // v5: очередь отправки в Google Drive (существующие таблицы не меняются).
+        // v5: очередь отправки в облако (существующие таблицы не меняются).
         try execute("""
             CREATE TABLE IF NOT EXISTS upload_tasks (
                 id TEXT PRIMARY KEY,
@@ -143,9 +132,6 @@ final class DatabaseManager: @unchecked Sendable {
                 priority INTEGER NOT NULL DEFAULT 0
             );
             """)
-        try execute("CREATE INDEX IF NOT EXISTS idx_uploads_status ON upload_tasks(status, priority);")
-        try execute("CREATE INDEX IF NOT EXISTS idx_uploads_status_updated ON upload_tasks(status, updated_at);")
-        try execute("CREATE INDEX IF NOT EXISTS idx_uploads_local ON upload_tasks(local_path, parent_drive_id);")
 
         // Объекты, добавленные по ссылке (раздел «Добавленные по ссылке»).
         try execute("""
@@ -159,6 +145,136 @@ final class DatabaseManager: @unchecked Sendable {
                 added_at INTEGER NOT NULL
             );
             """)
+
+        // v6: несколько облаков. Колонка provider (существующие строки — 'googleDrive')
+        // и первичные ключи по паре (provider, id).
+        for table in ["download_tasks", "upload_tasks", "custom_routes"] {
+            let names = try query("PRAGMA table_xinfo(\(table))") { s in Self.text(s, 1) ?? "" }
+            if !names.contains("provider") {
+                try execute("ALTER TABLE \(table) ADD COLUMN provider TEXT NOT NULL DEFAULT '\(CloudProviderKind.googleDrive.rawValue)';")
+            }
+        }
+        try rebuildWithProviderKey("download_tasks", schema: Self.downloadTasksSchema, columns: Self.downloadTasksStoredColumns)
+        try rebuildWithProviderKey("upload_tasks", schema: Self.uploadTasksSchema, columns: Self.uploadTasksColumns)
+        try rebuildWithProviderKey("custom_routes", schema: Self.customRoutesSchema, columns: Self.customRoutesColumns)
+    }
+
+    /// Индексы создаются после миграций: пересборка таблицы удаляет её индексы.
+    private func createIndexes() throws {
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON download_tasks(status);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_updated ON download_tasks(updated_at);")
+        // Записи индекса с одинаковым ключом упорядочены по rowid, поэтому выборка
+        // «WHERE status = 'queued' AND size_class = ? ORDER BY rowid» идёт без сортировки.
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_status_class ON download_tasks(status, size_class);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_target ON download_tasks(target_dir_path, file_name);")
+        // Приоритетных задач единицы — частичный индекс почти ничего не стоит.
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_priority ON download_tasks(status, size_class) WHERE priority > 0;")
+        // История и ошибки показываются «новые сверху» без сортировки всей таблицы.
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_status_updated ON download_tasks(status, updated_at);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_uploads_status ON upload_tasks(status, priority);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_uploads_status_updated ON upload_tasks(status, updated_at);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_uploads_local ON upload_tasks(local_path, parent_drive_id);")
+    }
+
+    // MARK: - v6: первичный ключ (provider, id)
+
+    private static let downloadTasksStoredColumns = """
+        id, drive_file_id, file_name, mime_type, expected_size, downloaded_size, md5_checksum, target_dir_path,
+        status, retry_count, last_error, updated_at, resource_key, drive_modified_at, verified, checksum_failures,
+        quota_attempts, next_attempt_at, priority, provider
+        """
+
+    private static let downloadTasksSchema = """
+        id TEXT NOT NULL,
+        drive_file_id TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        mime_type TEXT,
+        expected_size INTEGER NOT NULL,
+        downloaded_size INTEGER NOT NULL DEFAULT 0,
+        md5_checksum TEXT,
+        target_dir_path TEXT NOT NULL,
+        status TEXT NOT NULL,
+        retry_count INTEGER DEFAULT 0,
+        last_error TEXT,
+        updated_at INTEGER,
+        resource_key TEXT,
+        drive_modified_at INTEGER,
+        verified INTEGER NOT NULL DEFAULT 0,
+        checksum_failures INTEGER NOT NULL DEFAULT 0,
+        quota_attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at INTEGER,
+        priority INTEGER NOT NULL DEFAULT 0,
+        provider TEXT NOT NULL DEFAULT 'googleDrive',
+        size_class INTEGER GENERATED ALWAYS AS (
+            CASE
+                WHEN substr(mime_type, 1, 28) = 'application/vnd.google-apps.' THEN 2
+                WHEN expected_size < \(TaskSizeClass.smallFileThreshold) THEN 0
+                ELSE 1
+            END
+        ) VIRTUAL,
+        PRIMARY KEY (provider, id)
+        """
+
+    private static let uploadTasksColumns = """
+        id, local_path, file_name, file_size, local_modified_at, parent_drive_id, session_uri, session_created_at,
+        uploaded_bytes, status, retry_count, last_error, drive_file_id, md5_checksum, updated_at, parent_name,
+        shared_drive_id, replace_file_id, error_kind, priority, provider
+        """
+
+    private static let uploadTasksSchema = """
+        id TEXT NOT NULL,
+        local_path TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        local_modified_at INTEGER NOT NULL,
+        parent_drive_id TEXT NOT NULL,
+        session_uri TEXT,
+        session_created_at INTEGER,
+        uploaded_bytes INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        drive_file_id TEXT,
+        md5_checksum TEXT,
+        updated_at INTEGER,
+        parent_name TEXT,
+        shared_drive_id TEXT,
+        replace_file_id TEXT,
+        error_kind TEXT,
+        priority INTEGER NOT NULL DEFAULT 0,
+        provider TEXT NOT NULL DEFAULT 'googleDrive',
+        PRIMARY KEY (provider, id)
+        """
+
+    private static let customRoutesColumns = "drive_id, drive_name, local_path, provider"
+
+    private static let customRoutesSchema = """
+        drive_id TEXT NOT NULL,
+        drive_name TEXT,
+        local_path TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT 'googleDrive',
+        PRIMARY KEY (provider, drive_id)
+        """
+
+    /// Первичный ключ SQLite нельзя изменить через ALTER TABLE, поэтому таблица с ключом по одному id
+    /// пересобирается одной транзакцией: новая таблица, копия всех строк с прежними rowid
+    /// (порядок очереди сохраняется), удаление старой, переименование. При ошибке — откат без потерь.
+    private func rebuildWithProviderKey(_ table: String, schema: String, columns: String) throws {
+        let keyColumns = try query("PRAGMA table_info(\(table))") { s in sqlite3_column_int(s, 5) }.filter { $0 > 0 }
+        guard keyColumns.count == 1 else { return }
+        lock.lock(); defer { lock.unlock() }
+        try execute("BEGIN IMMEDIATE TRANSACTION;")
+        do {
+            try execute("DROP TABLE IF EXISTS \(table)_v6;")
+            try execute("CREATE TABLE \(table)_v6 (\(schema));")
+            try execute("INSERT INTO \(table)_v6 (rowid, \(columns)) SELECT rowid, \(columns) FROM \(table);")
+            try execute("DROP TABLE \(table);")
+            try execute("ALTER TABLE \(table)_v6 RENAME TO \(table);")
+            try execute("COMMIT;")
+        } catch {
+            try? execute("ROLLBACK;")
+            throw error
+        }
     }
 
     deinit {
@@ -250,21 +366,26 @@ final class DatabaseManager: @unchecked Sendable {
 
     // MARK: - Custom routes
 
+    private static func provider(_ s: OpaquePointer, _ column: Int32) -> CloudProviderKind {
+        text(s, column).flatMap(CloudProviderKind.init(rawValue:)) ?? .googleDrive
+    }
+
     func allRoutes() -> [CustomRoute] {
-        (try? query("SELECT drive_id, drive_name, local_path FROM custom_routes ORDER BY drive_name COLLATE NOCASE", reader: true) { s in
-            CustomRoute(driveId: Self.text(s, 0) ?? "", driveName: Self.text(s, 1) ?? "", localPath: Self.text(s, 2) ?? "")
+        (try? query("SELECT drive_id, drive_name, local_path, provider FROM custom_routes ORDER BY drive_name COLLATE NOCASE", reader: true) { s in
+            CustomRoute(provider: Self.provider(s, 3), driveId: Self.text(s, 0) ?? "", driveName: Self.text(s, 1) ?? "",
+                        localPath: Self.text(s, 2) ?? "")
         }) ?? []
     }
 
-    func setRoute(driveId: String, driveName: String, localPath: String) throws {
+    func setRoute(provider: CloudProviderKind, driveId: String, driveName: String, localPath: String) throws {
         try run("""
-            INSERT INTO custom_routes (drive_id, drive_name, local_path) VALUES (?, ?, ?)
-            ON CONFLICT(drive_id) DO UPDATE SET drive_name = excluded.drive_name, local_path = excluded.local_path
-            """, [.text(driveId), .text(driveName), .text(localPath)])
+            INSERT INTO custom_routes (provider, drive_id, drive_name, local_path) VALUES (?, ?, ?, ?)
+            ON CONFLICT(provider, drive_id) DO UPDATE SET drive_name = excluded.drive_name, local_path = excluded.local_path
+            """, [.text(provider.rawValue), .text(driveId), .text(driveName), .text(localPath)])
     }
 
-    func deleteRoute(driveId: String) throws {
-        try run("DELETE FROM custom_routes WHERE drive_id = ?", [.text(driveId)])
+    func deleteRoute(provider: CloudProviderKind, driveId: String) throws {
+        try run("DELETE FROM custom_routes WHERE provider = ? AND drive_id = ?", [.text(provider.rawValue), .text(driveId)])
     }
 
     // MARK: - Linked items
@@ -301,7 +422,7 @@ final class DatabaseManager: @unchecked Sendable {
     private static let taskColumns = """
         id, drive_file_id, file_name, mime_type, expected_size, downloaded_size, md5_checksum,
         target_dir_path, status, retry_count, last_error, updated_at,
-        resource_key, drive_modified_at, verified, checksum_failures, quota_attempts, next_attempt_at
+        resource_key, drive_modified_at, verified, checksum_failures, quota_attempts, next_attempt_at, provider
         """
 
     private static func optionalInt(_ s: OpaquePointer, _ column: Int32) -> Int64? {
@@ -316,7 +437,7 @@ final class DatabaseManager: @unchecked Sendable {
             mimeType: text(s, 3),
             expectedSize: sqlite3_column_int64(s, 4),
             downloadedSize: sqlite3_column_int64(s, 5),
-            md5Checksum: text(s, 6),
+            checksum: text(s, 6),
             targetDirPath: text(s, 7) ?? "",
             status: TaskStatus(rawValue: text(s, 8) ?? "") ?? .queued,
             retryCount: Int(sqlite3_column_int64(s, 9)),
@@ -327,7 +448,8 @@ final class DatabaseManager: @unchecked Sendable {
             verified: sqlite3_column_int64(s, 14) != 0,
             checksumFailures: Int(sqlite3_column_int64(s, 15)),
             quotaAttempts: Int(sqlite3_column_int64(s, 16)),
-            nextAttemptAt: optionalInt(s, 17)
+            nextAttemptAt: optionalInt(s, 17),
+            provider: provider(s, 18)
         )
     }
 
@@ -361,8 +483,8 @@ final class DatabaseManager: @unchecked Sendable {
         do {
             let sql = """
                 INSERT INTO download_tasks (\(Self.taskColumns))
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, 0, NULL)
-                ON CONFLICT(id) DO UPDATE SET
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, 0, NULL, ?)
+                ON CONFLICT(provider, id) DO UPDATE SET
                     file_name = excluded.file_name,
                     mime_type = excluded.mime_type,
                     expected_size = excluded.expected_size,
@@ -394,7 +516,7 @@ final class DatabaseManager: @unchecked Sendable {
                 if let mime = task.mimeType { sqlite3_bind_text(statement, 4, mime, -1, transient) } else { sqlite3_bind_null(statement, 4) }
                 sqlite3_bind_int64(statement, 5, task.expectedSize)
                 sqlite3_bind_int64(statement, 6, task.downloadedSize)
-                if let md5 = task.md5Checksum { sqlite3_bind_text(statement, 7, md5, -1, transient) } else { sqlite3_bind_null(statement, 7) }
+                if let checksum = task.checksum { sqlite3_bind_text(statement, 7, checksum, -1, transient) } else { sqlite3_bind_null(statement, 7) }
                 sqlite3_bind_text(statement, 8, task.targetDirPath, -1, transient)
                 sqlite3_bind_text(statement, 9, task.status.rawValue, -1, transient)
                 if let error = task.lastError { sqlite3_bind_text(statement, 10, error, -1, transient) } else { sqlite3_bind_null(statement, 10) }
@@ -402,6 +524,7 @@ final class DatabaseManager: @unchecked Sendable {
                 if let key = task.resourceKey { sqlite3_bind_text(statement, 12, key, -1, transient) } else { sqlite3_bind_null(statement, 12) }
                 if let modified = task.driveModifiedAt { sqlite3_bind_int64(statement, 13, modified) } else { sqlite3_bind_null(statement, 13) }
                 sqlite3_bind_int64(statement, 14, task.verified ? 1 : 0)
+                sqlite3_bind_text(statement, 15, task.provider.rawValue, -1, transient)
                 guard sqlite3_step(statement) == SQLITE_DONE else { throw DatabaseError.step(errorMessage) }
             }
             try execute("COMMIT;")
@@ -501,11 +624,12 @@ final class DatabaseManager: @unchecked Sendable {
             [.text(status.rawValue), .int(Int64(limit))], reader: true, map: Self.task)) ?? []
     }
 
-    /// Есть ли в той же папке задача с тем же именем файла, но для другого объекта Drive.
-    func fileNameTaken(targetDir: String, fileName: String, exceptDriveFileId: String) -> Bool {
-        let rows = (try? query(
-            "SELECT 1 FROM download_tasks WHERE target_dir_path = ? AND file_name = ? AND drive_file_id <> ? AND status <> 'cancelled' LIMIT 1",
-            [.text(targetDir), .text(fileName), .text(exceptDriveFileId)]) { _ in true }) ?? []
+    /// Есть ли в той же папке задача с тем же именем файла, но для другого объекта облака.
+    func fileNameTaken(targetDir: String, fileName: String, except provider: CloudProviderKind, fileId: String) -> Bool {
+        let rows = (try? query("""
+            SELECT 1 FROM download_tasks WHERE target_dir_path = ? AND file_name = ?
+                AND NOT (provider = ? AND drive_file_id = ?) AND status <> 'cancelled' LIMIT 1
+            """, [.text(targetDir), .text(fileName), .text(provider.rawValue), .text(fileId)]) { _ in true }) ?? []
         return !rows.isEmpty
     }
 
@@ -741,7 +865,7 @@ extension DatabaseManager {
     private static let uploadColumns = """
         id, local_path, file_name, file_size, local_modified_at, parent_drive_id, parent_name, shared_drive_id,
         replace_file_id, session_uri, session_created_at, uploaded_bytes, status, retry_count, last_error,
-        error_kind, drive_file_id, md5_checksum, updated_at
+        error_kind, drive_file_id, md5_checksum, updated_at, provider
         """
 
     private static func upload(_ s: OpaquePointer) -> UploadTask {
@@ -753,7 +877,7 @@ extension DatabaseManager {
             uploadedBytes: sqlite3_column_int64(s, 11), status: UploadStatus(rawValue: text(s, 12) ?? "") ?? .failed,
             retryCount: Int(sqlite3_column_int64(s, 13)), lastError: text(s, 14),
             errorKind: text(s, 15).flatMap(UploadErrorKind.init(rawValue:)), driveFileId: text(s, 16),
-            md5Checksum: text(s, 17), updatedAt: sqlite3_column_int64(s, 18))
+            checksum: text(s, 17), updatedAt: sqlite3_column_int64(s, 18), provider: provider(s, 19))
     }
 
     /// Пакетная постановка в очередь одной транзакцией. Файл, который уже ждёт отправки
@@ -765,17 +889,19 @@ extension DatabaseManager {
         do {
             for task in tasks {
                 let exists = try query("""
-                    SELECT 1 FROM upload_tasks WHERE local_path = ? AND parent_drive_id = ? AND file_name = ?
+                    SELECT 1 FROM upload_tasks WHERE local_path = ? AND parent_drive_id = ? AND file_name = ? AND provider = ?
                         AND status NOT IN ('completed', 'cancelled', 'failed') LIMIT 1
-                    """, [.text(task.localPath), .text(task.parentDriveId), .text(task.fileName)]) { _ in true }
+                    """, [.text(task.localPath), .text(task.parentDriveId), .text(task.fileName),
+                          .text(task.provider.rawValue)]) { _ in true }
                 if !exists.isEmpty { duplicates += 1; continue }
                 try run("""
                     INSERT INTO upload_tasks (id, local_path, file_name, file_size, local_modified_at, parent_drive_id,
-                        parent_name, shared_drive_id, replace_file_id, uploaded_bytes, status, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'queued', ?)
+                        parent_name, shared_drive_id, replace_file_id, uploaded_bytes, status, updated_at, provider)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'queued', ?, ?)
                     """, [.text(task.id), .text(task.localPath), .text(task.fileName), .int(task.fileSize),
                           .int(task.localModifiedAt), .text(task.parentDriveId), .text(task.parentName),
-                          .text(task.sharedDriveId), .text(task.replaceFileId), .int(Self.now)])
+                          .text(task.sharedDriveId), .text(task.replaceFileId), .int(Self.now),
+                          .text(task.provider.rawValue)])
                 added += 1
             }
             try execute("COMMIT;")
@@ -842,12 +968,12 @@ extension DatabaseManager {
                      [.int(Int64(retryCount)), .text(error), .int(Self.now), .text(id)])
     }
 
-    /// Сервер принял файл целиком; дальше — сверка MD5.
-    func markUploadTransferred(id: String, driveFileId: String, md5: String?, size: Int64) {
+    /// Сервер принял файл целиком; дальше — сверка хеша.
+    func markUploadTransferred(id: String, driveFileId: String, checksum: String?, size: Int64) {
         _ = try? run("""
             UPDATE upload_tasks SET status = 'verifying', drive_file_id = ?, md5_checksum = ?, uploaded_bytes = ?,
                 session_uri = NULL, last_error = NULL, updated_at = ? WHERE id = ?
-            """, [.text(driveFileId), .text(md5), .int(size), .int(Self.now), .text(id)])
+            """, [.text(driveFileId), .text(checksum), .int(size), .int(Self.now), .text(id)])
     }
 
     func markUploadCompleted(id: String) {

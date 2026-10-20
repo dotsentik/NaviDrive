@@ -17,7 +17,7 @@ extension GoogleDriveAPIClient {
         var components = URLComponents(string: "\(Self.baseURL)/files")!
         components.queryItems = [URLQueryItem(name: "supportsAllDrives", value: "true"),
                                  URLQueryItem(name: "fields", value: Self.itemFields)]
-        guard let url = components.url else { throw DriveAPIError.invalidResponse }
+        guard let url = components.url else { throw CloudAPIError.invalidResponse }
         let body = try JSONSerialization.data(withJSONObject: [
             "name": name, "mimeType": DriveItem.folderMimeType, "parents": [parentId],
         ])
@@ -32,7 +32,7 @@ extension GoogleDriveAPIClient {
     }
 
     func rename(id: String, to name: String) async throws -> DriveItem {
-        guard let url = fileURL(id) else { throw DriveAPIError.invalidResponse }
+        guard let url = fileURL(id) else { throw CloudAPIError.invalidResponse }
         let body = try JSONSerialization.data(withJSONObject: ["name": name])
         let (data, _) = try await send {
             var request = URLRequest(url: url)
@@ -49,13 +49,13 @@ extension GoogleDriveAPIClient {
         struct Parents: Decodable { let parents: [String]? }
         let encodedId = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
         guard let parentsURL = URL(string: "\(Self.baseURL)/files/\(encodedId)?fields=parents&supportsAllDrives=true") else {
-            throw DriveAPIError.invalidResponse
+            throw CloudAPIError.invalidResponse
         }
         let (parentsData, _) = try await send { URLRequest(url: parentsURL) }
         let current = (try JSONDecoder().decode(Parents.self, from: parentsData).parents ?? []).filter { $0 != parentId }
         var query = [URLQueryItem(name: "addParents", value: parentId)]
         if !current.isEmpty { query.append(URLQueryItem(name: "removeParents", value: current.joined(separator: ","))) }
-        guard let url = fileURL(id, query: query) else { throw DriveAPIError.invalidResponse }
+        guard let url = fileURL(id, query: query) else { throw CloudAPIError.invalidResponse }
         let body = try JSONSerialization.data(withJSONObject: [String: Any]())
         _ = try await send {
             var request = URLRequest(url: url)
@@ -68,7 +68,7 @@ extension GoogleDriveAPIClient {
 
     /// В корзину (не окончательное удаление).
     func trash(id: String) async throws {
-        guard let url = fileURL(id) else { throw DriveAPIError.invalidResponse }
+        guard let url = fileURL(id) else { throw CloudAPIError.invalidResponse }
         let body = try JSONSerialization.data(withJSONObject: ["trashed": true])
         _ = try await send {
             var request = URLRequest(url: url)
@@ -129,7 +129,7 @@ extension GoogleDriveAPIClient {
             return request
         }
         guard let location = response.value(forHTTPHeaderField: "Location"), let sessionURL = URL(string: location) else {
-            throw DriveAPIError.uploadSessionMissing
+            throw CloudAPIError.uploadSessionMissing
         }
         return sessionURL
     }
@@ -149,7 +149,7 @@ extension GoogleDriveAPIClient {
         } else {
             (data, response) = try await session.data(for: request)
         }
-        guard let http = response as? HTTPURLResponse else { throw DriveAPIError.invalidResponse }
+        guard let http = response as? HTTPURLResponse else { throw CloudAPIError.invalidResponse }
         return (data, http, token)
     }
 

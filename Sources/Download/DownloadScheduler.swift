@@ -28,7 +28,7 @@ actor DownloadScheduler {
     }
 
     private let db: DatabaseManager
-    private let api: GoogleDriveAPIClient
+    private let providers: CloudProviders
     private let progress: ProgressStore
 
     private var running: [String: Running] = [:]
@@ -49,7 +49,7 @@ actor DownloadScheduler {
     private var scanErrors: [String] = []
     private var timers: [Task<Void, Never>] = []
 
-    /// Проверка MD5 идёт вне слотов загрузки, не более 2 файлов одновременно.
+    /// Проверка хеша идёт вне слотов загрузки, не более 2 файлов одновременно.
     static let maxConcurrentVerifications = 2
     private var verificationQueue: [DownloadTask] = []
     /// id → сколько байт уже прочитано при проверке.
@@ -78,9 +78,9 @@ actor DownloadScheduler {
     private var sessionCounter = 0
     private var lastSession: QueueSessionSummary?
 
-    init(db: DatabaseManager, api: GoogleDriveAPIClient) {
+    init(db: DatabaseManager, providers: CloudProviders) {
         self.db = db
-        self.api = api
+        self.providers = providers
         self.progress = ProgressStore(db: db)
         self.balancer = AdaptiveConcurrency(userLimit: AppSettings.maxConcurrentDownloads)
     }
@@ -170,7 +170,7 @@ actor DownloadScheduler {
 
     /// Ставит объекты в очередь и возвращает итог, когда завершится обход всех выбранных папок.
     /// Файлы начинают скачиваться сразу, не дожидаясь конца обхода.
-    func enqueue(_ items: [DriveItem], destinationDir: String, projectName: String) async -> EnqueueReport {
+    func enqueue(_ items: [CloudItem], destinationDir: String, projectName: String) async -> EnqueueReport {
         session.active = true
         if !projectName.isEmpty, !session.projects.contains(projectName) { session.projects.append(projectName) }
         var report = EnqueueReport()
@@ -179,9 +179,9 @@ actor DownloadScheduler {
 
         for listed in items {
             var item = listed
-            if item.isShortcut {
+            if item.isAlias {
                 do {
-                    item = try await api.resolveShortcut(item)
+                    item = try await providers.provider(for: item.provider).resolveAlias(item)
                 } catch {
                     let message = String(localized: "Shortcut “\(listed.name)”: \(error.localizedDescription)")
                     scanFailed(message)
@@ -190,7 +190,12 @@ actor DownloadScheduler {
                 }
             }
             if item.isFolder {
-                scans.append(startScan(item, destinationDir: destinationDir))
+                guard let provider = providers[item.provider] else {
+                    scanFailed(CloudProviders.unavailableMessage)
+                    report.errors.append(CloudProviders.unavailableMessage)
+                    continue
+                }
+                scans.append(startScan(item, provider: provider, destinationDir: destinationDir))
             } else if item.isDownloadable {
                 let name = freeFileName(for: item, in: destinationDir)
                 do {
@@ -225,7 +230,7 @@ actor DownloadScheduler {
     }
 
     func pauseTask(_ id: String) {
-        // Проверка MD5 локальная и короткая — её не прерываем.
+        // Проверка хеша локальная и короткая — её не прерываем.
         if verifying[id] != nil || verificationQueue.contains(where: { $0.id == id }) { return }
         if running[id] != nil { stop(id, .pauseTask) } else { db.updateStatus(id: id, status: .paused) }
     }
@@ -487,9 +492,10 @@ actor DownloadScheduler {
     private func launch(_ task: DownloadTask, sizeClass: TaskSizeClass) {
         liveProgress[task.id] = task.downloadedSize
         activePartPaths.insert(task.partPath)
-        let worker = DownloadWorker(db: db, api: api, scheduler: self, progress: progress, retryWaiter: retryWaiter)
+        let provider = providers[task.provider]
+        let worker = provider.map { DownloadWorker(db: db, provider: $0, scheduler: self, progress: progress, retryWaiter: retryWaiter) }
         let handle = Task.detached(priority: .utility) {
-            let outcome = await worker.run(task)
+            let outcome = await worker?.run(task) ?? .failed(CloudProviders.unavailableMessage)
             await self.finish(task, outcome: outcome)
         }
         running[task.id] = Running(task: task, sizeClass: sizeClass, handle: handle)
@@ -698,11 +704,11 @@ actor DownloadScheduler {
         try? FileManager.default.removeItem(atPath: task.partPath)
     }
 
-    /// Имя файла, не конфликтующее с другим объектом Drive в той же локальной папке.
-    private func freeFileName(for item: DriveItem, in dir: String) -> String {
+    /// Имя файла, не конфликтующее с другим объектом облака в той же локальной папке.
+    private func freeFileName(for item: CloudItem, in dir: String) -> String {
         var name = item.localFileName
         var used: Set<String> = [name.lowercased()]
-        while db.fileNameTaken(targetDir: dir, fileName: name, exceptDriveFileId: item.id) {
+        while db.fileNameTaken(targetDir: dir, fileName: name, except: item.provider, fileId: item.id) {
             name = PathResolver.uniqueName(item.localFileName, used: &used)
         }
         return name
@@ -710,9 +716,9 @@ actor DownloadScheduler {
 
     // MARK: - Folder scans
 
-    private func startScan(_ folder: DriveItem, destinationDir: String) -> Task<EnqueueReport, Never> {
+    private func startScan(_ folder: CloudItem, provider: any CloudProvider, destinationDir: String) -> Task<EnqueueReport, Never> {
         scanningFolders += 1
-        let scanner = FolderScanner(db: db, api: api, scheduler: self)
+        let scanner = FolderScanner(db: db, provider: provider, scheduler: self)
         return Task.detached(priority: .utility) {
             let report = await scanner.scan(folder, into: destinationDir)
             await self.scanFinished()

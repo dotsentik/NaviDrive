@@ -1,7 +1,8 @@
 import AppKit
 import Foundation
 
-/// Отправка в Google Drive и изменение диска (папки, переименование, перемещение, корзина).
+/// Отправка в облако и изменение его содержимого (папки, переименование, перемещение, корзина).
+/// Все операции идут через `CloudProvider` облака, которому принадлежит объект.
 extension AppModel {
     // MARK: - Refresh
 
@@ -43,7 +44,7 @@ extension AppModel {
 
     /// Вход заведомо без права записи — окно «нужно заново войти». Скачивание при этом продолжает работать.
     func ensureWriteAccess() async -> Bool {
-        if await tokenManager.lacksWriteScope {
+        if await provider.lacksWriteAccess() {
             showReauthPrompt = true
             return false
         }
@@ -52,20 +53,22 @@ extension AppModel {
 
     /// Понятный текст ошибки изменения диска. Нехватка прав входа — окно повторного входа.
     private func reportEditError(_ error: Error, forbidden: String) {
-        if case DriveAPIError.insufficientScope = error {
+        if case CloudAPIError.insufficientScope = error {
             showReauthPrompt = true
             Task { await uploadScheduler?.requireReauth() }
             return
         }
         if error is CancellationError { return }
         switch error {
-        case DriveAPIError.http(403, let message):
-            errorMessage = message.contains("storageQuotaExceeded") ? String(localized: "Google Drive is out of storage") : forbidden
-        case DriveAPIError.http(404, _):
+        case CloudAPIError.storageFull:
+            errorMessage = error.localizedDescription
+        case CloudAPIError.http(403, _, _):
+            errorMessage = forbidden
+        case CloudAPIError.http(404, _, _):
             errorMessage = String(localized: "Item not found — it may have been deleted or moved. Refresh the list.")
-        case DriveAPIError.http(400, let message):
+        case CloudAPIError.http(400, let message, _):
             errorMessage = String(localized: "Google Drive rejected the operation: \(message)")
-        case let urlError as URLError where GoogleDriveAPIClient.isTransientNetworkError(urlError):
+        case let urlError as URLError where CloudNetwork.isTransientError(urlError):
             errorMessage = String(localized: "Can’t connect to Google Drive. Check your internet connection and try again.")
         default:
             errorMessage = error.localizedDescription
@@ -75,7 +78,7 @@ extension AppModel {
     // MARK: - Editing
 
     /// «Новая папка» в текущей папке: первое свободное имя «Новая папка», «Новая папка 2», …
-    func createFolder(in target: UploadTarget, existingNames: Set<String>) async -> DriveItem? {
+    func createFolder(in target: UploadTarget, existingNames: Set<String>) async -> CloudItem? {
         guard await ensureWriteAccess() else { return nil }
         var name = String(localized: "New Folder")
         var counter = 2
@@ -84,19 +87,19 @@ extension AppModel {
             counter += 1
         }
         do {
-            return try await api.createFolder(name: name, parentId: target.id)
+            return try await providers.provider(for: target.provider).createFolder(named: name, in: target)
         } catch {
             reportEditError(error, forbidden: String(localized: "You don’t have permission to change folder “\(target.name)”"))
             return nil
         }
     }
 
-    func rename(_ item: DriveItem, to newName: String) async -> DriveItem? {
+    func rename(_ item: CloudItem, to newName: String) async -> CloudItem? {
         let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name != item.name else { return nil }
         guard await ensureWriteAccess() else { return nil }
         do {
-            return try await api.rename(id: item.id, to: name)
+            return try await providers.provider(for: item.provider).rename(item, to: name)
         } catch {
             reportEditError(error, forbidden: String(localized: "You don’t have permission to rename “\(item.name)”"))
             return nil
@@ -104,12 +107,12 @@ extension AppModel {
     }
 
     /// Возвращает id перемещённых объектов (при ошибке остальные не трогаются).
-    func move(_ items: [DriveItem], to target: UploadTarget) async -> Set<String> {
+    func move(_ items: [CloudItem], to target: UploadTarget) async -> Set<String> {
         guard await ensureWriteAccess() else { return [] }
         var moved = Set<String>()
         for item in items where item.id != target.id {
             do {
-                try await api.move(id: item.id, to: target.id)
+                try await providers.provider(for: item.provider).move(item, to: target)
                 moved.insert(item.id)
             } catch {
                 reportEditError(error, forbidden: String(localized: "You don’t have permission to move “\(item.name)” to “\(target.name)”"))
@@ -120,12 +123,12 @@ extension AppModel {
     }
 
     /// В корзину (окончательное удаление не используется). Возвращает id перемещённых в корзину.
-    func trash(_ items: [DriveItem]) async -> Set<String> {
+    func trash(_ items: [CloudItem]) async -> Set<String> {
         guard await ensureWriteAccess() else { return [] }
         var trashed = Set<String>()
         for item in items {
             do {
-                try await api.trash(id: item.id)
+                try await providers.provider(for: item.provider).trash(item)
                 trashed.insert(item.id)
             } catch {
                 reportEditError(error, forbidden: String(localized: "You don’t have permission to delete “\(item.name)”"))
@@ -143,8 +146,15 @@ extension AppModel {
         guard let uploadScheduler, !urls.isEmpty else { return }
         let title = urls.count == 1 ? urls[0].lastPathComponent : String(localized: "\(urls.count) items")
         selection = .uploads
-        let planner = UploadPlanner(api: api)
+        let providers = providers
         Task {
+            let planner: UploadPlanner
+            do {
+                planner = UploadPlanner(provider: try providers.provider(for: target.provider))
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
             guard await ensureWriteAccess() else { return }
             await uploadScheduler.beginPreparing(title)
             do {
@@ -258,7 +268,7 @@ extension AppModel {
     }
 
     func openUploadFolderOnDrive(_ task: UploadTask) {
-        if let url = task.parentWebURL { NSWorkspace.shared.open(url) }
+        if let url = providers[task.provider]?.webURL(forFolder: task.parentDriveId) { NSWorkspace.shared.open(url) }
     }
 
     /// Строка прогресса отправки для трея и шапки.

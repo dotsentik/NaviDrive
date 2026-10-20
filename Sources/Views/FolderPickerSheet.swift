@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Выбор папки на Google Drive в отдельном окне с деревом диска: «Мой Диск» и общие диски,
+/// Выбор папки в облаке в отдельном окне с деревом диска: «Мой Диск» и общие диски,
 /// вложенные папки подгружаются при раскрытии.
 struct FolderPickerSheet: View {
     @Environment(AppModel.self) private var model
@@ -19,7 +19,7 @@ struct FolderPickerSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.headline).lineLimit(2)
             List {
-                FolderTreeRow(target: .myDriveRoot, icon: "externaldrive.connected.to.line.below",
+                FolderTreeRow(target: model.provider.rootFolder, icon: "externaldrive.connected.to.line.below",
                               selection: $selection, excludedIds: excludedIds, initiallyExpanded: true)
                 if !sharedDrives.isEmpty {
                     Section("Shared Drives") {
@@ -50,10 +50,11 @@ struct FolderPickerSheet: View {
         .padding(16)
         .frame(width: 480, height: 520)
         .task {
-            let drives = (try? await model.api.listAll(.drives)) ?? []
+            let provider = model.provider
+            let drives = (try? await provider.listAll(.sharedSpaces)) ?? []
             sharedDrives = drives
                 .filter(\.canAddChildren)
-                .map { UploadTarget(id: $0.id, name: $0.name, driveId: $0.id) }
+                .map { UploadTarget(provider: provider.kind, id: $0.id, name: $0.name, spaceId: $0.spaceId ?? $0.id) }
         }
     }
 }
@@ -109,15 +110,16 @@ private struct FolderTreeRow: View {
     }
 
     private func load() {
-        let api = model.api
+        let providers = model.providers
         let target = target
         Task {
             do {
-                let items = try await api.children(of: target.id, driveId: target.driveId)
+                let provider = try providers.provider(for: target.provider)
+                let items = try await provider.listAll(.folder(id: target.id, spaceId: target.spaceId))
                 children = items
-                    .filter { $0.isFolder && !$0.isShortcut }
+                    .filter { $0.isFolder && !$0.isAlias }
                     .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-                    .map { UploadTarget(id: $0.id, name: $0.name, driveId: $0.driveId ?? target.driveId) }
+                    .map { UploadTarget(provider: $0.provider, id: $0.id, name: $0.name, spaceId: $0.spaceId ?? target.spaceId) }
             } catch {
                 loadError = error.localizedDescription
             }

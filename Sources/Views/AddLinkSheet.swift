@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// «Добавить по ссылке…»: поиск объекта по ссылке Google Drive, карточка с размером и свободным местом.
+/// «Добавить по ссылке…»: поиск объекта по ссылке на облако, карточка с размером и свободным местом.
 struct AddLinkSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -9,7 +9,7 @@ struct AddLinkSheet: View {
     @State private var text = ""
     @State private var isLookingUp = false
     @State private var lookupError: String?
-    @State private var item: DriveItem?
+    @State private var item: CloudItem?
     @State private var stats = FolderSizeCounter.Stats()
     @State private var isCounting = false
     @State private var countFinished = false
@@ -84,7 +84,7 @@ struct AddLinkSheet: View {
     // MARK: - Card
 
     @ViewBuilder
-    private func card(for item: DriveItem) -> some View {
+    private func card(for item: CloudItem) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 Image(systemName: DriveBrowserView.icon(for: item))
@@ -185,7 +185,7 @@ struct AddLinkSheet: View {
 
     private func prefillFromPasteboard() {
         guard text.isEmpty, let string = NSPasteboard.general.string(forType: .string),
-              string.count < 2_000, DriveLink.parse(string) != nil,
+              string.count < 2_000, model.provider.parseLink(string) != nil,
               string.contains("google.com") else { return }
         text = string.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -212,13 +212,13 @@ struct AddLinkSheet: View {
         }
     }
 
-    private func startCounting(_ folder: DriveItem) {
+    private func startCounting(_ folder: CloudItem) {
         countTask?.cancel()
         stats = .init()
         countError = nil
         countFinished = false
         isCounting = true
-        let counter = FolderSizeCounter(api: model.api)
+        let counter = FolderSizeCounter(provider: model.provider)
         countTask = Task {
             do {
                 let result = try await counter.count(folder) { partial in

@@ -4,7 +4,7 @@ import Foundation
 /// Каждый поток независим: его ошибка, пауза или отмена не затрагивают остальные.
 struct DownloadWorker: Sendable {
     let db: DatabaseManager
-    let api: GoogleDriveAPIClient
+    let provider: any CloudProvider
     let scheduler: DownloadScheduler
     let progress: ProgressStore
     let retryWaiter: RetryWaiter
@@ -26,19 +26,16 @@ struct DownloadWorker: Sendable {
     enum Outcome: Sendable {
         /// Финальный файл уже был на диске с нужным размером.
         case completed(Int64)
-        /// `.gdrive.part` полностью получен и совпал по размеру; дальше — проверка MD5 и переименование.
+        /// `.gdrive.part` полностью получен и совпал по размеру; дальше — проверка хеша и переименование.
         case downloaded(Int64)
         case failed(String)
         case waitingForVolume(String)
-        /// downloadQuotaExceeded / quotaExceeded — повтор через часы, без траты лимита повторов.
+        /// Квота облака на скачивание файла — повтор через часы, без траты лимита повторов.
         case waitingForQuota(String)
         /// Вход отозван или истёк: задача возвращается в очередь до нового входа (прогресс сохранён).
         case signedOut
         case stopped
     }
-
-    static let quotaReasons: Set<String> = ["downloadQuotaExceeded", "quotaExceeded"]
-    static let rateLimitReasons: Set<String> = ["rateLimitExceeded", "userRateLimitExceeded"]
 
     private enum AttemptError: Error {
         case transient(String)
@@ -78,15 +75,15 @@ struct DownloadWorker: Sendable {
                 unauthorizedRefreshes += 1
                 guard unauthorizedRefreshes <= 2 else { return .failed(String(localized: "HTTP 401: access denied")) }
                 do {
-                    _ = try await api.tokenManager.refreshAfterUnauthorized(failedToken: token)
+                    try await provider.refreshAuthorization(after: token)
                 } catch {
                     if Task.isCancelled { return .stopped }
-                    if (error as? OAuthError)?.meansSignedOut == true { return .signedOut }
+                    if provider.isSignedOutError(error) { return .signedOut }
                     return .failed(error.localizedDescription)
                 }
                 continue
             } catch AttemptError.rateLimited(let message) {
-                // Лимит Google: регулятор сразу уменьшает число потоков вдвое,
+                // Лимит запросов облака: регулятор сразу уменьшает число потоков вдвое,
                 // а эта задача повторяется после паузы с разбросом.
                 await scheduler.reportRateLimit()
                 rateLimitRetries += 1
@@ -124,16 +121,15 @@ struct DownloadWorker: Sendable {
                 if case .missing(let message) = PathResolver.volumeState(for: task.targetDirPath) {
                     return .waitingForVolume(message)
                 }
-                if let error = error as? OAuthError {
-                    return error.meansSignedOut ? .signedOut : .failed(error.localizedDescription)
-                }
+                if provider.isSignedOutError(error) { return .signedOut }
+                if error is OAuthError { return .failed(error.localizedDescription) }
 
                 let message: String
                 let unlimited: Bool
                 if case AttemptError.transient(let text) = error {
                     message = text
                     unlimited = false
-                } else if GoogleDriveAPIClient.isTransientNetworkError(error) {
+                } else if CloudNetwork.isTransientError(error) {
                     // Обрывы сети повторяем бесконечно (с паузой до 32 с) — файл докачается с места обрыва.
                     message = error.localizedDescription
                     unlimited = true
@@ -203,30 +199,24 @@ struct DownloadWorker: Sendable {
         }
         await scheduler.report(id: task.id, delta: 0, total: localBytes)
 
-        // 4–6. Запрос с актуальным токеном и Range.
-        let token = try await api.tokenManager.validAccessToken()
-        var request = URLRequest(url: api.downloadURL(for: task))
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        if let key = task.resourceKey ?? api.resourceKeys.key(for: task.driveFileId) {
-            request.setValue("\(task.driveFileId)/\(key)", forHTTPHeaderField: ResourceKeyRegistry.headerName)
-        }
-        if localBytes > 0 {
-            request.setValue("bytes=\(localBytes)-", forHTTPHeaderField: "Range")
-        }
+        // 4–6. Подписанный провайдером запрос с Range.
+        let authorized = try await provider.downloadRequest(for: task, offset: localBytes)
+        let request = authorized.request
+        let token = authorized.credential
 
         let stream: any ResponseBodyStream
         let http: HTTPURLResponse
         if useAsyncBytes {
-            let (bytes, response) = try await api.session.bytes(for: request)
+            let (bytes, response) = try await provider.session.bytes(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
                 bytes.task.cancel()
                 throw AttemptError.transient(String(localized: "Invalid server response"))
             }
             (stream, http) = (AsyncBytesStream(bytes), httpResponse)
         } else {
-            // Экспорт Google Docs нельзя продолжить через Range — для него жёсткий предел буфера не нужен
-            // (экспорт ограничен Google 10 МБ).
-            (stream, http) = try await DataTaskStream.start(request, session: api.session, chunkSize: Self.chunkSize,
+            // Экспорт документов нельзя продолжить через Range — для него жёсткий предел буфера не нужен
+            // (экспорт невелик: у Google он ограничен 10 МБ).
+            (stream, http) = try await DataTaskStream.start(request, session: provider.session, chunkSize: Self.chunkSize,
                                                              hardLimitChunks: isExport ? nil : 8)
         }
 
@@ -258,30 +248,14 @@ struct DownloadWorker: Sendable {
             }
             try Self.truncate(partPath)
             throw AttemptError.restart
-        case 401:
-            stream.cancel()
-            throw AttemptError.unauthorized(token)
         default:
             let body = await Self.readBody(stream, limit: 16_384)
-            let message = "HTTP \(http.statusCode): \(GoogleDriveAPIClient.errorMessage(from: body))"
-            let reasons = Set(GoogleDriveAPIClient.errorReasons(from: body))
-            switch http.statusCode {
-            case 403 where !reasons.isDisjoint(with: Self.quotaReasons):
-                throw AttemptError.quota(message)
-            case 403 where reasons.contains("cannotDownloadFile"):
-                throw AttemptError.fatal(DownloadTask.downloadForbiddenMessage)
-            case 429:
-                throw AttemptError.rateLimited(message)
-            case 403 where !reasons.isDisjoint(with: Self.rateLimitReasons) || message.lowercased().contains("ratelimit"):
-                throw AttemptError.rateLimited(message)
-            case 500, 502, 503, 504:
-                throw AttemptError.transient(message)
-            case 404 where task.resourceKey != nil:
-                throw AttemptError.fatal(String(localized: "File not found (HTTP 404). Check the link: it may need a resourceKey"))
-            case 404:
-                throw AttemptError.fatal(String(localized: "File not found or no access (HTTP 404)"))
-            default:
-                throw AttemptError.fatal(message)
+            switch provider.downloadFailure(status: http.statusCode, body: body, task: task, credential: token) {
+            case .unauthorized(let credential): throw AttemptError.unauthorized(credential)
+            case .rateLimited(let message): throw AttemptError.rateLimited(message)
+            case .quotaExceeded(let message): throw AttemptError.quota(message)
+            case .transient(let message): throw AttemptError.transient(message)
+            case .fatal(let message): throw AttemptError.fatal(message)
             }
         }
 
@@ -316,7 +290,7 @@ struct DownloadWorker: Sendable {
         return try finalize(task)
     }
 
-    /// Проверка размера. Сверку MD5 и переименование выполняет планировщик вне слота загрузки.
+    /// Проверка размера. Сверку хеша и переименование выполняет планировщик вне слота загрузки.
     private func finalize(_ task: DownloadTask) throws -> Outcome {
         let size = Self.fileSize(task.partPath) ?? 0
         if task.exportFormat == nil, task.expectedSize > 0, size != task.expectedSize {

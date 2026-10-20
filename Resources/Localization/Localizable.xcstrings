@@ -3801,6 +3801,22 @@
         }
       }
     },
+    "This cloud service isn’t available in this version of NaviDrive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This cloud service isn’t available in this version of NaviDrive"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это облачное хранилище не поддерживается в этой версии NaviDrive"
+          }
+        }
+      }
+    },
     "This copy has no built-in Google credentials — turn on this option and enter your own.": {
       "localizations": {
         "ru": {
