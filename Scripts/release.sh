@@ -4,22 +4,44 @@
 # Публикация — только из ветки main с чистой рабочей копией, после подтверждения y/N.
 # В других ветках скрипт собирает DMG и .sha256 и пропускает публикацию.
 # В релиз попадают только DMG и .sha256. Заметки — раздел «## [X.Y.Z]» из CHANGELOG.md.
-# Запуск из любой папки: Scripts/release.sh 1.2.0
+# Подпись: отпечаток листового сертификата собранного .app должен совпасть с Config/signing-fingerprint.txt
+# (см. docs/SIGNING.md); иначе выпуск отменяется. Печатается срок действия сертификата.
+# Запуск из любой папки: Scripts/release.sh [--dry-run] 1.2.0
+#   --dry-run — собрать и проверить DMG и .sha256, ничего не публикуя.
+# NAVIDRIVE_DERIVED_DATA и NAVIDRIVE_RELEASE_OUT переопределяют папку сборки и папку результата.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-APP="$ROOT/DerivedData/Build/Products/Release/NaviDrive.app"
+DERIVED_DATA="${NAVIDRIVE_DERIVED_DATA:-$ROOT/DerivedData}"
+APP="$DERIVED_DATA/Build/Products/Release/NaviDrive.app"
 MIN_MACOS="15.0"
+FINGERPRINT_FILE="$ROOT/Config/signing-fingerprint.txt"
+NOTES_FOOTER="$SCRIPT_DIR/release-notes-footer.md"
+EXPIRY_WARNING_DAYS=180
 
 fail() { echo "Ошибка: $*" >&2; exit 1; }
 step() { echo "==> $*"; }
 
-VERSION="${1:-}"
+DRY_RUN=0
+VERSION=""
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=1 ;;
+        -*) fail "неизвестный параметр $arg" ;;
+        *) [ -z "$VERSION" ] || fail "версия указана дважды"; VERSION="$arg" ;;
+    esac
+done
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "укажите версию X.Y.Z, например: Scripts/release.sh 1.2.0"
 TAG="v$VERSION"
 DMG_NAME="NaviDrive-$VERSION.dmg"
-OUT="$ROOT/build/release/$VERSION"
+OUT="${NAVIDRIVE_RELEASE_OUT:-$ROOT/build/release/$VERSION}"
+
+# Отпечаток в виде 64 шестнадцатеричных символов в верхнем регистре: без «:», пробелов и комментариев.
+normalize_fingerprint() { tr -d ': \t' | tr '[:lower:]' '[:upper:]'; }
+[ -f "$FINGERPRINT_FILE" ] || fail "нет $FINGERPRINT_FILE"
+EXPECTED_FINGERPRINT="$(grep -v '^[[:space:]]*#' "$FINGERPRINT_FILE" | normalize_fingerprint | tr -d '\n')"
+[[ "$EXPECTED_FINGERPRINT" =~ ^[0-9A-F]{64}$ ]] || fail "в $FINGERPRINT_FILE нет SHA-256 отпечатка"
 
 cd "$ROOT"
 
@@ -30,7 +52,10 @@ trap 'rm -rf "$WORK"' EXIT
 BRANCH="$(git branch --show-current)"
 PUBLISH=1
 SKIP_REASON=""
-if [ "$BRANCH" != "main" ]; then
+if [ "$DRY_RUN" -eq 1 ]; then
+    PUBLISH=0
+    SKIP_REASON="режим --dry-run"
+elif [ "$BRANCH" != "main" ]; then
     PUBLISH=0
     SKIP_REASON="текущая ветка «$BRANCH», публиковать можно только из main"
 elif [ -n "$(git status --porcelain)" ]; then
@@ -52,10 +77,12 @@ awk -v version="$VERSION" '
     found { print }
 ' CHANGELOG.md | sed -e '/./,$!d' > "$NOTES"
 [ -s "$NOTES" ] || fail "в CHANGELOG.md нет раздела «## [$VERSION]» или он пуст"
+# Как открыть сборку без нотаризации на другом Mac — в конце заметок каждого релиза.
+[ -f "$NOTES_FOOTER" ] && cat "$NOTES_FOOTER" >> "$NOTES"
 
 step "Сборка Release (universal, macOS $MIN_MACOS+)"
 if command -v xcodegen >/dev/null; then xcodegen generate --quiet; fi
-xcodebuild -project NaviDrive.xcodeproj -scheme NaviDrive -configuration Release -derivedDataPath ./DerivedData \
+xcodebuild -project NaviDrive.xcodeproj -scheme NaviDrive -configuration Release -derivedDataPath "$DERIVED_DATA" \
     -quiet ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS" clean build \
     || fail "сборка не удалась"
 
@@ -74,11 +101,37 @@ REPO="$(/usr/libexec/PlistBuddy -c 'Print :NDGitHubRepo' "$APP/Contents/Info.pli
 [ -n "$REPO" ] || fail "в Info.plist нет NDGitHubRepo"
 codesign --verify --deep --strict "$APP" || fail "подпись $APP не прошла проверку"
 
+step "Сертификат подписи"
+CERTS="$WORK/certs"
+mkdir -p "$CERTS"
+(cd "$CERTS" && codesign -d --extract-certificates=cert "$APP" 2>/dev/null) || true
+[ -f "$CERTS/cert0" ] || fail "у $APP нет сертификата подписи (ad-hoc?) — нужна подпись «NaviDrive Signing»"
+ACTUAL_FINGERPRINT="$(openssl x509 -inform DER -in "$CERTS/cert0" -noout -fingerprint -sha256 | cut -d= -f2 | normalize_fingerprint)"
+if [ "$ACTUAL_FINGERPRINT" != "$EXPECTED_FINGERPRINT" ]; then
+    fail "приложение подписано другим сертификатом:
+  в подписи:                       $ACTUAL_FINGERPRINT
+  в Config/signing-fingerprint.txt: $EXPECTED_FINGERPRINT
+Установленные копии отклонят такое обновление. См. docs/SIGNING.md."
+fi
+echo "Отпечаток SHA-256 совпадает: $ACTUAL_FINGERPRINT"
+NOT_AFTER="$(openssl x509 -inform DER -in "$CERTS/cert0" -noout -enddate | cut -d= -f2)"
+EXPIRY_EPOCH="$(LC_ALL=C date -j -f '%b %e %T %Y %Z' "$NOT_AFTER" '+%s' 2>/dev/null || echo 0)"
+if [ "$EXPIRY_EPOCH" -gt 0 ]; then
+    DAYS_LEFT=$(( (EXPIRY_EPOCH - $(date '+%s')) / 86400 ))
+    echo "Сертификат действует до $(date -r "$EXPIRY_EPOCH" '+%Y-%m-%d') (осталось дней: $DAYS_LEFT)"
+    [ "$DAYS_LEFT" -ge 0 ] || fail "срок действия сертификата истёк — см. docs/SIGNING.md"
+    if [ "$DAYS_LEFT" -lt "$EXPIRY_WARNING_DAYS" ]; then
+        echo "Предупреждение: до окончания срока сертификата меньше $EXPIRY_WARNING_DAYS дней — пора выпускать переходную версию (docs/SIGNING.md)." >&2
+    fi
+else
+    echo "Предупреждение: не удалось разобрать дату окончания сертификата «$NOT_AFTER»" >&2
+fi
+
 step "DMG"
-"$SCRIPT_DIR/make_dmg.sh"
 mkdir -p "$OUT"
 rm -f "$OUT/$DMG_NAME" "$OUT/$DMG_NAME.sha256"
-mv "$HOME/Desktop/$DMG_NAME" "$OUT/$DMG_NAME"
+NAVIDRIVE_APP="$APP" NAVIDRIVE_DMG_DIR="$OUT" "$SCRIPT_DIR/make_dmg.sh"
+[ -f "$OUT/$DMG_NAME" ] || fail "make_dmg.sh не создал $OUT/$DMG_NAME"
 (cd "$OUT" && shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256")
 echo "Готово: $OUT/$DMG_NAME"
 echo "        $OUT/$DMG_NAME.sha256"
