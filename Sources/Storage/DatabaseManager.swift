@@ -1,0 +1,945 @@
+import Foundation
+import SQLite3
+
+enum DatabaseError: LocalizedError {
+    case open(String)
+    case prepare(String)
+    case step(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .open(let m): "SQLite open: \(m)"
+        case .prepare(let m): "SQLite prepare: \(m)"
+        case .step(let m): "SQLite step: \(m)"
+        }
+    }
+}
+
+/// Потокобезопасная обёртка над системным SQLite3. Все обращения к соединению сериализуются через lock.
+final class DatabaseManager: @unchecked Sendable {
+    private var db: OpaquePointer?
+    private let lock = NSRecursiveLock()
+    /// Отдельное read-only соединение для чтений интерфейса (сводка, список задач, маршруты, ссылки).
+    /// В режиме WAL читатели не ждут пишущих: экран не стоит в очереди за обходом папок и планировщиком.
+    private var readDB: OpaquePointer?
+    private let readLock = NSLock()
+
+    /// SQLITE_TRANSIENT: SQLite копирует привязанные строки.
+    private var transient: sqlite3_destructor_type { unsafeBitCast(-1, to: sqlite3_destructor_type.self) }
+
+    let path: String
+
+    init(path: String = AppSettings.supportDirectory.appendingPathComponent("navidrive_state.sqlite").path) throws {
+        self.path = path
+        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+        guard sqlite3_open_v2(path, &db, flags, nil) == SQLITE_OK else {
+            let message = db.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown"
+            throw DatabaseError.open(message)
+        }
+        sqlite3_busy_timeout(db, 5_000)
+        try execute("PRAGMA journal_mode=WAL;")
+        try execute("PRAGMA synchronous=NORMAL;")
+        try execute("""
+            CREATE TABLE IF NOT EXISTS custom_routes (
+                drive_id TEXT PRIMARY KEY,
+                drive_name TEXT,
+                local_path TEXT NOT NULL
+            );
+            """)
+        try execute("""
+            CREATE TABLE IF NOT EXISTS download_tasks (
+                id TEXT PRIMARY KEY,
+                drive_file_id TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                mime_type TEXT,
+                expected_size INTEGER NOT NULL,
+                downloaded_size INTEGER NOT NULL DEFAULT 0,
+                md5_checksum TEXT,
+                target_dir_path TEXT NOT NULL,
+                status TEXT NOT NULL,
+                retry_count INTEGER DEFAULT 0,
+                last_error TEXT,
+                updated_at INTEGER
+            );
+            """)
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON download_tasks(status);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_updated ON download_tasks(updated_at);")
+        try migrate()
+
+        let readFlags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
+        if sqlite3_open_v2(path, &readDB, readFlags, nil) == SQLITE_OK {
+            sqlite3_busy_timeout(readDB, 5_000)
+        } else {
+            // Без отдельного читателя всё продолжит работать через основное соединение.
+            sqlite3_close_v2(readDB)
+            readDB = nil
+        }
+    }
+
+    /// Миграции схемы. Существующие строки не переписываются: новые колонки добавляются через ALTER TABLE.
+    private func migrate() throws {
+        // v2: класс задачи для умной очереди (0 — мелкий файл < 10 МБ, 1 — крупный, 2 — экспорт Google Docs).
+        // Виртуальная генерируемая колонка вычисляется из уже сохранённых полей, поэтому старые задачи
+        // сразу получают правильный класс без перезаписи данных.
+        let columns = try query("PRAGMA table_xinfo(download_tasks)") { s in Self.text(s, 1) ?? "" }
+        if !columns.contains("size_class") {
+            try execute("""
+                ALTER TABLE download_tasks ADD COLUMN size_class INTEGER GENERATED ALWAYS AS (
+                    CASE
+                        WHEN substr(mime_type, 1, 28) = 'application/vnd.google-apps.' THEN 2
+                        WHEN expected_size < \(TaskSizeClass.smallFileThreshold) THEN 0
+                        ELSE 1
+                    END
+                ) VIRTUAL;
+                """)
+        }
+        // Записи индекса с одинаковым ключом упорядочены по rowid, поэтому выборка
+        // «WHERE status = 'queued' AND size_class = ? ORDER BY rowid» идёт без сортировки.
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_status_class ON download_tasks(status, size_class);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_target ON download_tasks(target_dir_path, file_name);")
+
+        // v3: resourceKey, проверка MD5, дата изменения из Drive, ожидание квоты Google.
+        let addedColumns: [(String, String)] = [
+            ("resource_key", "TEXT"),
+            ("drive_modified_at", "INTEGER"),
+            ("verified", "INTEGER NOT NULL DEFAULT 0"),
+            ("checksum_failures", "INTEGER NOT NULL DEFAULT 0"),
+            ("quota_attempts", "INTEGER NOT NULL DEFAULT 0"),
+            ("next_attempt_at", "INTEGER"),
+            // v4: задача, возобновлённая вручную, идёт в начало очереди.
+            ("priority", "INTEGER NOT NULL DEFAULT 0"),
+        ]
+        for (name, definition) in addedColumns where !columns.contains(name) {
+            try execute("ALTER TABLE download_tasks ADD COLUMN \(name) \(definition);")
+        }
+
+        // Приоритетных задач единицы — частичный индекс почти ничего не стоит.
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_priority ON download_tasks(status, size_class) WHERE priority > 0;")
+        // История и ошибки показываются «новые сверху» без сортировки всей таблицы.
+        try execute("CREATE INDEX IF NOT EXISTS idx_tasks_status_updated ON download_tasks(status, updated_at);")
+
+        // v5: очередь отправки в Google Drive (существующие таблицы не меняются).
+        try execute("""
+            CREATE TABLE IF NOT EXISTS upload_tasks (
+                id TEXT PRIMARY KEY,
+                local_path TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                file_size INTEGER NOT NULL,
+                local_modified_at INTEGER NOT NULL,
+                parent_drive_id TEXT NOT NULL,
+                session_uri TEXT,
+                session_created_at INTEGER,
+                uploaded_bytes INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL,
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                drive_file_id TEXT,
+                md5_checksum TEXT,
+                updated_at INTEGER,
+                parent_name TEXT,
+                shared_drive_id TEXT,
+                replace_file_id TEXT,
+                error_kind TEXT,
+                priority INTEGER NOT NULL DEFAULT 0
+            );
+            """)
+        try execute("CREATE INDEX IF NOT EXISTS idx_uploads_status ON upload_tasks(status, priority);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_uploads_status_updated ON upload_tasks(status, updated_at);")
+        try execute("CREATE INDEX IF NOT EXISTS idx_uploads_local ON upload_tasks(local_path, parent_drive_id);")
+
+        // Объекты, добавленные по ссылке (раздел «Добавленные по ссылке»).
+        try execute("""
+            CREATE TABLE IF NOT EXISTS linked_items (
+                drive_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                mime_type TEXT NOT NULL,
+                resource_key TEXT,
+                size INTEGER,
+                drive_id_of_shared_drive TEXT,
+                added_at INTEGER NOT NULL
+            );
+            """)
+    }
+
+    deinit {
+        sqlite3_close_v2(readDB)
+        sqlite3_close_v2(db)
+    }
+
+    // MARK: - Low level
+
+    private var errorMessage: String { String(cString: sqlite3_errmsg(db)) }
+    private static func errorMessage(_ handle: OpaquePointer?) -> String { String(cString: sqlite3_errmsg(handle)) }
+
+    private func execute(_ sql: String) throws {
+        lock.lock(); defer { lock.unlock() }
+        var error: UnsafeMutablePointer<CChar>?
+        if sqlite3_exec(db, sql, nil, nil, &error) != SQLITE_OK {
+            let message = error.map { String(cString: $0) } ?? errorMessage
+            sqlite3_free(error)
+            throw DatabaseError.step(message)
+        }
+    }
+
+    private enum Value {
+        case text(String?)
+        case int(Int64)
+    }
+
+    private func prepare(_ sql: String, _ values: [Value], on handle: OpaquePointer? = nil) throws -> OpaquePointer {
+        let connection = handle ?? db
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(connection, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
+            throw DatabaseError.prepare(Self.errorMessage(connection))
+        }
+        for (index, value) in values.enumerated() {
+            let position = Int32(index + 1)
+            switch value {
+            case .text(let string):
+                if let string {
+                    sqlite3_bind_text(statement, position, string, -1, transient)
+                } else {
+                    sqlite3_bind_null(statement, position)
+                }
+            case .int(let number):
+                sqlite3_bind_int64(statement, position, number)
+            }
+        }
+        return statement
+    }
+
+    @discardableResult
+    private func run(_ sql: String, _ values: [Value] = []) throws -> Int {
+        lock.lock(); defer { lock.unlock() }
+        let statement = try prepare(sql, values)
+        defer { sqlite3_finalize(statement) }
+        let rc = sqlite3_step(statement)
+        guard rc == SQLITE_DONE || rc == SQLITE_ROW else { throw DatabaseError.step(errorMessage) }
+        return Int(sqlite3_changes(db))
+    }
+
+    /// - Parameter reader: выполнить на read-only соединении (только для чтений вне транзакций записи).
+    private func query<T>(_ sql: String, _ values: [Value] = [], reader: Bool = false,
+                          map: (OpaquePointer) -> T) throws -> [T] {
+        let useReader = reader && readDB != nil
+        let activeLock: NSLocking = useReader ? readLock : lock
+        let handle = useReader ? readDB : db
+        activeLock.lock(); defer { activeLock.unlock() }
+        let statement = try prepare(sql, values, on: handle)
+        defer { sqlite3_finalize(statement) }
+        var rows: [T] = []
+        while true {
+            let rc = sqlite3_step(statement)
+            if rc == SQLITE_ROW {
+                rows.append(map(statement))
+            } else if rc == SQLITE_DONE {
+                break
+            } else {
+                throw DatabaseError.step(Self.errorMessage(handle))
+            }
+        }
+        return rows
+    }
+
+    private static func text(_ statement: OpaquePointer, _ column: Int32) -> String? {
+        guard let cString = sqlite3_column_text(statement, column) else { return nil }
+        return String(cString: cString)
+    }
+
+    private static var now: Int64 { Int64(Date().timeIntervalSince1970) }
+
+    // MARK: - Custom routes
+
+    func allRoutes() -> [CustomRoute] {
+        (try? query("SELECT drive_id, drive_name, local_path FROM custom_routes ORDER BY drive_name COLLATE NOCASE", reader: true) { s in
+            CustomRoute(driveId: Self.text(s, 0) ?? "", driveName: Self.text(s, 1) ?? "", localPath: Self.text(s, 2) ?? "")
+        }) ?? []
+    }
+
+    func setRoute(driveId: String, driveName: String, localPath: String) throws {
+        try run("""
+            INSERT INTO custom_routes (drive_id, drive_name, local_path) VALUES (?, ?, ?)
+            ON CONFLICT(drive_id) DO UPDATE SET drive_name = excluded.drive_name, local_path = excluded.local_path
+            """, [.text(driveId), .text(driveName), .text(localPath)])
+    }
+
+    func deleteRoute(driveId: String) throws {
+        try run("DELETE FROM custom_routes WHERE drive_id = ?", [.text(driveId)])
+    }
+
+    // MARK: - Linked items
+
+    func linkedItems() -> [LinkedItem] {
+        (try? query("""
+            SELECT drive_id, name, mime_type, resource_key, size, drive_id_of_shared_drive, added_at
+            FROM linked_items ORDER BY added_at DESC
+            """, reader: true) { s in
+            LinkedItem(driveId: Self.text(s, 0) ?? "", name: Self.text(s, 1) ?? "", mimeType: Self.text(s, 2) ?? "",
+                       resourceKey: Self.text(s, 3), size: Self.optionalInt(s, 4),
+                       sharedDriveId: Self.text(s, 5), addedAt: sqlite3_column_int64(s, 6))
+        }) ?? []
+    }
+
+    func saveLinked(_ item: LinkedItem) throws {
+        try run("""
+            INSERT INTO linked_items (drive_id, name, mime_type, resource_key, size, drive_id_of_shared_drive, added_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(drive_id) DO UPDATE SET name = excluded.name, mime_type = excluded.mime_type,
+                resource_key = COALESCE(excluded.resource_key, linked_items.resource_key),
+                size = COALESCE(excluded.size, linked_items.size),
+                drive_id_of_shared_drive = excluded.drive_id_of_shared_drive
+            """, [.text(item.driveId), .text(item.name), .text(item.mimeType), .text(item.resourceKey),
+                  item.size.map { .int($0) } ?? .text(nil), .text(item.sharedDriveId), .int(item.addedAt)])
+    }
+
+    func deleteLinked(driveId: String) throws {
+        try run("DELETE FROM linked_items WHERE drive_id = ?", [.text(driveId)])
+    }
+
+    // MARK: - Download tasks
+
+    private static let taskColumns = """
+        id, drive_file_id, file_name, mime_type, expected_size, downloaded_size, md5_checksum,
+        target_dir_path, status, retry_count, last_error, updated_at,
+        resource_key, drive_modified_at, verified, checksum_failures, quota_attempts, next_attempt_at
+        """
+
+    private static func optionalInt(_ s: OpaquePointer, _ column: Int32) -> Int64? {
+        sqlite3_column_type(s, column) == SQLITE_NULL ? nil : sqlite3_column_int64(s, column)
+    }
+
+    private static func task(from s: OpaquePointer) -> DownloadTask {
+        DownloadTask(
+            id: text(s, 0) ?? "",
+            driveFileId: text(s, 1) ?? "",
+            fileName: text(s, 2) ?? "",
+            mimeType: text(s, 3),
+            expectedSize: sqlite3_column_int64(s, 4),
+            downloadedSize: sqlite3_column_int64(s, 5),
+            md5Checksum: text(s, 6),
+            targetDirPath: text(s, 7) ?? "",
+            status: TaskStatus(rawValue: text(s, 8) ?? "") ?? .queued,
+            retryCount: Int(sqlite3_column_int64(s, 9)),
+            lastError: text(s, 10),
+            updatedAt: sqlite3_column_int64(s, 11),
+            resourceKey: text(s, 12),
+            driveModifiedAt: optionalInt(s, 13),
+            verified: sqlite3_column_int64(s, 14) != 0,
+            checksumFailures: Int(sqlite3_column_int64(s, 15)),
+            quotaAttempts: Int(sqlite3_column_int64(s, 16)),
+            nextAttemptAt: optionalInt(s, 17)
+        )
+    }
+
+    /// Постановка в очередь с проверкой диска: файлы, которые уже лежат на месте с нужным размером,
+    /// не скачиваются заново, а сразу помечаются `completed`.
+    func enqueue(_ tasks: [DownloadTask]) throws -> (added: Int, alreadyDownloaded: Int, forbidden: Int) {
+        var alreadyDownloaded = 0
+        var forbidden = 0
+        let prepared = tasks.map { task -> DownloadTask in
+            if task.status == .failed {
+                forbidden += 1
+                return task
+            }
+            guard task.isAlreadyDownloaded else { return task }
+            alreadyDownloaded += 1
+            var done = task
+            done.status = .completed
+            done.downloadedSize = task.expectedSize
+            return done
+        }
+        try insertTasks(prepared)
+        return (tasks.count - alreadyDownloaded - forbidden, alreadyDownloaded, forbidden)
+    }
+
+    /// Пакетная вставка задач одной транзакцией. Повторно добавленные задачи (кроме активных)
+    /// получают статус из `task.status` (обычно `queued`).
+    func insertTasks(_ tasks: [DownloadTask]) throws {
+        guard !tasks.isEmpty else { return }
+        lock.lock(); defer { lock.unlock() }
+        try execute("BEGIN IMMEDIATE TRANSACTION;")
+        do {
+            let sql = """
+                INSERT INTO download_tasks (\(Self.taskColumns))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, 0, NULL)
+                ON CONFLICT(id) DO UPDATE SET
+                    file_name = excluded.file_name,
+                    mime_type = excluded.mime_type,
+                    expected_size = excluded.expected_size,
+                    md5_checksum = excluded.md5_checksum,
+                    downloaded_size = CASE WHEN excluded.status = 'completed'
+                        THEN excluded.downloaded_size ELSE download_tasks.downloaded_size END,
+                    status = CASE WHEN download_tasks.status = 'downloading' THEN 'downloading' ELSE excluded.status END,
+                    retry_count = 0,
+                    last_error = excluded.last_error,
+                    resource_key = COALESCE(excluded.resource_key, download_tasks.resource_key),
+                    drive_modified_at = excluded.drive_modified_at,
+                    verified = CASE WHEN excluded.status = 'completed' THEN download_tasks.verified ELSE 0 END,
+                    checksum_failures = 0,
+                    quota_attempts = 0,
+                    next_attempt_at = NULL,
+                    updated_at = excluded.updated_at
+                """
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
+                throw DatabaseError.prepare(errorMessage)
+            }
+            defer { sqlite3_finalize(statement) }
+            for task in tasks {
+                sqlite3_reset(statement)
+                sqlite3_clear_bindings(statement)
+                sqlite3_bind_text(statement, 1, task.id, -1, transient)
+                sqlite3_bind_text(statement, 2, task.driveFileId, -1, transient)
+                sqlite3_bind_text(statement, 3, task.fileName, -1, transient)
+                if let mime = task.mimeType { sqlite3_bind_text(statement, 4, mime, -1, transient) } else { sqlite3_bind_null(statement, 4) }
+                sqlite3_bind_int64(statement, 5, task.expectedSize)
+                sqlite3_bind_int64(statement, 6, task.downloadedSize)
+                if let md5 = task.md5Checksum { sqlite3_bind_text(statement, 7, md5, -1, transient) } else { sqlite3_bind_null(statement, 7) }
+                sqlite3_bind_text(statement, 8, task.targetDirPath, -1, transient)
+                sqlite3_bind_text(statement, 9, task.status.rawValue, -1, transient)
+                if let error = task.lastError { sqlite3_bind_text(statement, 10, error, -1, transient) } else { sqlite3_bind_null(statement, 10) }
+                sqlite3_bind_int64(statement, 11, task.updatedAt)
+                if let key = task.resourceKey { sqlite3_bind_text(statement, 12, key, -1, transient) } else { sqlite3_bind_null(statement, 12) }
+                if let modified = task.driveModifiedAt { sqlite3_bind_int64(statement, 13, modified) } else { sqlite3_bind_null(statement, 13) }
+                sqlite3_bind_int64(statement, 14, task.verified ? 1 : 0)
+                guard sqlite3_step(statement) == SQLITE_DONE else { throw DatabaseError.step(errorMessage) }
+            }
+            try execute("COMMIT;")
+        } catch {
+            try? execute("ROLLBACK;")
+            throw error
+        }
+    }
+
+    func task(id: String) -> DownloadTask? {
+        try? query("SELECT \(Self.taskColumns) FROM download_tasks WHERE id = ?", [.text(id)], map: Self.task).first
+    }
+
+    /// rowid первой задачи в очереди для каждого класса (отсутствие ключа — класс пуст).
+    func queueHeads() -> [TaskSizeClass: Int64] {
+        var heads: [TaskSizeClass: Int64] = [:]
+        for sizeClass in TaskSizeClass.allCases {
+            let rowid = try? query(
+                "SELECT rowid FROM download_tasks WHERE status = 'queued' AND size_class = ? ORDER BY rowid LIMIT 1",
+                [.int(Int64(sizeClass.rawValue))]) { s in sqlite3_column_int64(s, 0) }.first
+            if let rowid { heads[sizeClass] = rowid }
+        }
+        return heads
+    }
+
+    /// Атомарно забирает следующую задачу класса: в одной транзакции переводит `queued → downloading`.
+    /// Условие `AND status = 'queued'` гарантирует, что одна и та же задача не будет запущена дважды.
+    func claimNext(sizeClass: TaskSizeClass) -> DownloadTask? {
+        lock.lock(); defer { lock.unlock() }
+        guard (try? execute("BEGIN IMMEDIATE TRANSACTION;")) != nil else { return nil }
+        let task = (try? query(
+            "SELECT \(Self.taskColumns) FROM download_tasks WHERE status = 'queued' AND size_class = ? ORDER BY rowid LIMIT 1",
+            [.int(Int64(sizeClass.rawValue))], map: Self.task))?.first
+        guard let task else {
+            _ = try? execute("COMMIT;")
+            return nil
+        }
+        let changed = (try? run(
+            "UPDATE download_tasks SET status = 'downloading', priority = 0, last_error = NULL, updated_at = ? WHERE id = ? AND status = 'queued'",
+            [.int(Self.now), .text(task.id)])) ?? 0
+        guard (try? execute("COMMIT;")) != nil, changed == 1 else {
+            _ = try? execute("ROLLBACK;")
+            return nil
+        }
+        var claimed = task
+        claimed.status = .downloading
+        return claimed
+    }
+
+    /// Атомарно забирает задачу, возобновлённую вручную (priority > 0), раньше обычной очереди.
+    /// - Parameter allowExport: можно ли взять экспорт Google Docs (лимит 2 одновременных).
+    func claimNextPrioritized(allowExport: Bool) -> DownloadTask? {
+        lock.lock(); defer { lock.unlock() }
+        guard (try? execute("BEGIN IMMEDIATE TRANSACTION;")) != nil else { return nil }
+        let exportFilter = allowExport ? "" : "AND size_class <> \(TaskSizeClass.export.rawValue)"
+        let task = (try? query(
+            "SELECT \(Self.taskColumns) FROM download_tasks WHERE status = 'queued' AND priority > 0 \(exportFilter) ORDER BY rowid LIMIT 1",
+            map: Self.task))?.first
+        guard let task else {
+            _ = try? execute("COMMIT;")
+            return nil
+        }
+        let changed = (try? run(
+            "UPDATE download_tasks SET status = 'downloading', priority = 0, last_error = NULL, updated_at = ? WHERE id = ? AND status = 'queued'",
+            [.int(Self.now), .text(task.id)])) ?? 0
+        guard (try? execute("COMMIT;")) != nil, changed == 1 else {
+            _ = try? execute("ROLLBACK;")
+            return nil
+        }
+        var claimed = task
+        claimed.status = .downloading
+        return claimed
+    }
+
+    /// «Возобновить»: в очередь с приоритетом. Докачка продолжится с размера .gdrive.part.
+    func resume(id: String) {
+        _ = try? run("""
+            UPDATE download_tasks SET status = 'queued', priority = 1, retry_count = 0, checksum_failures = 0,
+                last_error = NULL, next_attempt_at = NULL, updated_at = ?
+            WHERE id = ? AND status NOT IN ('downloading', 'verifying', 'completed')
+            """, [.int(Self.now), .text(id)])
+    }
+
+    /// «Возобновить все»: вручную приостановленные файлы тоже возвращаются в очередь (с приоритетом).
+    @discardableResult
+    func resumeAllPaused() -> Int {
+        (try? run("UPDATE download_tasks SET status = 'queued', priority = 1, updated_at = ? WHERE status = 'paused'",
+                  [.int(Self.now)])) ?? 0
+    }
+
+    /// Задачи одного статуса в порядке индекса (без сортировки всей таблицы).
+    /// - Parameter newestFirst: история/ошибки — новые сверху; очередь — в порядке постановки.
+    func tasks(status: TaskStatus, newestFirst: Bool, limit: Int) -> [DownloadTask] {
+        let order = newestFirst ? "updated_at DESC" : "rowid ASC"
+        return (try? query(
+            "SELECT \(Self.taskColumns) FROM download_tasks WHERE status = ? ORDER BY \(order) LIMIT ?",
+            [.text(status.rawValue), .int(Int64(limit))], reader: true, map: Self.task)) ?? []
+    }
+
+    /// Есть ли в той же папке задача с тем же именем файла, но для другого объекта Drive.
+    func fileNameTaken(targetDir: String, fileName: String, exceptDriveFileId: String) -> Bool {
+        let rows = (try? query(
+            "SELECT 1 FROM download_tasks WHERE target_dir_path = ? AND file_name = ? AND drive_file_id <> ? AND status <> 'cancelled' LIMIT 1",
+            [.text(targetDir), .text(fileName), .text(exceptDriveFileId)]) { _ in true }) ?? []
+        return !rows.isEmpty
+    }
+
+    /// Пакетная запись прогресса одной транзакцией.
+    func updateProgressBatch(_ progress: [String: Int64]) {
+        guard !progress.isEmpty else { return }
+        lock.lock(); defer { lock.unlock() }
+        guard (try? execute("BEGIN IMMEDIATE TRANSACTION;")) != nil else { return }
+        let now = Self.now
+        for (id, bytes) in progress {
+            _ = try? run("UPDATE download_tasks SET downloaded_size = ?, updated_at = ? WHERE id = ? AND status <> 'completed'",
+                         [.int(bytes), .int(now), .text(id)])
+        }
+        if (try? execute("COMMIT;")) == nil { _ = try? execute("ROLLBACK;") }
+    }
+
+    /// Переводит в `waiting_for_volume` все задачи очереди на отключённом томе, чтобы они не занимали слоты.
+    func markWaitingForVolume(volumeRoot: String, message: String) {
+        let escaped = volumeRoot.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_")
+        _ = try? run("""
+            UPDATE download_tasks SET status = 'waiting_for_volume', last_error = ?, updated_at = ?
+            WHERE status = 'queued' AND (target_dir_path = ? OR target_dir_path LIKE ? ESCAPE '\\')
+            """, [.text(message), .int(Self.now), .text(volumeRoot), .text(escaped + "/%")])
+    }
+
+    func updateStatus(id: String, status: TaskStatus, error: String? = nil) {
+        _ = try? run("UPDATE download_tasks SET status = ?, last_error = ?, updated_at = ? WHERE id = ?",
+                 [.text(status.rawValue), .text(error), .int(Self.now), .text(id)])
+    }
+
+    func updateProgress(id: String, downloaded: Int64) {
+        _ = try? run("UPDATE download_tasks SET downloaded_size = ?, updated_at = ? WHERE id = ?",
+                 [.int(downloaded), .int(Self.now), .text(id)])
+    }
+
+    func markCompleted(id: String, size: Int64, verified: Bool = false) {
+        _ = try? run("""
+            UPDATE download_tasks SET status = 'completed', downloaded_size = ?, verified = ?, checksum_failures = 0,
+                last_error = NULL, updated_at = ? WHERE id = ?
+            """, [.int(size), .int(verified ? 1 : 0), .int(Self.now), .text(id)])
+    }
+
+    /// Несовпадение MD5: файл удалён, задача либо снова в очереди, либо (после 2 раз подряд) в ошибках.
+    func markChecksumMismatch(id: String, failures: Int, error: String, giveUp: Bool) {
+        _ = try? run("""
+            UPDATE download_tasks SET status = ?, downloaded_size = 0, checksum_failures = ?, verified = 0,
+                last_error = ?, updated_at = ? WHERE id = ?
+            """, [.text(giveUp ? TaskStatus.failed.rawValue : TaskStatus.queued.rawValue),
+                  .int(Int64(failures)), .text(error), .int(Self.now), .text(id)])
+    }
+
+    func recordRetry(id: String, retryCount: Int, error: String) {
+        _ = try? run("UPDATE download_tasks SET retry_count = ?, last_error = ?, updated_at = ? WHERE id = ?",
+                 [.int(Int64(retryCount)), .text(error), .int(Self.now), .text(id)])
+    }
+
+    /// Переводит задачи из одних статусов в другой (например, после перезапуска приложения).
+    @discardableResult
+    func moveStatuses(_ from: [TaskStatus], to: TaskStatus) -> Int {
+        guard !from.isEmpty else { return 0 }
+        let placeholders = from.map { _ in "?" }.joined(separator: ",")
+        let values: [Value] = [.text(to.rawValue), .int(Self.now)] + from.map { .text($0.rawValue) }
+        return (try? run("UPDATE download_tasks SET status = ?, updated_at = ? WHERE status IN (\(placeholders))", values)) ?? 0
+    }
+
+    /// Корневые пути томов (`/Volumes/<Name>`), задачи на которых ждут подключения диска.
+    func volumesAwaitingMount() -> Set<String> {
+        let dirs = (try? query("SELECT DISTINCT target_dir_path FROM download_tasks WHERE status = 'waiting_for_volume'") { s in
+            Self.text(s, 0) ?? ""
+        }) ?? []
+        return Set(dirs.compactMap { dir in
+            let parts = dir.split(separator: "/", omittingEmptySubsequences: true)
+            guard parts.count >= 2, parts[0] == "Volumes" else { return nil }
+            return "/Volumes/\(parts[1])"
+        })
+    }
+
+    func requeueWaitingForVolume(volumeRoot: String) {
+        let escaped = volumeRoot.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_")
+        _ = try? run("""
+            UPDATE download_tasks SET status = 'queued', last_error = NULL, updated_at = ?
+            WHERE status = 'waiting_for_volume' AND (target_dir_path = ? OR target_dir_path LIKE ? ESCAPE '\\')
+            """, [.int(Self.now), .text(volumeRoot), .text(escaped + "/%")])
+    }
+
+    // MARK: - Диски
+
+    /// Корень тома для пути задачи: `/Volumes/<Name>` для внешних томов, иначе «/» (системный диск).
+    private static let volumeRootSQL = """
+        CASE WHEN target_dir_path LIKE '/Volumes/%' \
+        THEN substr(target_dir_path, 1, 8 + instr(substr(target_dir_path, 10) || '/', '/')) ELSE '/' END
+        """
+
+    /// Условие «задача на томе `root`» (`root` — значение `PathResolver.volumeKey`).
+    private static func volumeFilter(_ root: String) -> (sql: String, values: [Value]) {
+        if root == "/" { return ("target_dir_path NOT LIKE '/Volumes/%'", []) }
+        let escaped = root.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_")
+        return ("(target_dir_path = ? OR target_dir_path LIKE ? ESCAPE '\\')", [.text(root), .text(escaped + "/%")])
+    }
+
+    /// Сколько осталось скачать на каждый том и сколько файлов качается туда прямо сейчас.
+    func volumeQueueUsage() -> [String: VolumeQueueUsage] {
+        let rows = (try? query("""
+            SELECT \(Self.volumeRootSQL) AS root,
+                SUM(MAX(expected_size - downloaded_size, 0)), SUM(status = 'downloading')
+            FROM download_tasks
+            WHERE status IN ('queued', 'downloading', 'paused', 'waiting_for_volume', 'waiting_for_network',
+                             'waiting_for_quota', 'waiting_for_space')
+            GROUP BY root
+            """, reader: true) { s in
+            (Self.text(s, 0) ?? "/", sqlite3_column_int64(s, 1), Int(sqlite3_column_int64(s, 2)))
+        }) ?? []
+        var result: [String: VolumeQueueUsage] = [:]
+        for (root, remaining, downloading) in rows {
+            result[root] = VolumeQueueUsage(remainingBytes: remaining, downloadingCount: downloading)
+        }
+        return result
+    }
+
+    /// Тома, на которых есть задачи, ждущие свободного места.
+    func volumesAwaitingSpace() -> Set<String> {
+        Set((try? query("SELECT DISTINCT \(Self.volumeRootSQL) FROM download_tasks WHERE status = 'waiting_for_space'") { s in
+            Self.text(s, 0) ?? "/"
+        }) ?? [])
+    }
+
+    /// Возвращает в очередь ждущие места задачи тома, которым хватает `availableBytes` (в порядке очереди).
+    @discardableResult
+    func requeueWaitingForSpace(volumeRoot: String, availableBytes: Int64) -> Int {
+        let filter = Self.volumeFilter(volumeRoot)
+        let candidates = (try? query("""
+            SELECT id, MAX(expected_size - downloaded_size, 0) FROM download_tasks
+            WHERE status = 'waiting_for_space' AND \(filter.sql) ORDER BY rowid
+            """, filter.values) { s in (Self.text(s, 0) ?? "", sqlite3_column_int64(s, 1)) }) ?? []
+        var budget = availableBytes
+        var ids: [String] = []
+        for (id, remaining) in candidates where remaining <= budget {
+            budget -= remaining
+            ids.append(id)
+        }
+        for id in ids {
+            _ = try? run("UPDATE download_tasks SET status = 'queued', last_error = NULL, updated_at = ? WHERE id = ? AND status = 'waiting_for_space'",
+                         [.int(Self.now), .text(id)])
+        }
+        return ids.count
+    }
+
+    /// Ставит на паузу все незапущенные задачи тома (перед извлечением диска).
+    func pauseTasks(volumeRoot: String) {
+        let filter = Self.volumeFilter(volumeRoot)
+        _ = try? run("""
+            UPDATE download_tasks SET status = 'paused', updated_at = ?
+            WHERE status IN ('queued', 'waiting_for_volume', 'waiting_for_network', 'waiting_for_quota', 'waiting_for_space')
+                AND \(filter.sql)
+            """, [.int(Self.now)] + filter.values)
+    }
+
+    /// Квота Google на файл: задача ждёт до `nextAttemptAt`, слот не занимает, лимит повторов не тратит.
+    func markWaitingForQuota(id: String, attempts: Int, nextAttemptAt: Int64, error: String) {
+        _ = try? run("""
+            UPDATE download_tasks SET status = 'waiting_for_quota', quota_attempts = ?, next_attempt_at = ?,
+                last_error = ?, updated_at = ? WHERE id = ?
+            """, [.int(Int64(attempts)), .int(nextAttemptAt), .text(error), .int(Self.now), .text(id)])
+    }
+
+    /// Возвращает в очередь задачи, у которых наступило время следующей попытки (или все — при `force`).
+    @discardableResult
+    func requeueDueQuotaTasks(force: Bool = false) -> Int {
+        (try? run("""
+            UPDATE download_tasks SET status = 'queued', updated_at = ?
+            WHERE status = 'waiting_for_quota' AND (? OR next_attempt_at IS NULL OR next_attempt_at <= ?)
+            """, [.int(Self.now), .int(force ? 1 : 0), .int(Self.now)])) ?? 0
+    }
+
+    func retryFailed() {
+        _ = try? run("UPDATE download_tasks SET status = 'queued', retry_count = 0, last_error = NULL, updated_at = ? WHERE status = 'failed'",
+                 [.int(Self.now)])
+    }
+
+    func deleteTasks(statuses: [TaskStatus]) {
+        let placeholders = statuses.map { _ in "?" }.joined(separator: ",")
+        _ = try? run("DELETE FROM download_tasks WHERE status IN (\(placeholders))", statuses.map { .text($0.rawValue) })
+    }
+
+    func tasks(statuses: [TaskStatus], limit: Int = 500) -> [DownloadTask] {
+        let placeholders = statuses.map { _ in "?" }.joined(separator: ",")
+        let order = statuses.allSatisfy({ TaskStatus.pending.contains($0) }) ? "rowid ASC" : "updated_at DESC"
+        let sql = """
+            SELECT \(Self.taskColumns) FROM download_tasks
+            WHERE status IN (\(placeholders))
+            ORDER BY CASE status WHEN 'downloading' THEN 0 ELSE 1 END, \(order)
+            LIMIT ?
+            """
+        let values: [Value] = statuses.map { .text($0.rawValue) } + [.int(Int64(limit))]
+        return (try? query(sql, values, reader: true, map: Self.task)) ?? []
+    }
+
+    /// Суммарная статистика очереди (по всем задачам, кроме отменённых).
+    func totals() -> QueueTotals {
+        var totals = QueueTotals()
+        let rows = (try? query("""
+            SELECT status, COUNT(*), SUM(expected_size), SUM(MIN(downloaded_size, CASE WHEN expected_size > 0 THEN expected_size ELSE downloaded_size END))
+            FROM download_tasks GROUP BY status
+            """, reader: true) { s in
+            (Self.text(s, 0) ?? "", Int(sqlite3_column_int64(s, 1)), sqlite3_column_int64(s, 2), sqlite3_column_int64(s, 3))
+        }) ?? []
+        for (rawStatus, count, expected, downloaded) in rows {
+            guard let status = TaskStatus(rawValue: rawStatus) else { continue }
+            totals.countsByStatus[status] = count
+            totals.bytesByStatus[status] = expected
+            guard status != .cancelled else { continue }
+            totals.taskCount += count
+            if TaskStatus.pending.contains(status) { totals.pendingCount += count }
+            totals.expectedBytes += expected
+            totals.downloadedBytes += status == .completed ? max(expected, downloaded) : downloaded
+        }
+        if (totals.countsByStatus[.waitingForQuota] ?? 0) > 0 {
+            totals.nextQuotaAttemptAt = (try? query(
+                "SELECT MIN(next_attempt_at) FROM download_tasks WHERE status = 'waiting_for_quota'", reader: true) { s in
+                Self.optionalInt(s, 0)
+            })?.first ?? nil
+        }
+        return totals
+    }
+}
+
+// MARK: - Upload tasks
+
+extension DatabaseManager {
+    private static let uploadColumns = """
+        id, local_path, file_name, file_size, local_modified_at, parent_drive_id, parent_name, shared_drive_id,
+        replace_file_id, session_uri, session_created_at, uploaded_bytes, status, retry_count, last_error,
+        error_kind, drive_file_id, md5_checksum, updated_at
+        """
+
+    private static func upload(_ s: OpaquePointer) -> UploadTask {
+        UploadTask(
+            id: text(s, 0) ?? "", localPath: text(s, 1) ?? "", fileName: text(s, 2) ?? "",
+            fileSize: sqlite3_column_int64(s, 3), localModifiedAt: sqlite3_column_int64(s, 4),
+            parentDriveId: text(s, 5) ?? "root", parentName: text(s, 6) ?? "", sharedDriveId: text(s, 7),
+            replaceFileId: text(s, 8), sessionURI: text(s, 9), sessionCreatedAt: optionalInt(s, 10),
+            uploadedBytes: sqlite3_column_int64(s, 11), status: UploadStatus(rawValue: text(s, 12) ?? "") ?? .failed,
+            retryCount: Int(sqlite3_column_int64(s, 13)), lastError: text(s, 14),
+            errorKind: text(s, 15).flatMap(UploadErrorKind.init(rawValue:)), driveFileId: text(s, 16),
+            md5Checksum: text(s, 17), updatedAt: sqlite3_column_int64(s, 18))
+    }
+
+    /// Пакетная постановка в очередь одной транзакцией. Файл, который уже ждёт отправки
+    /// в ту же папку, повторно не добавляется.
+    func insertUploads(_ tasks: [UploadTask]) throws -> (added: Int, alreadyQueued: Int) {
+        lock.lock(); defer { lock.unlock() }
+        try execute("BEGIN IMMEDIATE TRANSACTION;")
+        var added = 0, duplicates = 0
+        do {
+            for task in tasks {
+                let exists = try query("""
+                    SELECT 1 FROM upload_tasks WHERE local_path = ? AND parent_drive_id = ? AND file_name = ?
+                        AND status NOT IN ('completed', 'cancelled', 'failed') LIMIT 1
+                    """, [.text(task.localPath), .text(task.parentDriveId), .text(task.fileName)]) { _ in true }
+                if !exists.isEmpty { duplicates += 1; continue }
+                try run("""
+                    INSERT INTO upload_tasks (id, local_path, file_name, file_size, local_modified_at, parent_drive_id,
+                        parent_name, shared_drive_id, replace_file_id, uploaded_bytes, status, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'queued', ?)
+                    """, [.text(task.id), .text(task.localPath), .text(task.fileName), .int(task.fileSize),
+                          .int(task.localModifiedAt), .text(task.parentDriveId), .text(task.parentName),
+                          .text(task.sharedDriveId), .text(task.replaceFileId), .int(Self.now)])
+                added += 1
+            }
+            try execute("COMMIT;")
+        } catch {
+            _ = try? execute("ROLLBACK;")
+            throw error
+        }
+        return (added, duplicates)
+    }
+
+    /// Атомарно забирает следующую задачу (сначала возобновлённые вручную, затем в порядке очереди).
+    func claimNextUpload() -> UploadTask? {
+        lock.lock(); defer { lock.unlock() }
+        guard var task = (try? query("""
+            SELECT \(Self.uploadColumns) FROM upload_tasks WHERE status = 'queued' ORDER BY priority DESC, rowid LIMIT 1
+            """, map: Self.upload))?.first else { return nil }
+        let changed = (try? run("UPDATE upload_tasks SET status = 'uploading', priority = 0, updated_at = ? WHERE id = ? AND status = 'queued'",
+                                [.int(Self.now), .text(task.id)])) ?? 0
+        guard changed == 1 else { return nil }
+        task.status = .uploading
+        return task
+    }
+
+    func uploadTask(id: String) -> UploadTask? {
+        (try? query("SELECT \(Self.uploadColumns) FROM upload_tasks WHERE id = ?", [.text(id)], map: Self.upload))?.first
+    }
+
+    func uploads(status: UploadStatus, newestFirst: Bool, limit: Int) -> [UploadTask] {
+        let order = newestFirst ? "updated_at DESC" : "priority DESC, rowid ASC"
+        return (try? query("SELECT \(Self.uploadColumns) FROM upload_tasks WHERE status = ? ORDER BY \(order) LIMIT ?",
+                           [.text(status.rawValue), .int(Int64(limit))], reader: true, map: Self.upload)) ?? []
+    }
+
+    func uploads(statuses: [UploadStatus]) -> [UploadTask] {
+        let placeholders = statuses.map { _ in "?" }.joined(separator: ",")
+        return (try? query("SELECT \(Self.uploadColumns) FROM upload_tasks WHERE status IN (\(placeholders)) ORDER BY rowid",
+                           statuses.map { .text($0.rawValue) }, map: Self.upload)) ?? []
+    }
+
+    func updateUploadStatus(id: String, status: UploadStatus, error: String? = nil, kind: UploadErrorKind? = nil) {
+        _ = try? run("UPDATE upload_tasks SET status = ?, last_error = ?, error_kind = ?, updated_at = ? WHERE id = ?",
+                     [.text(status.rawValue), .text(error), .text(kind?.rawValue), .int(Self.now), .text(id)])
+    }
+
+    /// Новая сессия загрузки: отправка начинается с нуля.
+    func saveUploadSession(id: String, uri: String, createdAt: Int64) {
+        _ = try? run("UPDATE upload_tasks SET session_uri = ?, session_created_at = ?, uploaded_bytes = 0, updated_at = ? WHERE id = ?",
+                     [.text(uri), .int(createdAt), .int(Self.now), .text(id)])
+    }
+
+    func resetUploadSession(id: String) {
+        _ = try? run("UPDATE upload_tasks SET session_uri = NULL, session_created_at = NULL, uploaded_bytes = 0, updated_at = ? WHERE id = ?",
+                     [.int(Self.now), .text(id)])
+    }
+
+    /// Сколько байт подтвердил сервер — сохраняется после каждой части.
+    func setUploadedBytes(id: String, bytes: Int64) {
+        _ = try? run("UPDATE upload_tasks SET uploaded_bytes = ?, updated_at = ? WHERE id = ?",
+                     [.int(bytes), .int(Self.now), .text(id)])
+    }
+
+    func recordUploadRetry(id: String, retryCount: Int, error: String) {
+        _ = try? run("UPDATE upload_tasks SET retry_count = ?, last_error = ?, updated_at = ? WHERE id = ?",
+                     [.int(Int64(retryCount)), .text(error), .int(Self.now), .text(id)])
+    }
+
+    /// Сервер принял файл целиком; дальше — сверка MD5.
+    func markUploadTransferred(id: String, driveFileId: String, md5: String?, size: Int64) {
+        _ = try? run("""
+            UPDATE upload_tasks SET status = 'verifying', drive_file_id = ?, md5_checksum = ?, uploaded_bytes = ?,
+                session_uri = NULL, last_error = NULL, updated_at = ? WHERE id = ?
+            """, [.text(driveFileId), .text(md5), .int(size), .int(Self.now), .text(id)])
+    }
+
+    func markUploadCompleted(id: String) {
+        _ = try? run("UPDATE upload_tasks SET status = 'completed', last_error = NULL, error_kind = NULL, updated_at = ? WHERE id = ?",
+                     [.int(Self.now), .text(id)])
+    }
+
+    @discardableResult
+    func moveUploadStatuses(_ from: [UploadStatus], to: UploadStatus) -> Int {
+        guard !from.isEmpty else { return 0 }
+        let placeholders = from.map { _ in "?" }.joined(separator: ",")
+        let values: [Value] = [.text(to.rawValue), .int(Self.now)] + from.map { .text($0.rawValue) }
+        return (try? run("UPDATE upload_tasks SET status = ?, updated_at = ? WHERE status IN (\(placeholders))", values)) ?? 0
+    }
+
+    /// «Возобновить» / «Повторить»: в начало очереди. Докачка продолжится с подтверждённого сервером байта.
+    func resumeUpload(id: String) {
+        _ = try? run("""
+            UPDATE upload_tasks SET status = 'queued', priority = 1, retry_count = 0, last_error = NULL, updated_at = ?
+            WHERE id = ? AND status NOT IN ('uploading', 'verifying', 'completed') AND error_kind IS NULL
+            """, [.int(Self.now), .text(id)])
+    }
+
+    /// «Начать заново» / «Загрузить заново»: новая сессия, отправка с нуля, текущие размер и дата файла.
+    func restartUpload(id: String, size: Int64, modifiedAt: Int64) {
+        _ = try? run("""
+            UPDATE upload_tasks SET status = 'queued', priority = 1, retry_count = 0, last_error = NULL, error_kind = NULL,
+                session_uri = NULL, session_created_at = NULL, uploaded_bytes = 0, drive_file_id = NULL, md5_checksum = NULL,
+                file_size = ?, local_modified_at = ?, updated_at = ?
+            WHERE id = ? AND status NOT IN ('uploading', 'verifying')
+            """, [.int(size), .int(modifiedAt), .int(Self.now), .text(id)])
+    }
+
+    func resumeAllPausedUploads() {
+        _ = try? run("UPDATE upload_tasks SET status = 'queued', priority = 1, updated_at = ? WHERE status = 'paused'", [.int(Self.now)])
+    }
+
+    /// Повтор ошибок, которые не требуют начинать заново (их перезапускает отдельная кнопка).
+    func retryFailedUploads() {
+        _ = try? run("""
+            UPDATE upload_tasks SET status = 'queued', retry_count = 0, last_error = NULL, updated_at = ?
+            WHERE status = 'failed' AND error_kind IS NULL
+            """, [.int(Self.now)])
+    }
+
+    func deleteUploads(statuses: [UploadStatus]) {
+        let placeholders = statuses.map { _ in "?" }.joined(separator: ",")
+        _ = try? run("DELETE FROM upload_tasks WHERE status IN (\(placeholders))", statuses.map { .text($0.rawValue) })
+    }
+
+    func uploadTotals() -> UploadTotals {
+        var totals = UploadTotals()
+        let rows = (try? query("""
+            SELECT status, COUNT(*), SUM(file_size), SUM(MIN(uploaded_bytes, file_size)) FROM upload_tasks GROUP BY status
+            """, reader: true) { s in
+            (Self.text(s, 0) ?? "", Int(sqlite3_column_int64(s, 1)), sqlite3_column_int64(s, 2), sqlite3_column_int64(s, 3))
+        }) ?? []
+        for (raw, count, size, uploaded) in rows {
+            guard let status = UploadStatus(rawValue: raw) else { continue }
+            totals.countsByStatus[status] = count
+            guard status != .cancelled else { continue }
+            if UploadStatus.pending.contains(status) { totals.pendingCount += count }
+            totals.totalBytes += size
+            totals.uploadedBytes += status == .completed ? size : uploaded
+        }
+        return totals
+    }
+
+    // MARK: Внешние диски с исходными файлами
+
+    private static func localPathFilter(_ root: String) -> (sql: String, values: [Value]) {
+        let escaped = root.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_")
+        return ("(local_path LIKE ? ESCAPE '\\')", [.text(escaped + "/%")])
+    }
+
+    func markUploadsWaitingForVolume(volumeRoot: String, message: String) {
+        let filter = Self.localPathFilter(volumeRoot)
+        _ = try? run("UPDATE upload_tasks SET status = 'waiting_for_volume', last_error = ?, updated_at = ? WHERE status = 'queued' AND \(filter.sql)",
+                     [.text(message), .int(Self.now)] + filter.values)
+    }
+
+    func uploadVolumesAwaitingMount() -> Set<String> {
+        let paths = (try? query("SELECT DISTINCT local_path FROM upload_tasks WHERE status = 'waiting_for_volume'") { s in
+            Self.text(s, 0) ?? ""
+        }) ?? []
+        return Set(paths.compactMap { PathResolver.volumeRoot(for: $0) })
+    }
+
+    func requeueUploadsWaitingForVolume(volumeRoot: String) {
+        let filter = Self.localPathFilter(volumeRoot)
+        _ = try? run("UPDATE upload_tasks SET status = 'queued', last_error = NULL, updated_at = ? WHERE status = 'waiting_for_volume' AND \(filter.sql)",
+                     [.int(Self.now)] + filter.values)
+    }
+}

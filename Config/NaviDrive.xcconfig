@@ -1,0 +1,7 @@
+// Общие настройки сборки NaviDrive.
+// Встроенные учётные данные Google OAuth по умолчанию пустые; настоящие значения —
+// в Config/Secrets.xcconfig (файл не хранится в git, см. Secrets.example.xcconfig).
+GOOGLE_CLIENT_ID =
+GOOGLE_CLIENT_SECRET =
+
+#include? "Secrets.xcconfig"

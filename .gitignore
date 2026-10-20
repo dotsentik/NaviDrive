@@ -1,0 +1,42 @@
+# Сборка
+build/
+DerivedData/
+*.app
+*.dSYM
+*.xcarchive
+
+# Xcode: пользовательские данные
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+
+# Проект генерируется `xcodegen generate` из project.yml
+NaviDrive.xcodeproj/
+
+# Секреты и подпись (шаблон Config/Secrets.example.xcconfig остаётся в репозитории)
+Config/Secrets.xcconfig
+!Config/Secrets.example.xcconfig
+*.p12
+*.cer
+*.mobileprovision
+.env*
+
+# Дистрибутивы
+*.dmg
+*.zip
+
+# Системный мусор macOS
+.DS_Store
+._*
+
+# Локальные настройки Claude Code
+.claude/settings.local.json
+
+# Временные файлы
+*.log
+*.swp
+*~
+scratchpad/
+
+# Локальные заметки, не для репозитория
+PROMPT.md

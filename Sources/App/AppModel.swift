@@ -1,0 +1,1088 @@
+import AppKit
+import Foundation
+import Observation
+import UserNotifications
+
+enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
+    case myDrive, sharedWithMe, sharedDrives, linked, downloads, uploads, routes
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .myDrive: String(localized: "My Drive")
+        case .sharedWithMe: String(localized: "Shared with Me")
+        case .sharedDrives: String(localized: "Shared Drives")
+        case .linked: String(localized: "Added by Link")
+        case .downloads: String(localized: "Download Manager")
+        case .uploads: String(localized: "Uploads")
+        case .routes: String(localized: "Save Locations")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .myDrive: "externaldrive.connected.to.line.below"
+        case .sharedWithMe: "person.2"
+        case .sharedDrives: "externaldrive.badge.person.crop"
+        case .linked: "link"
+        case .downloads: "arrow.down.circle"
+        case .uploads: "arrow.up.circle"
+        case .routes: "arrow.triangle.branch"
+        }
+    }
+}
+
+/// Секции «Менеджера загрузок».
+enum TaskSectionKind: String, CaseIterable, Identifiable, Sendable {
+    case downloading, paused, queued, waiting, failed, completed
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .downloading: String(localized: "Downloading")
+        case .paused: String(localized: "Paused")
+        case .queued: String(localized: "Queued")
+        case .waiting: String(localized: "Waiting")
+        case .failed: String(localized: "Errors")
+        case .completed: String(localized: "Completed")
+        }
+    }
+
+    var statuses: [TaskStatus] {
+        switch self {
+        case .downloading: [.downloading, .verifying]
+        case .paused: [.paused]
+        case .queued: [.queued]
+        case .waiting: [.waitingForVolume, .waitingForSpace, .waitingForNetwork, .waitingForQuota]
+        case .failed: [.failed]
+        case .completed: [.completed, .cancelled]
+        }
+    }
+
+    /// История и ошибки — новые сверху; остальное — в порядке очереди.
+    var newestFirst: Bool { self == .failed || self == .completed }
+
+    /// Сколько строк загружать (List ленивый; остаток показывается строкой «и ещё N»).
+    var limit: Int {
+        switch self {
+        case .downloading: 200
+        case .waiting, .completed: 500
+        case .paused, .queued, .failed: 1_000
+        }
+    }
+}
+
+/// Сегментированный фильтр над списком задач.
+enum DownloadFilter: String, CaseIterable, Identifiable {
+    case all, active, paused, errors, completed
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: String(localized: "All")
+        case .active: String(localized: "Active")
+        case .paused: String(localized: "Paused")
+        case .errors: String(localized: "Errors")
+        case .completed: String(localized: "Completed")
+        }
+    }
+
+    var sections: [TaskSectionKind] {
+        switch self {
+        case .all: TaskSectionKind.allCases
+        case .active: [.downloading, .queued, .waiting]
+        case .paused: [.paused]
+        case .errors: [.failed]
+        case .completed: [.completed]
+        }
+    }
+
+    var statuses: [TaskStatus] { sections.flatMap(\.statuses) }
+}
+
+/// Состояние кнопок тулбара браузера Drive (публикует открытый DriveBrowserView).
+struct BrowserToolbarState: Equatable {
+    var canGoBack = false
+    /// Текущая папка, в которую можно создавать и загружать (nil — нельзя).
+    var uploadTarget: UploadTarget?
+    var hasSelection = false
+    var isLoading = false
+}
+
+enum BrowserCommand: Equatable {
+    case back, refresh, newFolder, upload, download, downloadToCustom, setPermanentRoute
+}
+
+struct BrowserCommandRequest: Equatable {
+    let id: Int
+    let command: BrowserCommand
+}
+
+@MainActor
+@Observable
+final class AppModel {
+    static let shared = AppModel()
+
+    // Сервисы
+    let keychain = KeychainStore()
+    let tokenManager: TokenManager
+    let api: GoogleDriveAPIClient
+    let db: DatabaseManager?
+    let scheduler: DownloadScheduler?
+    let uploadScheduler: UploadScheduler?
+    private let networkMonitor = NetworkMonitor()
+
+    // Авторизация
+    var clientId: String
+    var clientSecret: String
+    var isSignedIn = false
+    var isSigningIn = false
+    /// При запуске был сохранённый вход: сразу главное окно, иначе — только окно приветствия.
+    let launchedSignedIn: Bool
+    /// Пояснение в окне приветствия (например, «Доступ к Google Drive истёк»).
+    var welcomeNotice: String?
+    /// Вошли другим аккаунтом, а очередь осталась от предыдущего: что с ней сделать.
+    var accountSwitch: AccountSwitch?
+
+    struct AccountSwitch: Identifiable, Equatable {
+        let id = UUID()
+        /// Email предыдущего аккаунта ("" — неизвестен).
+        let previousEmail: String
+    }
+    /// Имя и email вошедшего аккаунта (настройки, меню трея).
+    var userName: String?
+    var userEmail: String?
+    var userDescription: String? {
+        let parts = [userName, userEmail.map { "<\($0)>" }].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+    /// «Использовать свои учётные данные OAuth» (Настройки → Аккаунт → Дополнительно).
+    var useCustomCredentials = false {
+        didSet { AppSettings.useCustomOAuthCredentials = useCustomCredentials }
+    }
+    /// Понятный текст последней ошибки входа (приветственный экран и настройки).
+    var signInError: String?
+    /// Страница входа Google текущей попытки — «Открыть страницу входа ещё раз».
+    var signInURL: URL?
+    /// В эту копию при сборке вписаны Client ID/Secret.
+    var hasBundledCredentials: Bool { OAuthCredentials.bundled != nil }
+    private var signInTask: Task<Void, Never>?
+
+    // Настройки
+    var defaultDownloadPath: String = AppSettings.defaultDownloadPath {
+        didSet { AppSettings.defaultDownloadPath = defaultDownloadPath }
+    }
+    var preventSleep: Bool = AppSettings.preventSleep {
+        didSet {
+            AppSettings.preventSleep = preventSleep
+            updateSleepAssertion()
+        }
+    }
+    /// Активность ProcessInfo, запрещающая сон системы, пока идут загрузки.
+    @ObservationIgnored private var sleepActivity: NSObjectProtocol?
+    @ObservationIgnored private var lastNotifiedSession = 0
+
+    var maxConcurrentUploads: Int = AppSettings.maxConcurrentUploads {
+        didSet {
+            AppSettings.maxConcurrentUploads = maxConcurrentUploads
+            let value = maxConcurrentUploads
+            Task { await uploadScheduler?.setUserLimit(value) }
+        }
+    }
+
+    var maxConcurrentDownloads: Int = AppSettings.maxConcurrentDownloads {
+        didSet {
+            AppSettings.maxConcurrentDownloads = maxConcurrentDownloads
+            let value = maxConcurrentDownloads
+            Task { await scheduler?.setUserLimit(value) }
+        }
+    }
+
+    // Состояние загрузок
+    var snapshot = EngineSnapshot()
+    var totals = QueueTotals()
+    /// По умолчанию «Все»: задачи на паузе, в ожидании и с ошибками не должны «исчезать» из списка.
+    var downloadFilter: DownloadFilter = .all
+    /// Задачи по секциям для текущего фильтра (загружаются в фоне).
+    var sections: [TaskSectionKind: [DownloadTask]] = [:]
+    var routes: [CustomRoute] = []
+    var routeMap: [String: String] = [:]
+    /// Маршруты, чей внешний диск сейчас не подключён (проверяется в фоне, не в body).
+    var routeVolumeMissing: Set<String> = []
+    /// Есть ли активная работа (загрузки, обход, проверка). Меняется только на переходах —
+    /// в отличие от счётчиков, которые при скачивании мелких файлов меняются несколько раз в секунду.
+    var hasActiveDownloads = false
+    // Отправка в Google Drive
+    var uploadSnapshot = UploadSnapshot()
+    var uploadTotals = UploadTotals()
+    var uploadFilter: DownloadFilter = .all
+    var uploadSections: [UploadSectionKind: [UploadTask]] = [:]
+    var uploadBanner: String?
+    /// Окно «Для загрузки нужно заново войти в Google».
+    var showReauthPrompt = false
+    @ObservationIgnored var seenReauthRequests = 0
+    /// Файлы из Finder Services, для которых выбирается папка на диске.
+    var pendingServiceUpload: [URL]?
+    /// Раздел «Диски»: системный диск и подключённые внешние диски с заполненностью.
+    var volumes: [DiskVolume] = []
+
+    var selection: SidebarItem? = .myDrive
+    /// Тулбар браузера Drive живёт на стабильном контейнере detail-колонки (MainView), а не в самом
+    /// браузере: доступность кнопок и текст фильтра хранятся здесь и не сбрасываются при показе/скрытии sidebar.
+    var browserToolbar = BrowserToolbarState()
+    /// Текст поля «Фильтр по имени».
+    var browserFilter = ""
+    /// Команда кнопки тулбара для открытого браузера Drive (выполняет DriveBrowserView).
+    var browserCommand: BrowserCommandRequest?
+    @ObservationIgnored private var browserCommandSerial = 0
+
+    func sendBrowserCommand(_ command: BrowserCommand) {
+        browserCommandSerial += 1
+        browserCommand = BrowserCommandRequest(id: browserCommandSerial, command: command)
+    }
+    /// Вкладка окна настроек.
+    var settingsTab: SettingsTab = .account
+    var errorMessage: String?
+    /// Увеличивается, когда браузеру Drive нужно перезагрузить содержимое (вход/выход).
+    var driveReloadToken = 0
+    /// Путь навигации в браузерах Drive: сохраняется при переключении разделов
+    /// (например, после «Скачать» — переход в «Менеджер загрузок» и обратно).
+    var browserStacks: [BrowserScope: [DriveItem]] = [:]
+    /// Увеличивается, когда браузер должен перейти к `browserStacks[scope]` (например, из карточки ссылки).
+    var browserNavigationToken = 0
+    /// Объекты, добавленные по ссылке.
+    var linkedItems: [LinkedItem] = []
+    var showAddLink = false
+    /// Итог последней постановки в очередь — баннер вверху «Менеджера загрузок».
+    var enqueueBanner: EnqueueBanner?
+
+    struct EnqueueBanner: Identifiable, Equatable {
+        let id = UUID()
+        let report: EnqueueReport
+    }
+
+    private var started = false
+    private var refreshLoop: Task<Void, Never>?
+    private var volumeLoop: Task<Void, Never>?
+
+    private init() {
+        var notices: [String] = []
+        let store = KeychainStore()
+
+        // Одноразово: записи ad-hoc сборок недоступны сборке, подписанной сертификатом «NaviDrive Local».
+        if KeychainStore.migrateLegacyItemsIfNeeded() == .reloginRequired {
+            notices.append(Self.reloginAfterSigningChangeMessage)
+        }
+
+        do {
+            clientId = try store.clientId()
+            clientSecret = try store.clientSecret()
+        } catch {
+            clientId = ""
+            clientSecret = ""
+            notices.append(String(localized: "Couldn’t read the Client ID / Client Secret from the Keychain: \(error.localizedDescription)"))
+        }
+        tokenManager = TokenManager(keychain: store)
+        launchedSignedIn = tokenManager.hadTokensAtLaunch
+        isSignedIn = launchedSignedIn
+        api = GoogleDriveAPIClient(tokenManager: tokenManager)
+        do {
+            let database = try DatabaseManager()
+            db = database
+            scheduler = DownloadScheduler(db: database, api: api)
+            uploadScheduler = UploadScheduler(db: database, api: api)
+        } catch {
+            db = nil
+            scheduler = nil
+            uploadScheduler = nil
+            notices.append(String(localized: "Couldn’t open the database: \(error.localizedDescription)"))
+        }
+        // Кто уже вводил свои Client ID/Secret, продолжает входить с ними.
+        AppSettings.migrateCustomOAuthChoice(hasCustomCredentials: !clientId.isEmpty && !clientSecret.isEmpty)
+        useCustomCredentials = AppSettings.useCustomOAuthCredentials
+        if !notices.isEmpty {
+            errorMessage = notices.joined(separator: "\n\n")
+        }
+    }
+
+    static var reloginAfterSigningChangeMessage: String {
+        String(localized: "NaviDrive is now signed with the permanent “NaviDrive Local” certificate. Your saved sign-in was created by an earlier build with a temporary signature, and macOS doesn’t let the new signature access it, so the old items were removed. Open Settings, re-enter the Client ID and Client Secret if needed, and sign in to Google once more — from now on the sign-in will persist across rebuilds.")
+    }
+
+    // MARK: - Startup
+
+    func startIfNeeded() {
+        guard !started else { return }
+        started = true
+        reloadRoutes()
+        reloadLinked()
+
+        Task {
+            await tokenManager.setAccessRevokedHandler {
+                Task { @MainActor in AppModel.shared.handleAccessRevoked() }
+            }
+            isSignedIn = await tokenManager.isSignedIn
+            if let keychainError = await tokenManager.keychainLoadError {
+                // Нет доступа ≠ нет входа: запись не удаляем, а объясняем, что произошло.
+                let message = String(localized: "Couldn’t read the saved sign-in from the Keychain: \(keychainError)\n\nThe sign-in was not deleted. Restart NaviDrive and, if macOS asks for Keychain access, click “Always Allow”.")
+                errorMessage = [errorMessage, message].compactMap { $0 }.joined(separator: "\n\n")
+                openSettings(.account)
+            }
+            if errorMessage?.contains(Self.reloginAfterSigningChangeMessage) == true { openSettings(.account) }
+            // Очередь аккаунта, чей доступ был отозван, ждёт решения после входа (см. resumeQueuesAfterSignIn).
+            let authorized = isSignedIn && AppSettings.queueOwnerAwaitingSignIn == nil
+            await scheduler?.start(authorized: authorized)
+            await uploadScheduler?.start(authorized: authorized)
+            if isSignedIn {
+                await loadUser()
+                if !authorized { await resumeQueuesAfterSignIn() }
+            }
+        }
+
+        let scheduler = scheduler
+        let uploadScheduler = uploadScheduler
+        networkMonitor.start { online in
+            Task { await scheduler?.setOnline(online) }
+            Task { await uploadScheduler?.setOnline(online) }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didMountNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { await scheduler?.recheckVolumes() }
+            Task { await uploadScheduler?.recheckVolumes() }
+            Task { @MainActor in
+                self?.reloadRoutes()
+                await self?.refreshVolumes()
+            }
+        }
+        // Отключили внешний диск — обновить пометку «Диск не подключён» у маршрутов.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didUnmountNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.reloadRoutes()
+                await self?.refreshVolumes()
+            }
+        }
+        // После сна задачи, ждущие повтора, пробуют сразу, а не досиживают паузу.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { _ in
+            Task { await scheduler?.wakeUp() }
+            Task { await uploadScheduler?.wakeUp() }
+        }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+
+        // Заполненность дисков: каждые 10 с, пока идут загрузки, и раз в минуту в простое.
+        volumeLoop = Task { [weak self] in
+            var secondsSinceRefresh = Int.max
+            while !Task.isCancelled {
+                let interval = self?.hasActiveDownloads == true ? 10 : 60
+                if secondsSinceRefresh >= interval {
+                    await self?.refreshVolumes()
+                    secondsSinceRefresh = 0
+                }
+                try? await Task.sleep(for: .seconds(10))
+                secondsSinceRefresh += 10
+            }
+        }
+
+        refreshLoop = Task { [weak self] in
+            var tick = 0
+            while !Task.isCancelled {
+                // Прогресс в UI объединяется и обновляется не чаще 2 раз в секунду.
+                await self?.refresh(includeTasks: tick % 2 == 0)
+                tick += 1
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
+    }
+
+    func refresh(includeTasks: Bool = true) async {
+        guard let scheduler, let db else { return }
+        // Всё тяжёлое — в акторе планировщика и на фоновом read-only соединении SQLite;
+        // на главном потоке только присвоение готовых данных и только если они изменились,
+        // чтобы не перерисовывать окно без надобности.
+        let newSnapshot = await scheduler.snapshot()
+        if newSnapshot != snapshot { snapshot = newSnapshot }
+        let active = newSnapshot.runningCount > 0 || newSnapshot.scanningFolders > 0 || !newSnapshot.verificationProgress.isEmpty
+        if active != hasActiveDownloads { hasActiveDownloads = active }
+        let filter = downloadFilter
+        let (newTotals, newTasks) = await Task.detached(priority: .userInitiated) {
+            (db.totals(), includeTasks ? Self.loadSections(filter.sections, from: db) : nil)
+        }.value
+        if totals != newTotals { totals = newTotals }
+        if let newTasks, newTasks != sections { sections = newTasks }
+        await refreshUploads(includeTasks: includeTasks && selection == .uploads)
+        updateSleepAssertion()
+        notifyIfQueueFinished()
+    }
+
+    // MARK: - Sleep & notifications
+
+    /// Пока есть активные или ожидающие загрузки (и не всё на паузе), система не засыпает.
+    private func updateSleepAssertion() {
+        let counts = totals.countsByStatus
+        let waiting = [TaskStatus.queued, .downloading, .verifying, .waitingForNetwork, .waitingForQuota]
+            .reduce(0) { $0 + (counts[$1] ?? 0) }
+        let busy = snapshot.runningCount > 0 || snapshot.scanningFolders > 0
+            || !snapshot.verificationProgress.isEmpty || waiting > 0
+        let uploadCounts = uploadTotals.countsByStatus
+        let uploadsWaiting = [UploadStatus.queued, .uploading, .verifying, .waitingForNetwork]
+            .reduce(0) { $0 + (uploadCounts[$1] ?? 0) }
+        let uploadsBusy = !uploadSnapshot.isPaused
+            && (uploadSnapshot.runningCount > 0 || uploadsWaiting > 0 || !uploadSnapshot.preparing.isEmpty)
+        let needed = preventSleep && isSignedIn && ((!snapshot.isPaused && busy) || uploadsBusy)
+
+        if needed, sleepActivity == nil {
+            sleepActivity = ProcessInfo.processInfo.beginActivity(
+                options: [.idleSystemSleepDisabled, .userInitiated],
+                reason: "NaviDrive: downloading or uploading Google Drive files")
+        } else if !needed, let activity = sleepActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            sleepActivity = nil
+        }
+    }
+
+    /// Системное уведомление «Проект „…“ скачан: N файлов, X ГБ, все проверены».
+    private func notifyIfQueueFinished() {
+        guard let summary = snapshot.lastSession, summary.id != lastNotifiedSession else { return }
+        lastNotifiedSession = summary.id
+        let content = UNMutableNotificationContent()
+        content.title = summary.notificationTitle
+        content.body = summary.notificationBody
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: "navidrive.queue.\(summary.id).\(UUID().uuidString)",
+                                            content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request) { _ in }
+    }
+
+    // MARK: - Auth
+
+    /// Сохраняет Client ID / Client Secret. false — Связка ключей не приняла запись (сообщение уже показано).
+    @discardableResult
+    func saveCredentials() -> Bool {
+        clientId = clientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        clientSecret = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            try keychain.setCustomCredentials(clientId: clientId, clientSecret: clientSecret)
+            return true
+        } catch {
+            errorMessage = String(localized: "Couldn’t save the Client ID / Client Secret to the Keychain: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// Вход через Google: loopback + PKCE, страница входа — в браузере по умолчанию.
+    func signIn() {
+        guard !isSigningIn else { return }
+        signInError = nil
+        // Свои учётные данные сохраняются в Keychain: без них токен нельзя будет обновить после перезапуска.
+        if useCustomCredentials { guard saveCredentials() else { return } }
+        let credentials: OAuthCredentials
+        do {
+            credentials = try OAuthCredentials.forSignIn(keychain)
+        } catch {
+            signInError = Self.describeSignInError(error)
+            return
+        }
+        isSigningIn = true
+        signInTask = Task {
+            defer {
+                isSigningIn = false
+                signInURL = nil
+            }
+            do {
+                let tokens = try await OAuthService.signIn(clientId: credentials.clientId,
+                                                           clientSecret: credentials.clientSecret) { url in
+                    self.signInURL = url
+                    NSWorkspace.shared.open(url)
+                }
+                do {
+                    try await tokenManager.store(tokens)
+                } catch {
+                    errorMessage = String(localized: "Couldn’t save the sign-in to the Keychain: \(error.localizedDescription)\n\nYou stay signed in until you quit NaviDrive; after a restart you’ll need to sign in again.")
+                }
+                isSignedIn = true
+                welcomeNotice = nil
+                driveReloadToken += 1
+                // Вход завершён в браузере — окно приветствия закрывается, NaviDrive выходит
+                // на передний план и открывает «Мой Диск».
+                selection = .myDrive
+                showReauthPrompt = false
+                WindowOpener.closeWelcomeWindow()
+                WindowOpener.showMainWindow()
+                NSApp.activate()
+                await loadUser()
+                await resumeQueuesAfterSignIn()
+            } catch is CancellationError {
+            } catch LoopbackServer.ServerError.cancelled {
+            } catch {
+                signInError = Self.describeSignInError(error)
+                NSApp.activate()
+            }
+        }
+    }
+
+    /// Открыть страницу входа ещё раз (например, если вкладку закрыли).
+    func reopenSignInPage() {
+        if let signInURL { NSWorkspace.shared.open(signInURL) }
+    }
+
+    /// Ошибки входа — понятным текстом.
+    static func describeSignInError(_ error: Error) -> String {
+        switch error {
+        case OAuthError.authorizationDenied(let reason) where reason == "access_denied":
+            return String(localized: "Access wasn’t granted. To use NaviDrive, allow access to Google Drive on the Google page.")
+        case OAuthError.authorizationDenied(let reason):
+            return String(localized: "Google refused the sign-in (\(reason)).")
+        case LoopbackServer.ServerError.timedOut:
+            return String(localized: "Google didn’t respond within 5 minutes — perhaps the sign-in tab was closed. Try again.")
+        case let urlError as URLError where GoogleDriveAPIClient.isTransientNetworkError(urlError):
+            return String(localized: "Can’t reach Google. Check your internet connection and try again.")
+        default:
+            return error.localizedDescription
+        }
+    }
+
+    func cancelSignIn() {
+        signInTask?.cancel()
+        signInTask = nil
+        isSigningIn = false
+    }
+
+    func signOut() {
+        Task {
+            await scheduler?.setAuthorized(false)
+            await uploadScheduler?.setAuthorized(false)
+            await tokenManager.signOut()
+            isSignedIn = false
+            userName = nil
+            userEmail = nil
+            signInError = nil
+            welcomeNotice = nil
+            browserStacks = [:]
+            driveReloadToken += 1
+            showWelcome()
+        }
+    }
+
+    /// Без входа главное окно не показывается: только окно приветствия.
+    func showWelcome() {
+        WindowOpener.closeMainWindow()
+        WindowOpener.showWelcomeWindow()
+    }
+
+    /// Google отклонил refresh_token (invalid_grant): токены уже удалены из Связки ключей.
+    /// Очереди останавливаются с сохранением прогресса и продолжатся после входа тем же аккаунтом.
+    func handleAccessRevoked() {
+        guard isSignedIn else { return }
+        if AppSettings.queueOwnerAwaitingSignIn == nil {
+            AppSettings.queueOwnerAwaitingSignIn = userEmail ?? ""
+        }
+        isSignedIn = false
+        userName = nil
+        userEmail = nil
+        showReauthPrompt = false
+        accountSwitch = nil
+        browserStacks = [:]
+        driveReloadToken += 1
+        welcomeNotice = String(localized: "Access to Google Drive has expired. Please sign in again.")
+        Task {
+            await scheduler?.setAuthorized(false)
+            await uploadScheduler?.setAuthorized(false)
+        }
+        showWelcome()
+    }
+
+    /// После входа: тот же аккаунт (или очереди нет) — загрузки и отправки продолжаются;
+    /// другой аккаунт — сначала спросить, что сделать с очередью предыдущего.
+    private func resumeQueuesAfterSignIn() async {
+        if let previous = AppSettings.queueOwnerAwaitingSignIn {
+            await refresh(includeTasks: false)
+            let sameAccount = !previous.isEmpty && previous.caseInsensitiveCompare(userEmail ?? "") == .orderedSame
+            let hasQueue = totals.pendingCount > 0 || uploadTotals.pendingCount > 0
+            if !sameAccount && hasQueue {
+                accountSwitch = AccountSwitch(previousEmail: previous)
+                return
+            }
+            AppSettings.queueOwnerAwaitingSignIn = nil
+        }
+        await scheduler?.setAuthorized(true)
+        await uploadScheduler?.setAuthorized(true)
+    }
+
+    /// Ответ на вопрос об очереди предыдущего аккаунта: оставить на паузе или удалить из очереди.
+    func resolveAccountSwitch(keepPaused: Bool) {
+        accountSwitch = nil
+        AppSettings.queueOwnerAwaitingSignIn = nil
+        Task {
+            if keepPaused {
+                await scheduler?.pauseUnfinished()
+                await uploadScheduler?.pauseUnfinished()
+            } else {
+                await scheduler?.cancelUnfinished()
+                await uploadScheduler?.cancelUnfinished()
+            }
+            guard isSignedIn else { return }
+            await scheduler?.setAuthorized(true)
+            await uploadScheduler?.setAuthorized(true)
+            await refresh()
+        }
+    }
+
+    private func loadUser() async {
+        if let user = try? await api.currentUser() {
+            userName = user.displayName
+            userEmail = user.emailAddress
+        }
+    }
+
+    // MARK: - Routes
+
+    // MARK: - Links
+
+    enum LinkLookupError: LocalizedError {
+        case invalidLink
+        case notFound(hasResourceKey: Bool)
+        case noAccess
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidLink:
+                String(localized: "This doesn’t look like a Google Drive link. Paste a link like drive.google.com/drive/folders/… or an ID.")
+            case .notFound(let hasKey):
+                hasKey
+                    ? String(localized: "Item not found (HTTP 404). Check the link: it may be outdated or have a wrong resourceKey.")
+                    : String(localized: "Item not found (HTTP 404). Check the link: it may need a resourceKey — copy the full link including “resourcekey=…”.")
+            case .noAccess:
+                String(localized: "No access (HTTP 403). Ask the owner to share it by link or with your account.")
+            }
+        }
+    }
+
+    func reloadLinked() {
+        Task { await reloadLinkedNow() }
+    }
+
+    private func reloadLinkedNow() async {
+        guard let linked = await inBackground({ $0.linkedItems() }) else { return }
+        for item in linked { api.resourceKeys.register(id: item.driveId, key: item.resourceKey) }
+        if linked != linkedItems { linkedItems = linked }
+    }
+
+    /// Находит объект по ссылке (files.get), раскрывает ярлык и сохраняет в «Добавленные по ссылке».
+    func lookupLink(_ text: String) async throws -> DriveItem {
+        guard let link = DriveLink.parse(text) else { throw LinkLookupError.invalidLink }
+        var item: DriveItem
+        do {
+            item = try await api.file(id: link.id, resourceKey: link.resourceKey)
+            if item.isShortcut { item = try await api.resolveShortcut(item) }
+        } catch DriveAPIError.http(404, _) {
+            throw LinkLookupError.notFound(hasResourceKey: link.resourceKey != nil)
+        } catch DriveAPIError.http(403, let message) where !message.lowercased().contains("ratelimit") {
+            throw LinkLookupError.noAccess
+        }
+        let linked = LinkedItem(item)
+        let failure = await inBackground { db -> String? in
+            do { try db.saveLinked(linked); return nil } catch { return error.localizedDescription }
+        }
+        if let failure, let failure { errorMessage = failure }
+        await reloadLinkedNow()
+        return item
+    }
+
+    func removeLinked(_ item: DriveItem) {
+        let id = item.id
+        Task {
+            _ = await inBackground { try? $0.deleteLinked(driveId: id) }
+            await reloadLinkedNow()
+        }
+    }
+
+    /// «Открыть в браузере NaviDrive»: раздел «Добавленные по ссылке», внутри папки.
+    func openInBrowser(_ item: DriveItem) {
+        browserStacks[.linked] = item.isFolder ? [item] : []
+        browserNavigationToken += 1
+        selection = .linked
+    }
+
+    /// Скачивание из карточки ссылки с проверкой свободного места.
+    func downloadLinked(_ item: DriveItem, chooseFolder: Bool, requiredBytes: Int64?) {
+        if chooseFolder {
+            guard let path = chooseDirectory(message: String(localized: "Where should “\(item.name)” be downloaded? You can choose an external disk in /Volumes.")) else { return }
+            guard confirmFreeSpace(requiredBytes, at: path) else { return }
+            setRoute(for: item, path: path)
+            enqueue([item], groups: [path: [item]])
+        } else {
+            let dir = PathResolver.destinationDirectory(for: item, ancestors: [], routes: routeMap, defaultPath: defaultDownloadPath)
+            guard confirmFreeSpace(requiredBytes, at: dir) else { return }
+            enqueue([item], groups: [dir: [item]])
+        }
+    }
+
+    /// Предупреждение, если на целевом диске не хватает места. true — продолжать.
+    private func confirmFreeSpace(_ required: Int64?, at path: String) -> Bool {
+        guard let required, required > 0, let free = PathResolver.availableCapacity(at: path), free < required else { return true }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "Not enough disk space")
+        alert.informativeText = String(localized: "\(Format.bytes(required)) needed, \(Format.bytes(free)) free (\(path)). The download will stop when the disk is full.")
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.addButton(withTitle: String(localized: "Download Anyway"))
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
+    /// Работа с SQLite вне главного потока: главный поток никогда не ждёт блокировку базы,
+    /// которую в это время держат обход папок и планировщик.
+    private func inBackground<T: Sendable>(_ work: @escaping @Sendable (DatabaseManager) -> T) async -> T? {
+        guard let db else { return nil }
+        return await Task.detached(priority: .userInitiated) { work(db) }.value
+    }
+
+    func reloadRoutes() {
+        Task { await reloadRoutesNow() }
+    }
+
+    private func reloadRoutesNow() async {
+        guard let (newRoutes, missing) = await inBackground({ db -> ([CustomRoute], Set<String>) in
+            let routes = db.allRoutes()
+            let missing = routes.filter {
+                if case .missing = PathResolver.volumeState(for: $0.localPath) { return true }
+                return false
+            }
+            return (routes, Set(missing.map(\.driveId)))
+        }) else { return }
+        if newRoutes != routes { routes = newRoutes }
+        let map = Dictionary(newRoutes.map { ($0.driveId, $0.localPath) }, uniquingKeysWith: { a, _ in a })
+        if map != routeMap { routeMap = map }
+        if missing != routeVolumeMissing { routeVolumeMissing = missing }
+    }
+
+    /// Запись маршрута в фоне; routeMap обновляется сразу, чтобы следующие действия уже видели путь.
+    private func writeRoute(_ work: @escaping @Sendable (DatabaseManager) throws -> Void) {
+        Task {
+            let failure = await inBackground { db -> String? in
+                do { try work(db); return nil } catch { return error.localizedDescription }
+            }
+            if let failure, let failure { errorMessage = failure }
+            await reloadRoutesNow()
+        }
+    }
+
+    func setRoute(for item: DriveItem, path: String) {
+        routeMap[item.id] = path
+        let id = item.id, name = item.name
+        writeRoute { try $0.setRoute(driveId: id, driveName: name, localPath: path) }
+    }
+
+    func changeRoute(_ route: CustomRoute) {
+        guard let path = chooseDirectory(message: String(localized: "New location for “\(route.driveName)”"), initial: route.localPath) else { return }
+        routeMap[route.driveId] = path
+        writeRoute { try $0.setRoute(driveId: route.driveId, driveName: route.driveName, localPath: path) }
+    }
+
+    func deleteRoute(_ route: CustomRoute) {
+        routeMap[route.driveId] = nil
+        writeRoute { try $0.deleteRoute(driveId: route.driveId) }
+    }
+
+    // MARK: - Drive actions (context menu)
+
+    func downloadToDefault(_ items: [DriveItem], ancestors: [DriveItem]) {
+        var groups: [String: [DriveItem]] = [:]
+        for item in items {
+            let dir = PathResolver.destinationDirectory(for: item, ancestors: ancestors, routes: routeMap,
+                                                        defaultPath: defaultDownloadPath)
+            groups[dir, default: []].append(item)
+        }
+        enqueue(items, groups: groups)
+    }
+
+    /// Постановка в очередь, переход в «Менеджер загрузок» и баннер с итогом.
+    private func enqueue(_ items: [DriveItem], groups: [String: [DriveItem]]) {
+        guard let scheduler, !items.isEmpty else { return }
+        let title = Self.title(for: items)
+        selection = .downloads
+        Task {
+            var report = EnqueueReport(title: title)
+            for (dir, group) in groups {
+                report.merge(await scheduler.enqueue(group, destinationDir: dir, projectName: title))
+            }
+            showEnqueueReport(report)
+        }
+    }
+
+    func downloadToCustom(_ items: [DriveItem], ancestors: [DriveItem]) {
+        guard !items.isEmpty else { return }
+        let message = items.count == 1
+            ? String(localized: "Where should “\(items[0].name)” be downloaded? You can choose an external disk in /Volumes.")
+            : String(localized: "Where should \(items.count) items be downloaded? You can choose an external disk in /Volumes.")
+        guard let path = chooseDirectory(message: message) else { return }
+        for item in items { setRoute(for: item, path: path) }
+        enqueue(items, groups: [path: items])
+    }
+
+    private static func title(for items: [DriveItem]) -> String {
+        items.count == 1 ? items[0].name : String(localized: "\(items.count) items")
+    }
+
+    /// Показывает итог на несколько секунд (предупреждения — дольше).
+    private func showEnqueueReport(_ report: EnqueueReport) {
+        let banner = EnqueueBanner(report: report)
+        enqueueBanner = banner
+        let seconds: Double = report.tone == .warning ? 12 : 6
+        Task {
+            try? await Task.sleep(for: .seconds(seconds))
+            if enqueueBanner?.id == banner.id { enqueueBanner = nil }
+        }
+        Task { await refresh() }
+    }
+
+    func setPermanentRoute(_ items: [DriveItem]) {
+        guard !items.isEmpty else { return }
+        let message = items.count == 1
+            ? String(localized: "Permanent save location for “\(items[0].name)”")
+            : String(localized: "Permanent save location for \(items.count) items")
+        guard let path = chooseDirectory(message: message) else { return }
+        for item in items { setRoute(for: item, path: path) }
+    }
+
+    func revealInFinder(_ item: DriveItem, ancestors: [DriveItem]) {
+        let path = PathResolver.localPath(for: item, ancestors: ancestors, routes: routeMap, defaultPath: defaultDownloadPath)
+        revealPath(path, alternatives: [path + ".gdrive.part"])
+    }
+
+    func revealRoute(_ route: CustomRoute) {
+        revealPath(PathResolver.expand(route.localPath), alternatives: [])
+    }
+
+    func revealTask(_ task: DownloadTask) {
+        revealPath(task.finalPath, alternatives: [task.partPath])
+    }
+
+    private func revealPath(_ path: String, alternatives: [String]) {
+        let fm = FileManager.default
+        for candidate in [path] + alternatives where fm.fileExists(atPath: candidate) {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: candidate)])
+            return
+        }
+        var url = URL(fileURLWithPath: path).deletingLastPathComponent()
+        while !fm.fileExists(atPath: url.path), url.path != "/" { url.deleteLastPathComponent() }
+        if case .missing(let message) = PathResolver.volumeState(for: path) {
+            errorMessage = message
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    func openDefaultFolder() {
+        let path = PathResolver.expand(defaultDownloadPath)
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    func chooseDefaultFolder() {
+        if let path = chooseDirectory(message: String(localized: "Default download folder"), initial: defaultDownloadPath) {
+            defaultDownloadPath = path
+        }
+    }
+
+    func chooseDirectory(message: String, initial: String? = nil) -> String? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = String(localized: "Choose")
+        panel.message = message
+        if let initial {
+            panel.directoryURL = URL(fileURLWithPath: PathResolver.expand(initial))
+        }
+        NSApp.activate()
+        return panel.runModal() == .OK ? panel.url?.path : nil
+    }
+
+    // MARK: - Queue control
+
+    func togglePauseAll() {
+        let paused = !snapshot.isPaused
+        snapshot.isPaused = paused
+        Task { await scheduler?.setPaused(paused) }
+    }
+
+    func pause(_ task: DownloadTask) { Task { await scheduler?.pauseTask(task.id); await refresh() } }
+    func resume(_ task: DownloadTask) { Task { await scheduler?.resumeTask(task.id); await refresh() } }
+    func cancel(_ task: DownloadTask) { Task { await scheduler?.cancelTask(task.id); await refresh() } }
+    func retryFailed() { Task { await scheduler?.retryFailed(); await refresh() } }
+    func resumeAllPaused() { Task { await scheduler?.resumeAllPaused(); await refresh() } }
+    func retryQuotaNow() { Task { await scheduler?.requeueDueQuotaTasks(force: true); await refresh() } }
+
+    func clearHistory() {
+        Task {
+            _ = await inBackground { $0.deleteTasks(statuses: [.completed, .cancelled]) }
+            await scheduler?.clearScanErrors()
+            await refresh()
+        }
+    }
+
+    func setFilter(_ filter: DownloadFilter) {
+        downloadFilter = filter
+        Task { await refresh() }
+    }
+
+    // MARK: - Disks
+
+    /// Список дисков и остаток очереди на каждый — в фоне; на главном потоке только присвоение.
+    func refreshVolumes() async {
+        let db = db
+        let newVolumes = await Task.detached(priority: .utility) {
+            DiskVolumes.load(usage: db?.volumeQueueUsage() ?? [:])
+        }.value
+        if newVolumes != volumes { volumes = newVolumes }
+        // Место могли освободить — задачи «Не хватает места» пробуют снова.
+        await scheduler?.recheckSpace()
+    }
+
+    func openVolume(_ volume: DiskVolume) {
+        NSWorkspace.shared.open(volume.url)
+    }
+
+    func chooseDefaultFolder(on volume: DiskVolume) {
+        if let path = chooseDirectory(message: String(localized: "Default download folder on “\(volume.name)”"),
+                                      initial: volume.url.path) {
+            defaultDownloadPath = path
+        }
+    }
+
+    /// Извлечение внешнего диска. Если на него идёт скачивание — подтверждение, затем пауза его задач
+    /// (идущие загрузки сначала закрывают файлы) и только после этого извлечение.
+    func eject(_ volume: DiskVolume) {
+        guard !volume.isInternal else { return }
+        let hasDownloads = volume.isDownloadingHere
+        if hasDownloads {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = String(localized: "Files are being downloaded to “\(volume.name)”")
+            alert.informativeText = String(localized: "Downloads to this disk will be paused, then the disk will be ejected. Already downloaded parts are kept; you can continue in the Download Manager with Resume.")
+            alert.addButton(withTitle: String(localized: "Pause and Eject"))
+            alert.addButton(withTitle: String(localized: "Cancel"))
+            NSApp.activate()
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+        let url = volume.url, root = volume.id, name = volume.name
+        Task {
+            if hasDownloads { await scheduler?.pauseTasks(onVolume: root) }
+            let failure = await Task.detached(priority: .userInitiated) { () -> String? in
+                do {
+                    try NSWorkspace.shared.unmountAndEjectDevice(at: url)
+                    return nil
+                } catch {
+                    return error.localizedDescription
+                }
+            }.value
+            if let failure {
+                errorMessage = String(localized: "Couldn’t eject “\(name)”: \(failure)")
+            }
+            await refreshVolumes()
+            await refresh()
+        }
+    }
+
+    // MARK: - Language
+
+    var appLanguage: AppSettings.AppLanguage = AppSettings.appLanguage
+
+    /// Сохраняет выбор языка и спрашивает о перезапуске — уже на новом языке.
+    func setAppLanguage(_ language: AppSettings.AppLanguage) {
+        guard language != appLanguage else { return }
+        appLanguage = language
+        AppSettings.appLanguage = language
+        let bundle = AppSettings.bundle(for: AppSettings.effectiveLanguage(for: language))
+        let alert = NSAlert()
+        alert.messageText = String(localized: "The language will change after NaviDrive restarts", bundle: bundle)
+        alert.informativeText = String(localized: "Active downloads and uploads will be paused with their progress saved and will continue automatically after the restart.", bundle: bundle)
+        alert.addButton(withTitle: String(localized: "Restart Now", bundle: bundle))
+        alert.addButton(withTitle: String(localized: "Later", bundle: bundle))
+        if alert.runModal() == .alertFirstButtonReturn { relaunch() }
+    }
+
+    /// Аккуратный перезапуск: очереди останавливаются с сохранением прогресса, запускается новый экземпляр
+    /// (после завершения текущего), текущий завершается.
+    func relaunch() {
+        Task {
+            await scheduler?.stopForRelaunch()
+            await uploadScheduler?.stopForRelaunch()
+            let pid = ProcessInfo.processInfo.processIdentifier
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            // Путь передаётся аргументом ($0), а не подставляется в команду.
+            process.arguments = ["-c", "while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.2; done; /usr/bin/open \"$0\"",
+                                 Bundle.main.bundlePath]
+            do {
+                try process.run()
+            } catch {
+                errorMessage = String(localized: "Couldn’t restart NaviDrive: \(error.localizedDescription). Quit and open it again manually.")
+                return
+            }
+            NSApp.terminate(nil)
+        }
+    }
+
+    func openSystemLanguageSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Localization-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// Окно настроек (⌘,) на нужной вкладке — из любого места, в том числе когда главное окно закрыто.
+    func openSettings(_ tab: SettingsTab? = nil) {
+        if let tab { settingsTab = tab }
+        SettingsOpener.open()
+    }
+
+    // MARK: - Uploads (Finder Services)
+
+    /// «Upload to Google Drive (NaviDrive)» в Finder: выбор папки на диске, затем очередь отправки.
+    func upload(paths: [String]) {
+        guard isSignedIn else {
+            welcomeNotice = String(localized: "Sign in to Google to upload files.")
+            showWelcome()
+            return
+        }
+        pendingServiceUpload = paths.map { URL(fileURLWithPath: $0) }
+    }
+
+    // MARK: - Derived
+
+    var networkStatusText: String { snapshot.isOnline ? String(localized: "Online") : String(localized: "Waiting for network…") }
+
+    var progressSummary: String {
+        guard totals.taskCount > 0 else { return String(localized: "No downloads") }
+        return "\(Format.bytes(totals.downloadedBytes)) / \(Format.bytes(totals.expectedBytes)) (\(Format.percent(totals.fraction)))"
+    }
+
+    /// Сколько задач показывает «Менеджер загрузок» (List ленивый, строки отрисовываются по мере прокрутки).
+    /// Загрузка секций: по одному запросу на статус в порядке индекса (без сортировки всей таблицы).
+    nonisolated static func loadSections(_ kinds: [TaskSectionKind], from db: DatabaseManager) -> [TaskSectionKind: [DownloadTask]] {
+        var result: [TaskSectionKind: [DownloadTask]] = [:]
+        for kind in kinds {
+            var rows: [DownloadTask] = []
+            for status in kind.statuses {
+                rows += db.tasks(status: status, newestFirst: kind.newestFirst, limit: kind.limit)
+            }
+            if kind.newestFirst, kind.statuses.count > 1 {
+                rows.sort { $0.updatedAt > $1.updatedAt }
+            }
+            result[kind] = Array(rows.prefix(kind.limit))
+        }
+        return result
+    }
+
+    /// «Активно потоков: X из Y», где Y — текущий лимит AIMD-балансировщика.
+    var threadsSummary: String {
+        String(localized: "Active threads: \(snapshot.runningCount) of \(snapshot.adaptiveLimit)")
+    }
+}

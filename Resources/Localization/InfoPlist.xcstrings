@@ -1,0 +1,24 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "NaviDrive" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "NaviDrive" } }
+      }
+    },
+    "CFBundleName" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "NaviDrive" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "NaviDrive" } }
+      }
+    },
+    "NSHumanReadableCopyright" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "NaviDrive" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "NaviDrive" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

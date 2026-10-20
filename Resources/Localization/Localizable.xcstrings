@@ -1,0 +1,4805 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%@ (and %lld more errors)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (и ещё ошибок: %lld)"
+          }
+        }
+      }
+    },
+    "%@ free of %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свободно %@ из %@"
+          }
+        }
+      }
+    },
+    "%@ needed, %@ free (%@). The download will stop when the disk is full.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нужно %@, свободно %@ (%@). Скачивание остановится, когда место закончится."
+          }
+        }
+      }
+    },
+    "%@ of %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ из %@"
+          }
+        }
+      }
+    },
+    "%@ used": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Занято %@"
+          }
+        }
+      }
+    },
+    "%@ · %@": {},
+    "%@ — retrying in %lld s": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — повтор через %lld с"
+          }
+        }
+      }
+    },
+    "%@, %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@"
+          }
+        }
+      }
+    },
+    "%@, disk not connected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, диск не подключён"
+          }
+        }
+      }
+    },
+    "%@/s": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@/с"
+          }
+        }
+      }
+    },
+    "%@: starting at %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: старт с %lld"
+          }
+        }
+      }
+    },
+    "%lld": {},
+    "%lld files": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld file"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld files"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld файла"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld файлов"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld файл"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld файла"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld items": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld item"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld items"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld объекта"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld объектов"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld объект"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld объекта"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld items are not supported": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Объекты не поддерживаются: %lld"
+          }
+        }
+      }
+    },
+    "+ %lld Google docs / shortcuts without size": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ %lld док. Google / ярлыков без размера"
+          }
+        }
+      }
+    },
+    "+%@ purgeable": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%@ можно освободить"
+          }
+        }
+      }
+    },
+    "Access to Google Drive has expired. Please sign in again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступ к Google Drive истёк, войдите снова."
+          }
+        }
+      }
+    },
+    "Access wasn’t granted. To use NaviDrive, allow access to Google Drive on the Google page.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступ не предоставлен. Чтобы пользоваться NaviDrive, разрешите доступ к Google Drive на странице Google."
+          }
+        }
+      }
+    },
+    "Account": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Аккаунт"
+          }
+        }
+      }
+    },
+    "Actions": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Действия"
+          }
+        }
+      }
+    },
+    "Active": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Активные"
+          }
+        }
+      }
+    },
+    "Active downloads and uploads will be paused with their progress saved and will continue automatically after the restart.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Активные скачивания и отправки будут поставлены на паузу с сохранением прогресса и автоматически продолжатся после перезапуска."
+          }
+        }
+      }
+    },
+    "Active threads: %lld of %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Активно потоков: %lld из %lld"
+          }
+        }
+      }
+    },
+    "Active: %lld of %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Активно: %lld из %lld"
+          }
+        }
+      }
+    },
+    "Active: %lld of %lld · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Активно: %lld из %lld · %@"
+          }
+        }
+      }
+    },
+    "Add by Link": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить по ссылке"
+          }
+        }
+      }
+    },
+    "Add by Link…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить по ссылке…"
+          }
+        }
+      }
+    },
+    "Added %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавлено %lld"
+          }
+        }
+      }
+    },
+    "Added by Link": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавленные по ссылке"
+          }
+        }
+      }
+    },
+    "Advanced": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дополнительно"
+          }
+        }
+      }
+    },
+    "All": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все"
+          }
+        }
+      }
+    },
+    "Also: View → Show/Hide Sidebar (⌃⌘S)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Также: Вид → Показать/Скрыть боковое меню (⌃⌘S)"
+          }
+        }
+      }
+    },
+    "Another download is already writing to “%@” (same name in the same folder)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В файл «%@» уже пишет другая загрузка (совпадают имена в одной папке)"
+          }
+        }
+      }
+    },
+    "Assign a location by right-clicking a file or folder: “Set Permanent Custom Location…”. The folder will be created inside the chosen location, and subfolders keep their structure.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Назначьте путь через правый клик на файле или папке: «Задать постоянный кастомный путь…». Папка будет создана внутри выбранного пути, вложенные подпапки сохранят структуру."
+          }
+        }
+      }
+    },
+    "Authorization cancelled": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Авторизация отменена"
+          }
+        }
+      }
+    },
+    "Authorization failed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Авторизация не выполнена"
+          }
+        }
+      }
+    },
+    "Authorization successful!": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Авторизация успешна!"
+          }
+        }
+      }
+    },
+    "Back": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Назад"
+          }
+        }
+      }
+    },
+    "By default NaviDrive uses the Google credentials built into this copy. Your own credentials take priority and are stored in the Keychain. Sign out to change this option.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По умолчанию NaviDrive использует встроенные в эту копию учётные данные Google. Свои учётные данные имеют приоритет и хранятся в Связке ключей. Чтобы изменить параметр, выйдите из аккаунта."
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмена"
+          }
+        }
+      }
+    },
+    "Cancel Download": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить загрузку"
+          }
+        }
+      }
+    },
+    "Cancel Download…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить загрузку…"
+          }
+        }
+      }
+    },
+    "Cancel Upload": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить отправку"
+          }
+        }
+      }
+    },
+    "Cancel Upload…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить отправку…"
+          }
+        }
+      }
+    },
+    "Cancel downloading “%@”?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить загрузку «%@»?"
+          }
+        }
+      }
+    },
+    "Cancel uploading “%@”?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить отправку «%@»?"
+          }
+        }
+      }
+    },
+    "Cancelled": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменено"
+          }
+        }
+      }
+    },
+    "Can’t connect to Google Drive. Check your internet connection and try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет соединения с Google Drive. Проверьте интернет и повторите."
+          }
+        }
+      }
+    },
+    "Can’t continue the download: no progress": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удаётся продолжить скачивание: нет прогресса"
+          }
+        }
+      }
+    },
+    "Can’t open file “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удаётся открыть файл «%@»"
+          }
+        }
+      }
+    },
+    "Can’t reach Google. Check your internet connection and try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет связи с Google. Проверьте подключение к интернету и попробуйте ещё раз."
+          }
+        }
+      }
+    },
+    "Capacity: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ёмкость: %@"
+          }
+        }
+      }
+    },
+    "Capped at limit %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ограничено пределом %lld"
+          }
+        }
+      }
+    },
+    "Change Location…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменить путь…"
+          }
+        }
+      }
+    },
+    "Change…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменить…"
+          }
+        }
+      }
+    },
+    "Checksum mismatch": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Контрольная сумма не совпадает"
+          }
+        }
+      }
+    },
+    "Checksum mismatch (Google: %@…, file: %@…)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Контрольная сумма не совпадает (Google: %@…, файл: %@…)"
+          }
+        }
+      }
+    },
+    "Checksum mismatch (expected %@…, got %@…) — downloading the file again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Контрольная сумма не совпадает (ожидалась %@…, получена %@…) — файл скачивается заново"
+          }
+        }
+      }
+    },
+    "Choose": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрать"
+          }
+        }
+      }
+    },
+    "Clear History": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистить историю"
+          }
+        }
+      }
+    },
+    "Clear History (Completed and Cancelled)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистить историю (завершённые и отменённые)"
+          }
+        }
+      }
+    },
+    "Client ID": {},
+    "Client Secret": {},
+    "Close": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закрыть"
+          }
+        }
+      }
+    },
+    "Completed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершённые"
+          }
+        }
+      }
+    },
+    "Connected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключён"
+          }
+        }
+      }
+    },
+    "Couldn’t Load": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось загрузить"
+          }
+        }
+      }
+    },
+    "Couldn’t create folder %@: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось создать папку %@: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t eject “%@”: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось извлечь диск «%@»: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t open %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось открыть %@"
+          }
+        }
+      }
+    },
+    "Couldn’t open the database: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось открыть базу данных: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t read folder “%@”: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прочитать папку «%@»: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t read the Client ID / Client Secret from the Keychain: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прочитать Client ID / Client Secret из Связки ключей: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t read the saved sign-in from the Keychain: %@\n\nThe sign-in was not deleted. Restart NaviDrive and, if macOS asks for Keychain access, click “Always Allow”.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прочитать сохранённый вход из Связки ключей: %@\n\nВход не удалён. Перезапустите NaviDrive и, если macOS спросит доступ к связке ключей, нажмите «Всегда разрешать»."
+          }
+        }
+      }
+    },
+    "Couldn’t refresh: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось обновить: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t restart NaviDrive: %@. Quit and open it again manually.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось перезапустить NaviDrive: %@. Завершите приложение и откройте его снова вручную."
+          }
+        }
+      }
+    },
+    "Couldn’t save the Client ID / Client Secret to the Keychain: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось сохранить Client ID / Client Secret в Связку ключей: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t save the file: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось сохранить файл: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t save the queue: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибка записи очереди: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t save the sign-in to the Keychain: %@\n\nYou stay signed in until you quit NaviDrive; after a restart you’ll need to sign in again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось сохранить вход в Связку ключей: %@\n\nВход действует до выхода из NaviDrive; после перезапуска придётся войти снова."
+          }
+        }
+      }
+    },
+    "Couldn’t start the local authorization server: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось запустить локальный сервер авторизации: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t verify the file: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось проверить файл: %@"
+          }
+        }
+      }
+    },
+    "Count Again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Посчитать заново"
+          }
+        }
+      }
+    },
+    "Counting interrupted: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подсчёт прерван: %@"
+          }
+        }
+      }
+    },
+    "Counting stopped — the data shown is incomplete": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подсчёт остановлен — показаны неполные данные"
+          }
+        }
+      }
+    },
+    "Counting…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подсчёт…"
+          }
+        }
+      }
+    },
+    "Create an OAuth Client ID of type “Desktop app” in Google Cloud Console and enable the Google Drive API. Keys and tokens are stored in the system Keychain.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создайте OAuth Client ID типа «Desktop app» в Google Cloud Console и включите Google Drive API. Ключи и токены хранятся в системном Keychain."
+          }
+        }
+      }
+    },
+    "Custom save location": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кастомный маршрут сохранения"
+          }
+        }
+      }
+    },
+    "Custom save location for this folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кастомный путь сохранения для этой папки"
+          }
+        }
+      }
+    },
+    "Default download folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка для скачивания по умолчанию"
+          }
+        }
+      }
+    },
+    "Default download folder on “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка для скачивания по умолчанию на диске «%@»"
+          }
+        }
+      }
+    },
+    "Default folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка по умолчанию"
+          }
+        }
+      }
+    },
+    "Details…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подробнее…"
+          }
+        }
+      }
+    },
+    "Disk Status": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Статус диска"
+          }
+        }
+      }
+    },
+    "Disk not connected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диск не подключён"
+          }
+        }
+      }
+    },
+    "Disks": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диски"
+          }
+        }
+      }
+    },
+    "Done! You can close this tab and return to NaviDrive.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово! Можно закрыть вкладку и вернуться в NaviDrive."
+          }
+        }
+      }
+    },
+    "Don’t Cancel": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не отменять"
+          }
+        }
+      }
+    },
+    "Download Anyway": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всё равно скачать"
+          }
+        }
+      }
+    },
+    "Download Manager": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Менеджер загрузок"
+          }
+        }
+      }
+    },
+    "Download Selection to Default Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать выбранное в папку по умолчанию"
+          }
+        }
+      }
+    },
+    "Download To…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать в…"
+          }
+        }
+      }
+    },
+    "Download and upload Google Drive files reliably — even very large ones, with resume after interruptions.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Надёжно скачивает и загружает файлы Google Drive — даже очень большие, с продолжением после обрывов."
+          }
+        }
+      }
+    },
+    "Download files using the context menu in My Drive.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачивайте файлы через контекстное меню в «Мой Диск»."
+          }
+        }
+      }
+    },
+    "Download to Custom Folder / External SSD…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать в кастомную папку / на внешний SSD..."
+          }
+        }
+      }
+    },
+    "Download to Default Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать в дефолтную папку"
+          }
+        }
+      }
+    },
+    "Downloading": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачивается"
+          }
+        }
+      }
+    },
+    "Downloading here: %@ remaining": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачивается сюда: %@ осталось"
+          }
+        }
+      }
+    },
+    "Downloads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачивание"
+          }
+        }
+      }
+    },
+    "Downloads finished": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузки завершены"
+          }
+        }
+      }
+    },
+    "Downloads to this disk will be paused, then the disk will be ejected. Already downloaded parts are kept; you can continue in the Download Manager with Resume.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузки на этот диск будут поставлены на паузу, затем диск будет извлечён. Уже скачанные части сохранятся; продолжить можно в «Менеджере загрузок» кнопкой «Возобновить»."
+          }
+        }
+      }
+    },
+    "Drag files or folders from Finder into a My Drive folder, or click Upload… in the browser toolbar.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перетащите файлы или папки из Finder в папку «Мой Диск» или нажмите «Загрузить…» в тулбаре браузера."
+          }
+        }
+      }
+    },
+    "Eject": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Извлечь"
+          }
+        }
+      }
+    },
+    "Enter the Client ID and Client Secret in Settings": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Укажите Client ID и Client Secret в Настройках"
+          }
+        }
+      }
+    },
+    "Error": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибка"
+          }
+        }
+      }
+    },
+    "Errors": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибки"
+          }
+        }
+      }
+    },
+    "Errors: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибок: %lld"
+          }
+        }
+      }
+    },
+    "Everything is already downloaded (%lld)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всё уже скачано (%lld)"
+          }
+        }
+      }
+    },
+    "External disk %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Внешний диск %@"
+          }
+        }
+      }
+    },
+    "External disk “%@” is not connected. The transfer will continue automatically once it is connected.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Внешний диск «%@» не подключён. Загрузка продолжится автоматически после подключения."
+          }
+        }
+      }
+    },
+    "File": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл"
+          }
+        }
+      }
+    },
+    "File not found (HTTP 404). Check the link: it may need a resourceKey": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл не найден (HTTP 404). Проверьте ссылку: возможно, нужен resourceKey"
+          }
+        }
+      }
+    },
+    "File not found or no access (HTTP 404)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл не найден или нет доступа (HTTP 404)"
+          }
+        }
+      }
+    },
+    "File read error: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибка чтения файла: %@"
+          }
+        }
+      }
+    },
+    "File system: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файловая система: %@"
+          }
+        }
+      }
+    },
+    "File verification failed: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибка проверки файла: %@"
+          }
+        }
+      }
+    },
+    "Files": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файлов"
+          }
+        }
+      }
+    },
+    "Files and folders to upload to “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файлы и папки для загрузки в «%@»"
+          }
+        }
+      }
+    },
+    "Files are being downloaded to “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На диск «%@» сейчас идёт скачивание"
+          }
+        }
+      }
+    },
+    "Files that changed during upload or failed verification are restarted with the button in their row": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файлы, изменённые во время загрузки или не прошедшие проверку, перезапускаются кнопкой в строке"
+          }
+        }
+      }
+    },
+    "Filter by Name": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фильтр по имени"
+          }
+        }
+      }
+    },
+    "Find": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Найти"
+          }
+        }
+      }
+    },
+    "Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка"
+          }
+        }
+      }
+    },
+    "Folder Is Empty": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка пуста"
+          }
+        }
+      }
+    },
+    "Folder Scan Errors": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибки сканирования папок"
+          }
+        }
+      }
+    },
+    "Folder size, number of files and free disk space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Размер папки, число файлов и свободное место на диске"
+          }
+        }
+      }
+    },
+    "Free in default folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свободно в папке по умолчанию"
+          }
+        }
+      }
+    },
+    "Free: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свободно: %@"
+          }
+        }
+      }
+    },
+    "GOCSPX-…": {},
+    "General": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общие"
+          }
+        }
+      }
+    },
+    "Getting details…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Получаю сведения…"
+          }
+        }
+      }
+    },
+    "Google Account": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Аккаунт Google"
+          }
+        }
+      }
+    },
+    "Google Doc": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Документ"
+          }
+        }
+      }
+    },
+    "Google Drawing": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Рисунок"
+          }
+        }
+      }
+    },
+    "Google Drive": {},
+    "Google Drive Folder/File": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка/файл в Google Drive"
+          }
+        }
+      }
+    },
+    "Google Drive doesn’t accept the upload session": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Drive не принимает сессию загрузки"
+          }
+        }
+      }
+    },
+    "Google Drive is out of storage": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На Google Drive закончилось место"
+          }
+        }
+      }
+    },
+    "Google Drive link or ID": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка Google Drive или ID"
+          }
+        }
+      }
+    },
+    "Google Drive rejected the operation: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Drive отклонил операцию: %@"
+          }
+        }
+      }
+    },
+    "Google Drive server is temporarily unavailable (HTTP %lld)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер Google Drive временно недоступен (HTTP %lld)"
+          }
+        }
+      }
+    },
+    "Google Sheet": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Таблица"
+          }
+        }
+      }
+    },
+    "Google Slides": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Презентация"
+          }
+        }
+      }
+    },
+    "Google denied authorization: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google отклонил авторизацию: %@"
+          }
+        }
+      }
+    },
+    "Google didn’t respond within 5 minutes — perhaps the sign-in tab was closed. Try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google не ответил за 5 минут — возможно, вкладку входа закрыли. Попробуйте ещё раз."
+          }
+        }
+      }
+    },
+    "Google has limited downloads of these files. NaviDrive will retry after 1 h, 2 h, 4 h … up to 24 h; other files keep downloading as usual.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google ограничил число скачиваний этих файлов. NaviDrive повторит попытку через 1 ч, 2 ч, 4 ч … до 24 ч; остальные файлы качаются как обычно."
+          }
+        }
+      }
+    },
+    "Google has temporarily limited downloads of this file (quota). Next attempt at %@. %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google временно ограничил скачивание этого файла (квота). Следующая попытка в %@. %@"
+          }
+        }
+      }
+    },
+    "Google is rate-limiting requests — the limit is temporarily reduced": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google ограничил частоту запросов — лимит временно снижен"
+          }
+        }
+      }
+    },
+    "Google rate limit: ramp-up paused (%lld)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимит Google: пауза разгона (%lld)"
+          }
+        }
+      }
+    },
+    "Google rate limit: reduced to %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимит Google: снижено до %lld"
+          }
+        }
+      }
+    },
+    "Google rate-limited requests (HTTP 403)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google ограничил частоту запросов (HTTP 403)"
+          }
+        }
+      }
+    },
+    "Google rate-limited requests (HTTP 429)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google ограничил частоту запросов (HTTP 429)"
+          }
+        }
+      }
+    },
+    "Google refused the sign-in (%@).": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google отклонил вход (%@)."
+          }
+        }
+      }
+    },
+    "Google will show an “unverified app” warning — click Advanced → Go to NaviDrive.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google покажет предупреждение о непроверенном приложении — нажмите Advanced → Go to NaviDrive."
+          }
+        }
+      }
+    },
+    "HTTP 401: access denied": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTP 401: доступ запрещён"
+          }
+        }
+      }
+    },
+    "Hide": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрыть"
+          }
+        }
+      }
+    },
+    "Internal disk": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Встроенный диск"
+          }
+        }
+      }
+    },
+    "Internal disk %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Внутренний диск %@"
+          }
+        }
+      }
+    },
+    "Invalid server response": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Некорректный ответ сервера"
+          }
+        }
+      }
+    },
+    "Item not found (HTTP 404). Check the link: it may be outdated or have a wrong resourceKey.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Объект не найден (HTTP 404). Проверьте ссылку: возможно, она устарела или указан неверный resourceKey."
+          }
+        }
+      }
+    },
+    "Item not found (HTTP 404). Check the link: it may need a resourceKey — copy the full link including “resourcekey=…”.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Объект не найден (HTTP 404). Проверьте ссылку: возможно, нужен resourceKey — скопируйте ссылку полностью, вместе с «resourcekey=…»."
+          }
+        }
+      }
+    },
+    "Item not found — it may have been deleted or moved. Refresh the list.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Объект не найден — возможно, он уже удалён или перемещён. Обновите список."
+          }
+        }
+      }
+    },
+    "Items can be restored from the Google Drive trash within 30 days.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Объекты можно будет восстановить из корзины Google Drive в течение 30 дней."
+          }
+        }
+      }
+    },
+    "Keep Both": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить оба"
+          }
+        }
+      }
+    },
+    "Keep Paused": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оставить на паузе"
+          }
+        }
+      }
+    },
+    "Keep the Mac awake during downloads and uploads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не давать Mac засыпать во время загрузок и отправки"
+          }
+        }
+      }
+    },
+    "Keychain (%@): %@ [%d]": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Связка ключей (%@): %@ [%d]"
+          }
+        }
+      }
+    },
+    "Kind": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тип"
+          }
+        }
+      }
+    },
+    "Language": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language / Язык"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Язык / Language"
+          }
+        }
+      }
+    },
+    "Later": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Позже"
+          }
+        }
+      }
+    },
+    "Link saturated: holding at %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Канал загружен: держим %lld"
+          }
+        }
+      }
+    },
+    "Loading…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка…"
+          }
+        }
+      }
+    },
+    "Local Path": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Локальный путь"
+          }
+        }
+      }
+    },
+    "MD5 matches the Google Drive checksum": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MD5 совпал с контрольной суммой Google Drive"
+          }
+        }
+      }
+    },
+    "Maximum threads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Максимум потоков"
+          }
+        }
+      }
+    },
+    "Modified": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменён"
+          }
+        }
+      }
+    },
+    "More Actions": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Другие действия"
+          }
+        }
+      }
+    },
+    "Mount point: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Точка монтирования: %@"
+          }
+        }
+      }
+    },
+    "Move": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переместить"
+          }
+        }
+      }
+    },
+    "Move %lld items to the Trash?": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Move %lld item to the Trash?"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Move %lld items to the Trash?"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Переместить %lld объекта в корзину?"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Переместить %lld объектов в корзину?"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Переместить %lld объект в корзину?"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Переместить %lld объекта в корзину?"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Move %lld items to…": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Move %lld item to…"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Move %lld items to…"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Переместить %lld объекта в…"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Переместить %lld объектов в…"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Переместить %lld объект в…"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Переместить %lld объекта в…"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Move To…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переместить в…"
+          }
+        }
+      }
+    },
+    "Move to Trash": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переместить в корзину"
+          }
+        }
+      }
+    },
+    "Move to Trash…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переместить в корзину…"
+          }
+        }
+      }
+    },
+    "Move “%@” to the Trash?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переместить «%@» в корзину?"
+          }
+        }
+      }
+    },
+    "Move “%@” to…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переместить «%@» в…"
+          }
+        }
+      }
+    },
+    "My Drive": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мой Диск"
+          }
+        }
+      }
+    },
+    "Name": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Имя"
+          }
+        }
+      }
+    },
+    "NaviDrive": {},
+    "NaviDrive is now signed with the permanent “NaviDrive Local” certificate. Your saved sign-in was created by an earlier build with a temporary signature, and macOS doesn’t let the new signature access it, so the old items were removed. Open Settings, re-enter the Client ID and Client Secret if needed, and sign in to Google once more — from now on the sign-in will persist across rebuilds.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive теперь подписан постоянным сертификатом «NaviDrive Local». Сохранённый вход был создан прежней сборкой с временной подписью, и macOS не даёт новой подписи доступ к нему, поэтому старые записи удалены. Откройте «Настройки», при необходимости заново введите Client ID и Client Secret и войдите в Google ещё один раз — дальше вход будет сохраняться между пересборками."
+          }
+        }
+      }
+    },
+    "Network": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сеть"
+          }
+        }
+      }
+    },
+    "Network restored": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сеть восстановлена"
+          }
+        }
+      }
+    },
+    "Network: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сеть: %@"
+          }
+        }
+      }
+    },
+    "New Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая папка"
+          }
+        }
+      }
+    },
+    "New Folder %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая папка %lld"
+          }
+        }
+      }
+    },
+    "New location for “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый путь для «%@»"
+          }
+        }
+      }
+    },
+    "New upload session: the file is sent from the beginning": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая сессия загрузки: файл отправляется с начала"
+          }
+        }
+      }
+    },
+    "Next attempt: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ближайшая попытка: %@"
+          }
+        }
+      }
+    },
+    "No Tasks": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет задач"
+          }
+        }
+      }
+    },
+    "No Uploads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет отправок"
+          }
+        }
+      }
+    },
+    "No access (HTTP 403). Ask the owner to share it by link or with your account.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа (HTTP 403). Попросите автора открыть доступ по ссылке или для вашего аккаунта."
+          }
+        }
+      }
+    },
+    "No access to the Keychain: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа к Связке ключей: %@"
+          }
+        }
+      }
+    },
+    "No custom save locations": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет кастомных маршрутов"
+          }
+        }
+      }
+    },
+    "No downloads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет загрузок"
+          }
+        }
+      }
+    },
+    "No files selected for upload": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не выбраны файлы для загрузки"
+          }
+        }
+      }
+    },
+    "No new files to upload": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новых файлов для отправки нет"
+          }
+        }
+      }
+    },
+    "No response from Google within 5 minutes. Try signing in again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google не ответил за 5 минут. Попробуйте войти ещё раз."
+          }
+        }
+      }
+    },
+    "No subfolders": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет вложенных папок"
+          }
+        }
+      }
+    },
+    "No uploads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет отправок"
+          }
+        }
+      }
+    },
+    "No write access: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа на запись: %@"
+          }
+        }
+      }
+    },
+    "Not connected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не подключён"
+          }
+        }
+      }
+    },
+    "Not enough disk space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не хватает места на диске"
+          }
+        }
+      }
+    },
+    "Not enough disk space: %@ needed, %@ available": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Недостаточно места на диске: нужно %@, доступно %@"
+          }
+        }
+      }
+    },
+    "Not enough space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не хватает места"
+          }
+        }
+      }
+    },
+    "Not enough space on “%@”: %@ needed, %@ free (a %@ reserve is kept). Free up space and the download will continue automatically.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не хватает места на диске «%@»: нужно %@, свободно %@ (запас %@ не занимается). Освободите место — загрузка продолжится автоматически."
+          }
+        }
+      }
+    },
+    "Not enough space: %@ needed (+ %@ reserve), %@ free": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не хватит места: нужно %@ (+ запас %@), свободно %@"
+          }
+        }
+      }
+    },
+    "Not enough space: %@ needed, %@ free. Choose another disk with “Download To…”.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не хватает места: нужно %@, свободно %@. Выберите другой диск через «Скачать в…»."
+          }
+        }
+      }
+    },
+    "Not enough tasks to ramp up (%lld)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Недостаточно задач для разгона (%lld)"
+          }
+        }
+      }
+    },
+    "Not signed in": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не выполнен вход"
+          }
+        }
+      }
+    },
+    "Not signed in to Google": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не выполнен вход в Google"
+          }
+        }
+      }
+    },
+    "Now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сейчас"
+          }
+        }
+      }
+    },
+    "OK": {},
+    "Online": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В сети"
+          }
+        }
+      }
+    },
+    "Open": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть"
+          }
+        }
+      }
+    },
+    "Open Account Settings": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть настройки аккаунта"
+          }
+        }
+      }
+    },
+    "Open Downloads Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть папку загрузок"
+          }
+        }
+      }
+    },
+    "Open Downloads Folder in Finder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть папку загрузок в Finder"
+          }
+        }
+      }
+    },
+    "Open Folder on Drive": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть папку на диске"
+          }
+        }
+      }
+    },
+    "Open Sign-In Page Again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть страницу входа ещё раз"
+          }
+        }
+      }
+    },
+    "Open in Finder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть в Finder"
+          }
+        }
+      }
+    },
+    "Open in NaviDrive Browser": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть в браузере NaviDrive"
+          }
+        }
+      }
+    },
+    "Open macOS Language Settings": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть настройки языка macOS"
+          }
+        }
+      }
+    },
+    "Overall progress": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общий прогресс"
+          }
+        }
+      }
+    },
+    "Paste a link to a Google Drive file or folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставьте ссылку на файл или папку Google Drive"
+          }
+        }
+      }
+    },
+    "Pause": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пауза"
+          }
+        }
+      }
+    },
+    "Pause All": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пауза все"
+          }
+        }
+      }
+    },
+    "Pause all uploads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поставить все отправки на паузу"
+          }
+        }
+      }
+    },
+    "Pause and Eject": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поставить на паузу и извлечь"
+          }
+        }
+      }
+    },
+    "Paused": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На паузе"
+          }
+        }
+      }
+    },
+    "Permanent save location for %lld items": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Permanent save location for %lld item"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Permanent save location for %lld items"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Постоянный путь сохранения для %lld объектов"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Постоянный путь сохранения для %lld объектов"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Постоянный путь сохранения для %lld объекта"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Постоянный путь сохранения для %lld объекта"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Permanent save location for “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Постоянный путь сохранения для «%@»"
+          }
+        }
+      }
+    },
+    "Preparing: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подготовка: %@"
+          }
+        }
+      }
+    },
+    "Progress: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прогресс: %@"
+          }
+        }
+      }
+    },
+    "Project “%@” downloaded": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проект «%@» скачан"
+          }
+        }
+      }
+    },
+    "Projects %@ downloaded": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проекты %@ скачаны"
+          }
+        }
+      }
+    },
+    "Purgeable: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очищаемое: %@"
+          }
+        }
+      }
+    },
+    "Queued": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В очереди"
+          }
+        }
+      }
+    },
+    "Queued for upload: %@, %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В очередь отправки: %@, %@"
+          }
+        }
+      }
+    },
+    "Queued: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В очереди: %lld"
+          }
+        }
+      }
+    },
+    "Quit NaviDrive": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выход"
+          }
+        }
+      }
+    },
+    "Ramp-up: +1 → %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разгон: +1 → %lld"
+          }
+        }
+      }
+    },
+    "Re-probe: +1 → %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторная проба: +1 → %lld"
+          }
+        }
+      }
+    },
+    "Reached limit %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Достигнут предел %lld"
+          }
+        }
+      }
+    },
+    "Refresh": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить"
+          }
+        }
+      }
+    },
+    "Refreshing list": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновление списка"
+          }
+        }
+      }
+    },
+    "Remove Custom Location": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить кастомный путь"
+          }
+        }
+      }
+    },
+    "Remove Location": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить привязку"
+          }
+        }
+      }
+    },
+    "Remove from Added by Link": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить из списка «Добавленные по ссылке»"
+          }
+        }
+      }
+    },
+    "Remove from Queue": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить из очереди"
+          }
+        }
+      }
+    },
+    "Removes only the history entries; downloaded files stay on disk": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удаляет только записи истории; скачанные файлы остаются на диске"
+          }
+        }
+      }
+    },
+    "Removes only the history entries; files on Google Drive stay": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удаляет только записи истории; файлы на Google Drive остаются"
+          }
+        }
+      }
+    },
+    "Rename": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переименовать"
+          }
+        }
+      }
+    },
+    "Replace": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заменить"
+          }
+        }
+      }
+    },
+    "Replaces the existing file: a new version of the same file is uploaded": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заменяет существующий файл: загружается новая версия того же файла"
+          }
+        }
+      }
+    },
+    "Restart Now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перезапустить сейчас"
+          }
+        }
+      }
+    },
+    "Resume": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Возобновить"
+          }
+        }
+      }
+    },
+    "Resume All": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Возобновить все"
+          }
+        }
+      }
+    },
+    "Resume all uploads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Возобновить все отправки"
+          }
+        }
+      }
+    },
+    "Resumed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Возобновлено"
+          }
+        }
+      }
+    },
+    "Retries: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторов: %lld"
+          }
+        }
+      }
+    },
+    "Retry": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторить"
+          }
+        }
+      }
+    },
+    "Retry All": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторить все"
+          }
+        }
+      }
+    },
+    "Retry All Failed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторить все ошибочные"
+          }
+        }
+      }
+    },
+    "Save Locations": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршруты сохранения"
+          }
+        }
+      }
+    },
+    "Saved to: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохраняется в: %@"
+          }
+        }
+      }
+    },
+    "Scanning files, checking names in the destination folder and creating subfolders on Drive": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обход файлов, проверка имён в целевой папке и создание подпапок на диске"
+          }
+        }
+      }
+    },
+    "Scanning folders: %lld files found": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Scanning folders: %lld file found"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Scanning folders: %lld files found"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Сканирование папок: найдено %lld файла"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Сканирование папок: найдено %lld файлов"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Сканирование папок: найден %lld файл"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Сканирование папок: найдено %lld файла"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Scanning: %lld files": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Scanning: %lld file"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Scanning: %lld files"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Сканирование: %lld файла"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Сканирование: %lld файлов"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Сканирование: %lld файл"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Сканирование: %lld файла"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "See details in Folder Scan Errors below.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подробности — в блоке «Ошибки сканирования папок» ниже."
+          }
+        }
+      }
+    },
+    "Separate from download threads: downloads and uploads run at the same time. If Google rate-limits requests, the number of uploads is temporarily reduced. Files are sent in 32 MB parts and continue from where they stopped after a connection drop.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отдельно от потоков скачивания: скачивание и отправка идут одновременно. Если Google ограничит частоту запросов, число отправок временно уменьшится. Файлы отправляются частями по 32 МБ и после обрыва связи продолжаются с места остановки."
+          }
+        }
+      }
+    },
+    "Set Permanent Custom Location…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задать постоянный кастомный путь..."
+          }
+        }
+      }
+    },
+    "Set as Default Folder…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сделать папкой по умолчанию…"
+          }
+        }
+      }
+    },
+    "Settings…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки…"
+          }
+        }
+      }
+    },
+    "Shared Drives": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общие диски"
+          }
+        }
+      }
+    },
+    "Shared with Me": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступные мне"
+          }
+        }
+      }
+    },
+    "Shortcut": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ярлык"
+          }
+        }
+      }
+    },
+    "Shortcut (no target)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ярлык (без цели)"
+          }
+        }
+      }
+    },
+    "Shortcut to file": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ярлык на файл"
+          }
+        }
+      }
+    },
+    "Shortcut to folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ярлык на папку"
+          }
+        }
+      }
+    },
+    "Shortcut — its target is downloaded and opened": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ярлык — скачивается и открывается его цель"
+          }
+        }
+      }
+    },
+    "Shortcut “%@” in “%@”: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ярлык «%@» в «%@»: %@"
+          }
+        }
+      }
+    },
+    "Shortcut “%@”: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ярлык «%@»: %@"
+          }
+        }
+      }
+    },
+    "Show": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать"
+          }
+        }
+      }
+    },
+    "Show Main Window": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать главное окно"
+          }
+        }
+      }
+    },
+    "Show Sidebar": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показывать боковую панель"
+          }
+        }
+      }
+    },
+    "Show in Finder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать в Finder"
+          }
+        }
+      }
+    },
+    "Sign In to Google": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войти в Google"
+          }
+        }
+      }
+    },
+    "Sign In with Google": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войти через Google"
+          }
+        }
+      }
+    },
+    "Sign In with Google…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войти через Google…"
+          }
+        }
+      }
+    },
+    "Sign Out": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выйти"
+          }
+        }
+      }
+    },
+    "Sign in to Google again to upload": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для загрузки нужно заново войти в Google"
+          }
+        }
+      }
+    },
+    "Sign in to Google again to upload and edit files": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для загрузки и изменения файлов нужно заново войти в Google"
+          }
+        }
+      }
+    },
+    "Sign in to Google in Settings first.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сначала войдите в Google в Настройках."
+          }
+        }
+      }
+    },
+    "Sign in to Google to upload files.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войдите в Google, чтобы отправлять файлы."
+          }
+        }
+      }
+    },
+    "Sign-in didn’t complete. Return to NaviDrive and try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вход не завершён. Вернитесь в NaviDrive и попробуйте ещё раз."
+          }
+        }
+      }
+    },
+    "Signed in": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вход выполнен"
+          }
+        }
+      }
+    },
+    "Simultaneous uploads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Одновременных отправок"
+          }
+        }
+      }
+    },
+    "Size": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Размер"
+          }
+        }
+      }
+    },
+    "Size mismatch: received %lld of %lld bytes": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Размер не совпадает: получено %lld из %lld байт"
+          }
+        }
+      }
+    },
+    "Skip": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропустить"
+          }
+        }
+      }
+    },
+    "Source file not found: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Исходный файл не найден: %@"
+          }
+        }
+      }
+    },
+    "Speed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скорость"
+          }
+        }
+      }
+    },
+    "Speed is increasing: +1 → %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скорость растёт: +1 → %lld"
+          }
+        }
+      }
+    },
+    "Speed: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скорость: %@"
+          }
+        }
+      }
+    },
+    "Start Over": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начать заново"
+          }
+        }
+      }
+    },
+    "Start: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Старт: %lld"
+          }
+        }
+      }
+    },
+    "State database": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "База состояния"
+          }
+        }
+      }
+    },
+    "Stop Counting": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить подсчёт"
+          }
+        }
+      }
+    },
+    "Storage": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Хранилище"
+          }
+        }
+      }
+    },
+    "System": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как в системе"
+          }
+        }
+      }
+    },
+    "The MD5 of the file on this Mac matches the Google Drive checksum": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MD5 файла на Mac совпал с контрольной суммой Google Drive"
+          }
+        }
+      }
+    },
+    "The app language can also be chosen in System Settings → General → Language & Region → Applications.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Язык приложения можно выбрать и в Системных настройках → Основные → Язык и регион → Приложения."
+          }
+        }
+      }
+    },
+    "The authorization response failed the state check": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ответ авторизации не прошёл проверку state"
+          }
+        }
+      }
+    },
+    "The download and upload queue belongs to %@. What should be done with it?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очередь загрузок и отправок осталась от аккаунта %@. Что с ней сделать?"
+          }
+        }
+      }
+    },
+    "The download and upload queue belongs to the previous Google account. What should be done with it?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очередь загрузок и отправок осталась от предыдущего аккаунта Google. Что с ней сделать?"
+          }
+        }
+      }
+    },
+    "The downloaded file disappeared from the disk — downloading again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачанный файл пропал с диска — скачивается заново"
+          }
+        }
+      }
+    },
+    "The file changed during upload": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл изменён во время загрузки"
+          }
+        }
+      }
+    },
+    "The language will change after NaviDrive restarts": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Язык изменится после перезапуска NaviDrive"
+          }
+        }
+      }
+    },
+    "The number of simultaneous uploads is set in Settings (1–6). Downloads run in parallel with their own limit.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Число одновременных отправок задаётся в Настройках (1–6). Скачивание идёт параллельно со своим лимитом."
+          }
+        }
+      }
+    },
+    "The number of threads is tuned automatically (AIMD): +1 every 15 s while speed grows; ×½ when Google rate-limits.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Число потоков подбирается автоматически (AIMD): +1 каждые 15 с, пока растёт скорость; ×½ при ограничении от Google."
+          }
+        }
+      }
+    },
+    "The owner has disabled downloading of %lld files": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Автор запретил скачивание файлов: %lld"
+          }
+        }
+      }
+    },
+    "The owner has disabled downloading of %lld files — they will be skipped": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "The owner has disabled downloading of %lld file — it will be skipped"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "The owner has disabled downloading of %lld files — they will be skipped"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Автор запретил скачивание %lld файлов — они будут пропущены"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Автор запретил скачивание %lld файлов — они будут пропущены"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Автор запретил скачивание %lld файла — он будет пропущен"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Автор запретил скачивание %lld файла — они будут пропущены"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "The owner has disabled downloading this file": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Автор запретил скачивание этого файла"
+          }
+        }
+      }
+    },
+    "The part already downloaded (%@) will be deleted. To continue later, use Pause.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уже скачанная часть (%@) будет удалена. Чтобы продолжить позже, используйте паузу."
+          }
+        }
+      }
+    },
+    "The part already uploaded (%@) will be discarded. To continue later, use Pause.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уже отправленная часть (%@) будет отброшена. Чтобы продолжить позже, используйте паузу."
+          }
+        }
+      }
+    },
+    "The path “%@” is outside the destination folder — the file was rejected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Путь «%@» выходит за пределы папки назначения — файл отклонён"
+          }
+        }
+      }
+    },
+    "The server didn’t confirm the empty file upload": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер не подтвердил загрузку пустого файла"
+          }
+        }
+      }
+    },
+    "The server didn’t confirm the upload finished": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер не подтвердил завершение загрузки"
+          }
+        }
+      }
+    },
+    "The server didn’t return an upload session URL": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер не вернул адрес сессии загрузки"
+          }
+        }
+      }
+    },
+    "The server doesn’t support resuming (Range)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер не поддерживает докачку (Range)"
+          }
+        }
+      }
+    },
+    "The task will be moved to history as cancelled.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задача будет перенесена в историю как отменённая."
+          }
+        }
+      }
+    },
+    "There are no files to download in this folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В папке нет файлов для скачивания"
+          }
+        }
+      }
+    },
+    "This copy has no built-in Google credentials — turn on this option and enter your own.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В эту копию не встроены учётные данные Google — включите параметр и введите свои."
+          }
+        }
+      }
+    },
+    "This copy of NaviDrive was built without Google sign-in credentials. Turn on “Use my own OAuth credentials” in Settings → Account → Advanced and enter your Client ID and Client Secret.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Эта копия NaviDrive собрана без учётных данных для входа в Google. Включите «Использовать свои учётные данные OAuth» в Настройках → Аккаунт → Дополнительно и введите свои Client ID и Client Secret."
+          }
+        }
+      }
+    },
+    "This doesn’t look like a Google Drive link. Paste a link like drive.google.com/drive/folders/… or an ID.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не похоже на ссылку Google Drive. Вставьте ссылку вида drive.google.com/drive/folders/… или ID."
+          }
+        }
+      }
+    },
+    "This is the upper limit. The engine starts with 4 threads and adds one every 15 seconds while total speed keeps growing. If Google reports rate limiting (429), the number of threads is halved immediately. Changes apply on the fly; running downloads are not interrupted.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это верхний предел. Движок стартует с 4 потоков и каждые 15 секунд добавляет по одному, пока растёт общая скорость. Если Google отвечает об ограничении запросов (429), число потоков сразу уменьшается вдвое. Изменение применяется на лету, идущие загрузки не обрываются."
+          }
+        }
+      }
+    },
+    "This item is not supported (Google Forms, Sites and similar items cannot be downloaded)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Объект не поддерживается (формы, сайты и подобные объекты Google нельзя скачать)"
+          }
+        }
+      }
+    },
+    "Threads (limit %lld)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Потоки (предел %lld)"
+          }
+        }
+      }
+    },
+    "Token request failed: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибка получения токена: %@"
+          }
+        }
+      }
+    },
+    "Total size": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общий размер"
+          }
+        }
+      }
+    },
+    "Transfers": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузки"
+          }
+        }
+      }
+    },
+    "Try Again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попробовать снова"
+          }
+        }
+      }
+    },
+    "Try Files Waiting for Quota Now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попробовать сейчас файлы в ожидании квоты"
+          }
+        }
+      }
+    },
+    "Try Now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попробовать сейчас"
+          }
+        }
+      }
+    },
+    "Try Quota Now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попробовать квоту сейчас"
+          }
+        }
+      }
+    },
+    "Upload": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузить"
+          }
+        }
+      }
+    },
+    "Upload Again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузить заново"
+          }
+        }
+      }
+    },
+    "Upload files and folders to “%@”…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузить файлы и папки в «%@»…"
+          }
+        }
+      }
+    },
+    "Upload to “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузить в «%@»"
+          }
+        }
+      }
+    },
+    "Uploaded": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загружено"
+          }
+        }
+      }
+    },
+    "Uploading": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправляется"
+          }
+        }
+      }
+    },
+    "Uploading: %@ · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправка: %@ · %@"
+          }
+        }
+      }
+    },
+    "Uploads": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправка"
+          }
+        }
+      }
+    },
+    "Uploads (limit %lld)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправки (предел %lld)"
+          }
+        }
+      }
+    },
+    "Upload…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузить…"
+          }
+        }
+      }
+    },
+    "Use my own OAuth credentials": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Использовать свои учётные данные OAuth"
+          }
+        }
+      }
+    },
+    "Used: %@ (%@)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Занято: %@ (%@)"
+          }
+        }
+      }
+    },
+    "Verifying…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверка…"
+          }
+        }
+      }
+    },
+    "Waiting": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидают"
+          }
+        }
+      }
+    },
+    "Waiting for Google quota": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидание квоты Google"
+          }
+        }
+      }
+    },
+    "Waiting for Google quota: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ждут квоту Google: %lld"
+          }
+        }
+      }
+    },
+    "Waiting for Google quota: %lld · next attempt at %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ждут квоту Google: %lld · попытка в %@"
+          }
+        }
+      }
+    },
+    "Waiting for disk": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидание диска"
+          }
+        }
+      }
+    },
+    "Waiting for disk: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ждут подключения диска: %lld"
+          }
+        }
+      }
+    },
+    "Waiting for network": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидание интернета"
+          }
+        }
+      }
+    },
+    "Waiting for network…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидание интернета…"
+          }
+        }
+      }
+    },
+    "Waiting for sign-in in your browser…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидание входа в браузере…"
+          }
+        }
+      }
+    },
+    "Welcome to NaviDrive": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добро пожаловать в NaviDrive"
+          }
+        }
+      }
+    },
+    "Where should %lld items be downloaded? You can choose an external disk in /Volumes.": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Where should %lld item be downloaded? You can choose an external disk in /Volumes."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Where should %lld items be downloaded? You can choose an external disk in /Volumes."
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Куда скачать %lld объекта? Можно выбрать внешний диск в /Volumes."
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Куда скачать %lld объектов? Можно выбрать внешний диск в /Volumes."
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Куда скачать %lld объект? Можно выбрать внешний диск в /Volumes."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Куда скачать %lld объекта? Можно выбрать внешний диск в /Volumes."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Where should %lld items be uploaded?": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Where should %lld item be uploaded?"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Where should %lld items be uploaded?"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Куда загрузить %lld объекта?"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Куда загрузить %lld объектов?"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Куда загрузить %lld объект?"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Куда загрузить %lld объекта?"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Where should “%@” be downloaded? You can choose an external disk in /Volumes.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Куда скачать «%@»? Можно выбрать внешний диск в /Volumes."
+          }
+        }
+      }
+    },
+    "Where should “%@” be uploaded?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Куда загрузить «%@»?"
+          }
+        }
+      }
+    },
+    "While there are active or pending transfers, the system won’t sleep. The display still turns off as usual.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пока есть активные или ожидающие загрузки, система не уходит в сон. Экран при этом гаснет как обычно."
+          }
+        }
+      }
+    },
+    "You can’t create folders here": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь нельзя создавать папки"
+          }
+        }
+      }
+    },
+    "You can’t move a folder into itself": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нельзя переместить папку в саму себя"
+          }
+        }
+      }
+    },
+    "You can’t upload files here": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сюда нельзя загружать файлы"
+          }
+        }
+      }
+    },
+    "You don’t have permission to change folder “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет прав на изменение папки «%@»"
+          }
+        }
+      }
+    },
+    "You don’t have permission to delete “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет прав на удаление «%@»"
+          }
+        }
+      }
+    },
+    "You don’t have permission to move “%@” to “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет прав на перемещение «%@» в «%@»"
+          }
+        }
+      }
+    },
+    "You don’t have permission to rename “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет прав на переименование «%@»"
+          }
+        }
+      }
+    },
+    "You don’t have permission to upload to folder “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет прав на загрузку в папку «%@»"
+          }
+        }
+      }
+    },
+    "You don’t have permission to upload to this folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет прав на загрузку в эту папку"
+          }
+        }
+      }
+    },
+    "You signed in with a different account": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вы вошли другим аккаунтом"
+          }
+        }
+      }
+    },
+    "Your Google session has expired — sign in again in Settings": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сессия Google истекла — войдите заново в Настройках"
+          }
+        }
+      }
+    },
+    "Your saved sign-in only lets NaviDrive read files. To upload files and change folders, sign in again and allow access to Google Drive on the Google screen. Downloads keep working in the meantime.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранённый вход разрешает NaviDrive только чтение. Чтобы отправлять файлы и изменять папки, войдите ещё раз и на экране Google разрешите доступ к Google Drive. Скачивание при этом продолжает работать."
+          }
+        }
+      }
+    },
+    "all verified": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "все проверены"
+          }
+        }
+      }
+    },
+    "already downloaded %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "уже скачано %lld"
+          }
+        }
+      }
+    },
+    "already queued: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "уже в очереди: %lld"
+          }
+        }
+      }
+    },
+    "create": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "создание"
+          }
+        }
+      }
+    },
+    "delete": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "удаление"
+          }
+        }
+      }
+    },
+    "delete before re-create": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "удаление перед пересозданием"
+          }
+        }
+      }
+    },
+    "download disabled by owner %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "скачивание запрещено автором %lld"
+          }
+        }
+      }
+    },
+    "errors %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ошибок %lld"
+          }
+        }
+      }
+    },
+    "existing skipped: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пропущено существующих: %lld"
+          }
+        }
+      }
+    },
+    "export": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "экспорт"
+          }
+        }
+      }
+    },
+    "export to .%@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "экспорт в .%@"
+          }
+        }
+      }
+    },
+    "folders created: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "создано папок: %lld"
+          }
+        }
+      }
+    },
+    "https://drive.google.com/drive/folders/…": {},
+    "https://drive.google.com/drive/folders/…  or ID": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "https://drive.google.com/drive/folders/…  или ID"
+          }
+        }
+      }
+    },
+    "in %lld folders": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "in %lld folder"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "in %lld folders"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "в %lld папках"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "в %lld папках"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "в %lld папке"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "в %lld папки"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "new version": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "новая версия"
+          }
+        }
+      }
+    },
+    "no access to the shortcut target (HTTP %lld)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "нет доступа к цели ярлыка (HTTP %lld)"
+          }
+        }
+      }
+    },
+    "not supported %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "не поддерживается %lld"
+          }
+        }
+      }
+    },
+    "read": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "чтение"
+          }
+        }
+      }
+    },
+    "small %lld · large %lld · export %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "мелкие %lld · крупные %lld · экспорт %lld"
+          }
+        }
+      }
+    },
+    "the shortcut has no target": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "у ярлыка нет цели"
+          }
+        }
+      }
+    },
+    "the shortcut target was deleted or is unavailable (HTTP 404)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "цель ярлыка удалена или недоступна (HTTP 404)"
+          }
+        }
+      }
+    },
+    "unavailable": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "недоступна"
+          }
+        }
+      }
+    },
+    "unknown": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "неизвестно"
+          }
+        }
+      }
+    },
+    "unreadable: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "не прочитано: %lld"
+          }
+        }
+      }
+    },
+    "update": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "обновление"
+          }
+        }
+      }
+    },
+    "verified %lld of %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "проверено %lld из %lld"
+          }
+        }
+      }
+    },
+    "verified ✓": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "проверено ✓"
+          }
+        }
+      }
+    },
+    "xxxxxxxx.apps.googleusercontent.com": {},
+    "· %@": {},
+    "“%@” already contains %@ with the same names": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В папке «%@» уже есть %@ с такими же именами"
+          }
+        }
+      }
+    },
+    "“%@” already contains a file named “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В папке «%@» уже есть файл «%@»"
+          }
+        }
+      }
+    },
+    "“%@” is a symbolic link — NaviDrive doesn’t write through symbolic links": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» — символическая ссылка; NaviDrive не записывает файлы по символическим ссылкам"
+          }
+        }
+      }
+    },
+    "“%@”: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@»: %@"
+          }
+        }
+      }
+    },
+    "“Replace” uploads a new version of the same file, “Keep Both” adds “ (1)” to the name. The choice applies to all files in this batch.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Заменить» загрузит новую версию того же файла, «Сохранить оба» добавит « (1)» к имени. Выбор применяется ко всем файлам пачки."
+          }
+        }
+      }
+    },
+    "“Use my own OAuth credentials” is on, but the Client ID or Client Secret is empty. Fill them in or turn the option off in Settings → Account → Advanced.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включено «Использовать свои учётные данные OAuth», но Client ID или Client Secret не заполнен. Заполните их или выключите параметр в Настройках → Аккаунт → Дополнительно."
+          }
+        }
+      }
+    },
+    "…and %lld more": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "…и ещё %lld"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

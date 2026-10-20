@@ -1,0 +1,101 @@
+name: NaviDrive
+
+options:
+  bundleIdPrefix: com.navidrive
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    ARCHS: arm64
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+
+schemes:
+  NaviDrive:
+    build:
+      targets:
+        NaviDrive: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
+targets:
+  NaviDrive:
+    type: application
+    platform: macOS
+    deploymentTarget: "15.0"
+    # Client ID/Secret Google OAuth: Config/NaviDrive.xcconfig подключает Config/Secrets.xcconfig (не в git).
+    configFiles:
+      Debug: Config/NaviDrive.xcconfig
+      Release: Config/NaviDrive.xcconfig
+    sources:
+      - path: Sources
+      # Только каталог ресурсов: исходники иконки (AppIcon-*.png, AppIcon-original.jpeg) в бандл не попадают.
+      - path: Resources/Assets.xcassets
+      # Локализация (en — язык разработки, ru — перевод): строки интерфейса, Info.plist, пункт Finder Services.
+      - path: Resources/Localization
+    dependencies:
+      - sdk: libsqlite3.tbd
+    settings:
+      base:
+        PRODUCT_NAME: NaviDrive
+        PRODUCT_BUNDLE_IDENTIFIER: com.navidrive.NaviDrive
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ARCHS: arm64
+        ONLY_ACTIVE_ARCH: NO
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        CODE_SIGN_IDENTITY: "NaviDrive Signing"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        COMBINE_HIDPI_IMAGES: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        STRING_CATALOG_GENERATE_SYMBOLS: NO
+      configs:
+        # В Release нет get-task-allow: к процессу нельзя подключиться отладчиком без прав администратора.
+        Release:
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+    preBuildScripts:
+      - name: Check Google OAuth credentials
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ -z "${GOOGLE_CLIENT_ID}" ] || [ -z "${GOOGLE_CLIENT_SECRET}" ]; then
+            echo "warning: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are empty in Config/Secrets.xcconfig — this build has no built-in Google sign-in; users will have to enter their own OAuth credentials in Settings."
+          fi
+    info:
+      path: Support/Info.plist
+      properties:
+        CFBundleName: NaviDrive
+        CFBundleDisplayName: NaviDrive
+        CFBundleDevelopmentRegion: en
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundlePackageType: APPL
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        LSApplicationCategoryType: public.app-category.productivity
+        NSPrincipalClass: NSApplication
+        NSHumanReadableCopyright: "NaviDrive"
+        NaviDriveGoogleClientID: $(GOOGLE_CLIENT_ID)
+        NaviDriveGoogleClientSecret: $(GOOGLE_CLIENT_SECRET)
+        NSServices:
+          - NSMenuItem:
+              default: Upload to Google Drive (NaviDrive)
+            NSMessage: uploadToGoogleDrive
+            NSPortName: NaviDrive
+            NSRequiredContext: {}
+            NSSendFileTypes:
+              - public.item
+              - public.folder
+            NSSendTypes:
+              - NSFilenamesPboardType
+              - public.file-url
