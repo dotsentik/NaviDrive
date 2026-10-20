@@ -50,12 +50,16 @@ struct MainView: View {
             // С .safeAreaInset прокрутка списка в sidebar macOS не всегда учитывала высоту блока,
             // и последние пункты («Настройки») оказывались под ним.
             VStack(spacing: 0) {
+                // Переключатель облака вместо заголовка «Google Drive»: разделы ниже — выбранного облака.
+                CloudSwitcher()
+                    .padding(.horizontal, 10)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
                 List(selection: $model.selection) {
-                    Section("Google Drive") {
-                        sidebarRow(.myDrive)
-                        sidebarRow(.sharedWithMe)
-                        sidebarRow(.sharedDrives)
-                        sidebarRow(.linked, badge: model.linkedItems.count)
+                    Section {
+                        ForEach(SidebarItem.cloudItems(for: model.activeCloud)) { item in
+                            sidebarRow(item, badge: item == .linked ? model.activeLinkedItems.count : 0)
+                        }
                     }
                     Section("Transfers") {
                         // Счётчик активных потоков в строке не показываем — активность видна в строке статуса.
@@ -122,7 +126,7 @@ struct MainView: View {
             // Отдельный носитель для второго алерта, чтобы он не конфликтовал с алертом ошибок.
             Color.clear
                 .alert("Sign in to Google again to upload", isPresented: $model.showReauthPrompt) {
-                    Button("Sign In to Google") { model.signIn() }
+                    Button("Sign In to Google") { model.signIn(.googleDrive) }
                     Button("Later", role: .cancel) {}
                 } message: {
                     Text("Your saved sign-in only lets NaviDrive read files. To upload files and change folders, sign in again and allow access to Google Drive on the Google screen. Downloads keep working in the meantime.")
@@ -138,7 +142,9 @@ struct MainView: View {
                     Button("Keep Paused") { model.resolveAccountSwitch(keepPaused: true) }
                     Button("Remove from Queue", role: .destructive) { model.resolveAccountSwitch(keepPaused: false) }
                 } message: { change in
-                    if change.previousEmail.isEmpty {
+                    if change.previousEmail.isEmpty, change.provider == .dropbox {
+                        Text("The download and upload queue belongs to the previous Dropbox account. What should be done with it?")
+                    } else if change.previousEmail.isEmpty {
                         Text("The download and upload queue belongs to the previous Google account. What should be done with it?")
                     } else {
                         Text("The download and upload queue belongs to \(change.previousEmail). What should be done with it?")
@@ -155,15 +161,17 @@ struct MainView: View {
     /// Содержимое detail-колонки для выбранного раздела sidebar.
     @ViewBuilder
     private var detailContent: some View {
+        // Облако в .id: при переключении браузер создаётся заново со своим путём навигации.
+        let cloud = model.activeCloud.rawValue
         switch model.selection ?? .myDrive {
         case .myDrive:
-            DriveBrowserView(scope: .myDrive).id("myDrive-\(model.driveReloadToken)")
+            DriveBrowserView(scope: .myDrive).id("myDrive-\(cloud)-\(model.driveReloadToken)")
         case .sharedWithMe:
-            DriveBrowserView(scope: .sharedWithMe).id("shared-\(model.driveReloadToken)")
+            DriveBrowserView(scope: .sharedWithMe).id("shared-\(cloud)-\(model.driveReloadToken)")
         case .sharedDrives:
-            DriveBrowserView(scope: .sharedDrives).id("drives-\(model.driveReloadToken)")
+            DriveBrowserView(scope: .sharedDrives).id("drives-\(cloud)-\(model.driveReloadToken)")
         case .linked:
-            DriveBrowserView(scope: .linked).id("linked-\(model.driveReloadToken)")
+            DriveBrowserView(scope: .linked).id("linked-\(cloud)-\(model.driveReloadToken)")
         case .downloads:
             DownloadManagerView()
         case .uploads:
@@ -177,9 +185,56 @@ struct MainView: View {
     /// строка остаётся видимой, но перестаёт выбираться (SwiftUI не находит у неё значения выбора) —
     /// именно так не открывались «Маршруты сохранения» и «Добавленные по ссылке».
     private func sidebarRow(_ item: SidebarItem, badge: Int = 0) -> some View {
-        Label(item.title, systemImage: item.systemImage)
+        Label(item.title(for: model.activeCloud), systemImage: item.systemImage(for: model.activeCloud))
             .badge(badge)
             .tag(item)
+    }
+}
+
+/// Переключатель облака вверху sidebar: сегменты «Google Drive | Dropbox», когда подключены оба;
+/// иначе — подключённое облако и кнопка подключения второго.
+private struct CloudSwitcher: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        let connected = model.connectedClouds
+        if connected.count > 1 {
+            Picker("Cloud", selection: $model.activeCloud) {
+                ForEach(connected, id: \.self) { cloud in
+                    Label(cloud.displayName, systemImage: cloud.systemImage).tag(cloud)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.large)
+            .help("Cloud shown in the sidebar")
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Label(model.activeCloud.displayName, systemImage: model.activeCloud.systemImage)
+                    .font(.headline)
+                if let missing = CloudProviderKind.allCases.first(where: { !connected.contains($0) }) {
+                    HStack(spacing: 6) {
+                        Button(String(localized: "Connect \(missing.displayName)…")) { model.signIn(missing) }
+                            .buttonStyle(.link)
+                            .disabled(model.account(missing).isSigningIn)
+                        if model.account(missing).isSigningIn {
+                            ProgressView().controlSize(.mini)
+                            Button("Cancel") { model.cancelSignIn(missing) }
+                                .buttonStyle(.link)
+                        }
+                    }
+                    .font(.caption)
+                    if let error = model.account(missing).signInError {
+                        Text(error)
+                            .font(.caption2).foregroundStyle(.orange)
+                            .lineLimit(3)
+                            .help(error)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

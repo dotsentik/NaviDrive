@@ -32,6 +32,7 @@ struct CloudPermissions: Sendable, Hashable {
 
 /// Формат, в который документ облака конвертируется при скачивании (документы Google и т. п.).
 struct CloudExportFormat: Sendable, Hashable {
+    /// Формат для API облака: MIME-тип у Google, значение `export_format` у Dropbox.
     let mimeType: String
     let fileExtension: String
 }
@@ -109,10 +110,18 @@ struct CloudItem: Sendable, Identifiable, Hashable {
         return true
     }
 
+    /// Расширения документов-заглушек, которые при экспорте заменяются расширением формата.
+    private static let placeholderExtensions: Set<String> = ["paper", "gdoc", "gsheet", "gslides"]
+
     /// Имя локального файла (для экспортируемых документов добавляется расширение экспорта).
     var localFileName: String {
-        let base = PathResolver.sanitize(name)
-        if let format = exportFormat, !base.lowercased().hasSuffix("." + format.fileExtension) {
+        var base = PathResolver.sanitize(name)
+        guard let format = exportFormat else { return base }
+        let ext = (base as NSString).pathExtension.lowercased()
+        if Self.placeholderExtensions.contains(ext) {
+            base = (base as NSString).deletingPathExtension
+        }
+        if !base.lowercased().hasSuffix("." + format.fileExtension) {
             return base + "." + format.fileExtension
         }
         return base
@@ -139,6 +148,8 @@ enum CloudLocation: Sendable, Hashable {
     case sharedWithMe
     /// Список общих пространств (общих дисков) в виде папок.
     case sharedSpaces
+    /// Папка внутри общей ссылки: `path` — путь относительно корня ссылки ("" — сам корень).
+    case linkFolder(url: String, path: String)
 }
 
 struct CloudPage: Sendable {
@@ -184,7 +195,8 @@ enum CloudUploadState: Sendable {
 enum CloudTransferError: Error, Sendable {
     /// HTTP 401: учётные данные нужно обновить и повторить запрос.
     case unauthorized(credential: String)
-    case rateLimited(String)
+    /// `retryAfter` — пауза, которую назначил сервер (заголовок Retry-After).
+    case rateLimited(String, retryAfter: TimeInterval?)
     /// Квота на скачивание файла исчерпана — повтор через часы.
     case quotaExceeded(String)
     case transient(String)
@@ -199,7 +211,7 @@ enum CloudAPIError: LocalizedError {
     /// Сохранённый вход выдан без права записи.
     case insufficientScope
     /// В облаке закончилось место.
-    case storageFull
+    case storageFull(CloudProviderKind)
 
     var errorDescription: String? {
         switch self {
@@ -207,7 +219,8 @@ enum CloudAPIError: LocalizedError {
         case .invalidResponse: String(localized: "Invalid server response")
         case .uploadSessionMissing: String(localized: "The server didn’t return an upload session URL")
         case .insufficientScope: String(localized: "Sign in to Google again to upload and edit files")
-        case .storageFull: String(localized: "Google Drive is out of storage")
+        case .storageFull(.googleDrive): String(localized: "Google Drive is out of storage")
+        case .storageFull(.dropbox): String(localized: "Dropbox is out of storage")
         }
     }
 

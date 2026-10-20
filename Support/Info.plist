@@ -54,6 +54,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NaviDriveDropboxAppKey</key>
+	<string>$(DROPBOX_APP_KEY)</string>
 	<key>NaviDriveGoogleClientID</key>
 	<string>$(GOOGLE_CLIENT_ID)</string>
 	<key>NaviDriveGoogleClientSecret</key>

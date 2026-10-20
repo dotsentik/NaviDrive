@@ -39,7 +39,7 @@ struct DownloadWorker: Sendable {
 
     private enum AttemptError: Error {
         case transient(String)
-        case rateLimited(String)
+        case rateLimited(String, retryAfter: TimeInterval?)
         case quota(String)
         case fatal(String)
         case volume(String)
@@ -82,13 +82,14 @@ struct DownloadWorker: Sendable {
                     return .failed(error.localizedDescription)
                 }
                 continue
-            } catch AttemptError.rateLimited(let message) {
+            } catch AttemptError.rateLimited(let message, let retryAfter) {
                 // Лимит запросов облака: регулятор сразу уменьшает число потоков вдвое,
                 // а эта задача повторяется после паузы с разбросом.
                 await scheduler.reportRateLimit()
                 rateLimitRetries += 1
                 guard rateLimitRetries <= Self.maxRateLimitRetries else { return .failed(message) }
-                let delay = Self.jitteredDelay(attempt: rateLimitRetries, cap: Self.rateLimitMaxDelay)
+                // Пауза, назначенная сервером (Retry-After), соблюдается всегда.
+                let delay = max(Self.jitteredDelay(attempt: rateLimitRetries, cap: Self.rateLimitMaxDelay), retryAfter ?? 0)
                 db.recordRetry(id: task.id, retryCount: retries + rateLimitRetries,
                                error: String(localized: "\(message) — retrying in \(Int(delay.rounded())) s"))
                 do {
@@ -250,9 +251,9 @@ struct DownloadWorker: Sendable {
             throw AttemptError.restart
         default:
             let body = await Self.readBody(stream, limit: 16_384)
-            switch provider.downloadFailure(status: http.statusCode, body: body, task: task, credential: token) {
+            switch provider.downloadFailure(http, body: body, task: task, credential: token) {
             case .unauthorized(let credential): throw AttemptError.unauthorized(credential)
-            case .rateLimited(let message): throw AttemptError.rateLimited(message)
+            case .rateLimited(let message, let retryAfter): throw AttemptError.rateLimited(message, retryAfter: retryAfter)
             case .quotaExceeded(let message): throw AttemptError.quota(message)
             case .transient(let message): throw AttemptError.transient(message)
             case .fatal(let message): throw AttemptError.fatal(message)

@@ -42,7 +42,8 @@ actor DownloadScheduler {
     private var started = false
     private var isPaused = false
     private var isOnline = true
-    private var isAuthorized = false
+    /// Облака с действующим входом: задачи остальных ждут в очереди.
+    private var authorized: Set<CloudProviderKind> = []
 
     private var scanningFolders = 0
     private var scannedFiles = 0
@@ -88,10 +89,10 @@ actor DownloadScheduler {
     // MARK: - Lifecycle
 
     /// Подхватывает незавершённые задачи после перезапуска приложения.
-    func start(authorized: Bool) {
+    func start(authorized: Set<CloudProviderKind>) {
         guard !started else { return }
         started = true
-        isAuthorized = authorized
+        self.authorized = authorized
         db.moveStatuses([.downloading, .waitingForNetwork], to: .queued)
         // Незавершённые задачи после перезапуска — тоже сессия (уведомление в конце без имени проекта).
         if db.totals().pendingCount > 0 { session.active = true }
@@ -116,9 +117,14 @@ actor DownloadScheduler {
         schedule()
     }
 
-    func setAuthorized(_ authorized: Bool) {
-        isAuthorized = authorized
-        if authorized { schedule() } else { stopAll(.requeue) }
+    func setAuthorized(_ provider: CloudProviderKind, _ isAuthorized: Bool) {
+        if isAuthorized {
+            authorized.insert(provider)
+            schedule()
+        } else {
+            authorized.remove(provider)
+            stopAll(.requeue, provider: provider)
+        }
     }
 
     func setOnline(_ online: Bool) {
@@ -268,13 +274,13 @@ actor DownloadScheduler {
     ]
 
     /// Очередь предыдущего аккаунта после входа другим: всё незавершённое — на паузу (прогресс сохраняется).
-    func pauseUnfinished() {
-        db.moveStatuses(Self.unfinishedStatuses, to: .paused)
+    func pauseUnfinished(_ provider: CloudProviderKind) {
+        db.moveStatuses(Self.unfinishedStatuses, to: .paused, provider: provider)
     }
 
     /// Очередь предыдущего аккаунта после входа другим: незавершённое удаляется из очереди вместе с частями файлов.
-    func cancelUnfinished() {
-        for task in db.tasks(statuses: Self.unfinishedStatuses + [.paused, .failed], limit: 1_000_000)
+    func cancelUnfinished(_ provider: CloudProviderKind) {
+        for task in db.tasks(statuses: Self.unfinishedStatuses + [.paused, .failed], limit: 1_000_000, provider: provider)
         where running[task.id] == nil {
             db.updateStatus(id: task.id, status: .cancelled)
             try? FileManager.default.removeItem(atPath: task.partPath)
@@ -390,7 +396,7 @@ actor DownloadScheduler {
         return EngineSnapshot(
             isPaused: isPaused,
             isOnline: isOnline,
-            isAuthorized: isAuthorized,
+            isAuthorized: !authorized.isEmpty,
             bytesPerSecond: meter.bytesPerSecond(window: 3, now: Date().timeIntervalSinceReferenceDate),
             liveProgress: liveProgress,
             runningCount: running.count,
@@ -411,10 +417,10 @@ actor DownloadScheduler {
     // MARK: - Balancing
 
     private func rebalance() {
-        guard started, isAuthorized, isOnline, !isPaused else { return }
+        guard started, !authorized.isEmpty, isOnline, !isPaused else { return }
         let speed = meter.bytesPerSecond(window: AdaptiveConcurrency.evaluationWindowSeconds,
                                          now: Date().timeIntervalSinceReferenceDate)
-        let saturated = running.count >= balancer.limit && !db.queueHeads().isEmpty
+        let saturated = running.count >= balancer.limit && !db.queueHeads(providers: authorized).isEmpty
         balancer.evaluate(speed: speed, saturated: saturated)
         schedule()
     }
@@ -452,17 +458,19 @@ actor DownloadScheduler {
     }
 
     private func schedule() {
-        guard started, isAuthorized, isOnline, !isPaused else { return }
+        guard started, !authorized.isEmpty, isOnline, !isPaused else { return }
         while running.count < balancer.limit {
             let task: DownloadTask
             let sizeClass: TaskSizeClass
             // Сначала — файлы, которые пользователь возобновил вручную.
-            if let prioritized = db.claimNextPrioritized(allowExport: runningCounts().export < Self.exportLimit) {
+            if let prioritized = db.claimNextPrioritized(allowExport: runningCounts().export < Self.exportLimit,
+                                                         providers: authorized) {
                 task = prioritized
                 sizeClass = TaskSizeClass(prioritized)
             } else {
-                let heads = db.queueHeads()
-                guard let picked = pickClass(heads: heads), let claimed = db.claimNext(sizeClass: picked) else { return }
+                let heads = db.queueHeads(providers: authorized)
+                guard let picked = pickClass(heads: heads),
+                      let claimed = db.claimNext(sizeClass: picked, providers: authorized) else { return }
                 task = claimed
                 sizeClass = picked
             }
@@ -560,8 +568,8 @@ actor DownloadScheduler {
             }
         case .signedOut:
             // Вход отозван: очередь стоит до нового входа, скачанная часть файла сохранена.
-            isAuthorized = false
-            stopAll(.requeue)
+            authorized.remove(task.provider)
+            stopAll(.requeue, provider: task.provider)
             switch reason {
             case .pauseTask:
                 db.updateStatus(id: task.id, status: .paused)
@@ -695,8 +703,9 @@ actor DownloadScheduler {
         entry.handle.cancel()
     }
 
-    private func stopAll(_ reason: StopReason) {
-        for id in running.keys { stop(id, reason) }
+    /// - Parameter provider: только задачи этого облака (nil — все).
+    private func stopAll(_ reason: StopReason, provider: CloudProviderKind? = nil) {
+        for (id, entry) in running where provider == nil || entry.task.provider == provider { stop(id, reason) }
     }
 
     private func removePartFile(_ id: String) {

@@ -22,18 +22,27 @@ struct AddLinkSheet: View {
             Text("Add by Link").font(.title2.weight(.semibold))
 
             HStack {
-                TextField("Google Drive link or ID", text: $text,
-                          prompt: Text("https://drive.google.com/drive/folders/…"))
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(lookup)
-                    .disabled(!model.isSignedIn)
+                Group {
+                    if model.activeCloud == .dropbox {
+                        TextField("Dropbox shared link", text: $text,
+                                  prompt: Text(verbatim: "https://www.dropbox.com/scl/fo/…"))
+                    } else {
+                        TextField("Google Drive link or ID", text: $text,
+                                  prompt: Text("https://drive.google.com/drive/folders/…"))
+                    }
+                }
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(lookup)
+                .disabled(!model.isActiveCloudSignedIn)
                 Button("Find", action: lookup)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty || isLookingUp || !model.isSignedIn)
+                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty || isLookingUp || !model.isActiveCloudSignedIn)
             }
 
-            if !model.isSignedIn {
-                Label("Sign in to Google in Settings first.", systemImage: "person.crop.circle.badge.exclamationmark")
+            if !model.isActiveCloudSignedIn {
+                Label(model.activeCloud == .dropbox ? String(localized: "Connect Dropbox in Settings first.")
+                                                    : String(localized: "Sign in to Google in Settings first."),
+                      systemImage: "person.crop.circle.badge.exclamationmark")
                     .foregroundStyle(.secondary)
             } else if isLookingUp {
                 HStack(spacing: 8) {
@@ -186,7 +195,7 @@ struct AddLinkSheet: View {
     private func prefillFromPasteboard() {
         guard text.isEmpty, let string = NSPasteboard.general.string(forType: .string),
               string.count < 2_000, model.provider.parseLink(string) != nil,
-              string.contains("google.com") else { return }
+              string.contains(model.activeCloud == .dropbox ? "dropbox.com" : "google.com") else { return }
         text = string.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

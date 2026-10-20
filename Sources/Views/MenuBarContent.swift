@@ -25,14 +25,21 @@ struct MenuBarContent: View {
         Divider()
 
         if model.isSignedIn {
-            // Вошедший аккаунт: имя и email.
-            if let name = model.userName { Text(verbatim: name) }
-            if let email = model.userEmail { Text(verbatim: email) }
+            // Подключённые облака: аккаунт каждого (email или имя).
+            ForEach(model.connectedClouds, id: \.self) { cloud in
+                let account = model.account(cloud)
+                Label {
+                    Text(verbatim: "\(cloud.displayName): \(account.userEmail ?? account.userName ?? "…")")
+                } icon: {
+                    Image(systemName: cloud.systemImage)
+                }
+            }
             Divider()
+            // Общий прогресс очередей обоих облаков.
             status
         } else {
             // Вместо статуса загрузок — вход: снова открывает окно приветствия.
-            Button("Sign In with Google…") {
+            Button("Connect a Cloud…") {
                 WindowOpener.openAction = { id in openWindow(id: id) }
                 WindowOpener.showWelcomeWindow()
             }

@@ -204,7 +204,10 @@ private struct DownloadTaskRow: View, Equatable {
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(task.fileName).lineLimit(1).truncationMode(.middle)
+                HStack(spacing: 5) {
+                    CloudBadge(cloud: task.provider)
+                    Text(task.fileName).lineLimit(1).truncationMode(.middle)
+                }
                 Text(PathResolver.displayPath(task.targetDirPath))
                     .font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.head)
@@ -214,7 +217,9 @@ private struct DownloadTaskRow: View, Equatable {
                     if task.status == .completed && task.verified {
                         Text("verified ✓")
                             .foregroundStyle(.green)
-                            .help("MD5 matches the Google Drive checksum")
+                            .help(task.provider == .dropbox
+                                  ? String(localized: "content_hash matches the Dropbox checksum")
+                                  : String(localized: "MD5 matches the Google Drive checksum"))
                     }
                     if task.retryCount > 0 && ![.completed, .paused].contains(task.status) {
                         Text("Retries: \(task.retryCount)")

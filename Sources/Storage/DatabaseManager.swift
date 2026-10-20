@@ -154,9 +154,21 @@ final class DatabaseManager: @unchecked Sendable {
                 try execute("ALTER TABLE \(table) ADD COLUMN provider TEXT NOT NULL DEFAULT '\(CloudProviderKind.googleDrive.rawValue)';")
             }
         }
-        try rebuildWithProviderKey("download_tasks", schema: Self.downloadTasksSchema, columns: Self.downloadTasksStoredColumns)
-        try rebuildWithProviderKey("upload_tasks", schema: Self.uploadTasksSchema, columns: Self.uploadTasksColumns)
-        try rebuildWithProviderKey("custom_routes", schema: Self.customRoutesSchema, columns: Self.customRoutesColumns)
+        // v7 (Dropbox): путь в облаке у задач скачивания, экспорт документов Dropbox в классе «экспорт»,
+        // провайдер в «Добавленных по ссылке». Пересборка совмещена с v6 — таблица копируется один раз.
+        let downloadColumns = try storedColumns("download_tasks")
+        if try keyColumnCount("download_tasks") == 1 || !downloadColumns.contains("cloud_path") {
+            try rebuild("download_tasks", schema: Self.downloadTasksSchema, columns: Self.downloadTasksStoredColumns)
+        }
+        if try keyColumnCount("upload_tasks") == 1 {
+            try rebuild("upload_tasks", schema: Self.uploadTasksSchema, columns: Self.uploadTasksColumns)
+        }
+        if try keyColumnCount("custom_routes") == 1 {
+            try rebuild("custom_routes", schema: Self.customRoutesSchema, columns: Self.customRoutesColumns)
+        }
+        if try keyColumnCount("linked_items") == 1 {
+            try rebuild("linked_items", schema: Self.linkedItemsSchema, columns: Self.linkedItemsColumns)
+        }
     }
 
     /// Индексы создаются после миграций: пересборка таблицы удаляет её индексы.
@@ -181,8 +193,11 @@ final class DatabaseManager: @unchecked Sendable {
     private static let downloadTasksStoredColumns = """
         id, drive_file_id, file_name, mime_type, expected_size, downloaded_size, md5_checksum, target_dir_path,
         status, retry_count, last_error, updated_at, resource_key, drive_modified_at, verified, checksum_failures,
-        quota_attempts, next_attempt_at, priority, provider
+        quota_attempts, next_attempt_at, priority, provider, cloud_path
         """
+
+    /// Документы, которые скачиваются только экспортом (класс 2 умной очереди).
+    private static let exportTypePrefixes = ["application/vnd.google-apps.", DropboxProvider.exportContentTypePrefix]
 
     private static let downloadTasksSchema = """
         id TEXT NOT NULL,
@@ -205,9 +220,10 @@ final class DatabaseManager: @unchecked Sendable {
         next_attempt_at INTEGER,
         priority INTEGER NOT NULL DEFAULT 0,
         provider TEXT NOT NULL DEFAULT 'googleDrive',
+        cloud_path TEXT,
         size_class INTEGER GENERATED ALWAYS AS (
             CASE
-                WHEN substr(mime_type, 1, 28) = 'application/vnd.google-apps.' THEN 2
+                WHEN \(exportTypePrefixes.map { "substr(mime_type, 1, \($0.count)) = '\($0)'" }.joined(separator: " OR ")) THEN 2
                 WHEN expected_size < \(TaskSizeClass.smallFileThreshold) THEN 0
                 ELSE 1
             END
@@ -256,20 +272,47 @@ final class DatabaseManager: @unchecked Sendable {
         PRIMARY KEY (provider, drive_id)
         """
 
-    /// Первичный ключ SQLite нельзя изменить через ALTER TABLE, поэтому таблица с ключом по одному id
+    private static let linkedItemsColumns = "drive_id, name, mime_type, resource_key, size, drive_id_of_shared_drive, added_at, provider"
+
+    private static let linkedItemsSchema = """
+        drive_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        resource_key TEXT,
+        size INTEGER,
+        drive_id_of_shared_drive TEXT,
+        added_at INTEGER NOT NULL,
+        provider TEXT NOT NULL DEFAULT 'googleDrive',
+        PRIMARY KEY (provider, drive_id)
+        """
+
+    private func keyColumnCount(_ table: String) throws -> Int {
+        try query("PRAGMA table_info(\(table))") { s in sqlite3_column_int(s, 5) }.filter { $0 > 0 }.count
+    }
+
+    /// Обычные (не генерируемые) колонки таблицы.
+    private func storedColumns(_ table: String) throws -> Set<String> {
+        Set(try query("PRAGMA table_xinfo(\(table))") { s in
+            sqlite3_column_int(s, 6) == 0 ? Self.text(s, 1) : nil
+        }.compactMap { $0 })
+    }
+
+    /// Первичный ключ и генерируемые колонки SQLite нельзя изменить через ALTER TABLE, поэтому таблица
     /// пересобирается одной транзакцией: новая таблица, копия всех строк с прежними rowid
-    /// (порядок очереди сохраняется), удаление старой, переименование. При ошибке — откат без потерь.
-    private func rebuildWithProviderKey(_ table: String, schema: String, columns: String) throws {
-        let keyColumns = try query("PRAGMA table_info(\(table))") { s in sqlite3_column_int(s, 5) }.filter { $0 > 0 }
-        guard keyColumns.count == 1 else { return }
+    /// (порядок очереди сохраняется), удаление старой, переименование. Копируются колонки, которые
+    /// есть в старой таблице; новые получают значения по умолчанию. При ошибке — откат без потерь.
+    private func rebuild(_ table: String, schema: String, columns: String) throws {
+        let existing = try storedColumns(table)
+        let copied = columns.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter(existing.contains).joined(separator: ", ")
         lock.lock(); defer { lock.unlock() }
         try execute("BEGIN IMMEDIATE TRANSACTION;")
         do {
-            try execute("DROP TABLE IF EXISTS \(table)_v6;")
-            try execute("CREATE TABLE \(table)_v6 (\(schema));")
-            try execute("INSERT INTO \(table)_v6 (rowid, \(columns)) SELECT rowid, \(columns) FROM \(table);")
+            try execute("DROP TABLE IF EXISTS \(table)_rebuild;")
+            try execute("CREATE TABLE \(table)_rebuild (\(schema));")
+            try execute("INSERT INTO \(table)_rebuild (rowid, \(copied)) SELECT rowid, \(copied) FROM \(table);")
             try execute("DROP TABLE \(table);")
-            try execute("ALTER TABLE \(table)_v6 RENAME TO \(table);")
+            try execute("ALTER TABLE \(table)_rebuild RENAME TO \(table);")
             try execute("COMMIT;")
         } catch {
             try? execute("ROLLBACK;")
@@ -392,10 +435,10 @@ final class DatabaseManager: @unchecked Sendable {
 
     func linkedItems() -> [LinkedItem] {
         (try? query("""
-            SELECT drive_id, name, mime_type, resource_key, size, drive_id_of_shared_drive, added_at
+            SELECT drive_id, name, mime_type, resource_key, size, drive_id_of_shared_drive, added_at, provider
             FROM linked_items ORDER BY added_at DESC
             """, reader: true) { s in
-            LinkedItem(driveId: Self.text(s, 0) ?? "", name: Self.text(s, 1) ?? "", mimeType: Self.text(s, 2) ?? "",
+            LinkedItem(provider: Self.provider(s, 7), driveId: Self.text(s, 0) ?? "", name: Self.text(s, 1) ?? "", mimeType: Self.text(s, 2) ?? "",
                        resourceKey: Self.text(s, 3), size: Self.optionalInt(s, 4),
                        sharedDriveId: Self.text(s, 5), addedAt: sqlite3_column_int64(s, 6))
         }) ?? []
@@ -403,18 +446,19 @@ final class DatabaseManager: @unchecked Sendable {
 
     func saveLinked(_ item: LinkedItem) throws {
         try run("""
-            INSERT INTO linked_items (drive_id, name, mime_type, resource_key, size, drive_id_of_shared_drive, added_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(drive_id) DO UPDATE SET name = excluded.name, mime_type = excluded.mime_type,
+            INSERT INTO linked_items (drive_id, name, mime_type, resource_key, size, drive_id_of_shared_drive, added_at, provider)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(provider, drive_id) DO UPDATE SET name = excluded.name, mime_type = excluded.mime_type,
                 resource_key = COALESCE(excluded.resource_key, linked_items.resource_key),
                 size = COALESCE(excluded.size, linked_items.size),
                 drive_id_of_shared_drive = excluded.drive_id_of_shared_drive
             """, [.text(item.driveId), .text(item.name), .text(item.mimeType), .text(item.resourceKey),
-                  item.size.map { .int($0) } ?? .text(nil), .text(item.sharedDriveId), .int(item.addedAt)])
+                  item.size.map { .int($0) } ?? .text(nil), .text(item.sharedDriveId), .int(item.addedAt),
+                  .text(item.provider.rawValue)])
     }
 
-    func deleteLinked(driveId: String) throws {
-        try run("DELETE FROM linked_items WHERE drive_id = ?", [.text(driveId)])
+    func deleteLinked(provider: CloudProviderKind, driveId: String) throws {
+        try run("DELETE FROM linked_items WHERE provider = ? AND drive_id = ?", [.text(provider.rawValue), .text(driveId)])
     }
 
     // MARK: - Download tasks
@@ -422,7 +466,7 @@ final class DatabaseManager: @unchecked Sendable {
     private static let taskColumns = """
         id, drive_file_id, file_name, mime_type, expected_size, downloaded_size, md5_checksum,
         target_dir_path, status, retry_count, last_error, updated_at,
-        resource_key, drive_modified_at, verified, checksum_failures, quota_attempts, next_attempt_at, provider
+        resource_key, drive_modified_at, verified, checksum_failures, quota_attempts, next_attempt_at, provider, cloud_path
         """
 
     private static func optionalInt(_ s: OpaquePointer, _ column: Int32) -> Int64? {
@@ -449,7 +493,8 @@ final class DatabaseManager: @unchecked Sendable {
             checksumFailures: Int(sqlite3_column_int64(s, 15)),
             quotaAttempts: Int(sqlite3_column_int64(s, 16)),
             nextAttemptAt: optionalInt(s, 17),
-            provider: provider(s, 18)
+            provider: provider(s, 18),
+            cloudPath: text(s, 19)
         )
     }
 
@@ -483,7 +528,7 @@ final class DatabaseManager: @unchecked Sendable {
         do {
             let sql = """
                 INSERT INTO download_tasks (\(Self.taskColumns))
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, 0, NULL, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, 0, NULL, ?, ?)
                 ON CONFLICT(provider, id) DO UPDATE SET
                     file_name = excluded.file_name,
                     mime_type = excluded.mime_type,
@@ -500,6 +545,7 @@ final class DatabaseManager: @unchecked Sendable {
                     checksum_failures = 0,
                     quota_attempts = 0,
                     next_attempt_at = NULL,
+                    cloud_path = excluded.cloud_path,
                     updated_at = excluded.updated_at
                 """
             var statement: OpaquePointer?
@@ -525,6 +571,7 @@ final class DatabaseManager: @unchecked Sendable {
                 if let modified = task.driveModifiedAt { sqlite3_bind_int64(statement, 13, modified) } else { sqlite3_bind_null(statement, 13) }
                 sqlite3_bind_int64(statement, 14, task.verified ? 1 : 0)
                 sqlite3_bind_text(statement, 15, task.provider.rawValue, -1, transient)
+                if let path = task.cloudPath { sqlite3_bind_text(statement, 16, path, -1, transient) } else { sqlite3_bind_null(statement, 16) }
                 guard sqlite3_step(statement) == SQLITE_DONE else { throw DatabaseError.step(errorMessage) }
             }
             try execute("COMMIT;")
@@ -538,13 +585,21 @@ final class DatabaseManager: @unchecked Sendable {
         try? query("SELECT \(Self.taskColumns) FROM download_tasks WHERE id = ?", [.text(id)], map: Self.task).first
     }
 
+    /// Условие «задача одного из облаков» (облака без входа в очередь не берутся).
+    private static func providerFilter(_ providers: Set<CloudProviderKind>) -> (sql: String, values: [Value]) {
+        let sorted = providers.map(\.rawValue).sorted()
+        guard !sorted.isEmpty else { return ("0", []) }
+        return ("provider IN (\(sorted.map { _ in "?" }.joined(separator: ",")))", sorted.map { .text($0) })
+    }
+
     /// rowid первой задачи в очереди для каждого класса (отсутствие ключа — класс пуст).
-    func queueHeads() -> [TaskSizeClass: Int64] {
+    func queueHeads(providers: Set<CloudProviderKind>) -> [TaskSizeClass: Int64] {
         var heads: [TaskSizeClass: Int64] = [:]
+        let filter = Self.providerFilter(providers)
         for sizeClass in TaskSizeClass.allCases {
             let rowid = try? query(
-                "SELECT rowid FROM download_tasks WHERE status = 'queued' AND size_class = ? ORDER BY rowid LIMIT 1",
-                [.int(Int64(sizeClass.rawValue))]) { s in sqlite3_column_int64(s, 0) }.first
+                "SELECT rowid FROM download_tasks WHERE status = 'queued' AND size_class = ? AND \(filter.sql) ORDER BY rowid LIMIT 1",
+                [.int(Int64(sizeClass.rawValue))] + filter.values) { s in sqlite3_column_int64(s, 0) }.first
             if let rowid { heads[sizeClass] = rowid }
         }
         return heads
@@ -552,12 +607,13 @@ final class DatabaseManager: @unchecked Sendable {
 
     /// Атомарно забирает следующую задачу класса: в одной транзакции переводит `queued → downloading`.
     /// Условие `AND status = 'queued'` гарантирует, что одна и та же задача не будет запущена дважды.
-    func claimNext(sizeClass: TaskSizeClass) -> DownloadTask? {
+    func claimNext(sizeClass: TaskSizeClass, providers: Set<CloudProviderKind>) -> DownloadTask? {
         lock.lock(); defer { lock.unlock() }
+        let filter = Self.providerFilter(providers)
         guard (try? execute("BEGIN IMMEDIATE TRANSACTION;")) != nil else { return nil }
         let task = (try? query(
-            "SELECT \(Self.taskColumns) FROM download_tasks WHERE status = 'queued' AND size_class = ? ORDER BY rowid LIMIT 1",
-            [.int(Int64(sizeClass.rawValue))], map: Self.task))?.first
+            "SELECT \(Self.taskColumns) FROM download_tasks WHERE status = 'queued' AND size_class = ? AND \(filter.sql) ORDER BY rowid LIMIT 1",
+            [.int(Int64(sizeClass.rawValue))] + filter.values, map: Self.task))?.first
         guard let task else {
             _ = try? execute("COMMIT;")
             return nil
@@ -576,13 +632,14 @@ final class DatabaseManager: @unchecked Sendable {
 
     /// Атомарно забирает задачу, возобновлённую вручную (priority > 0), раньше обычной очереди.
     /// - Parameter allowExport: можно ли взять экспорт Google Docs (лимит 2 одновременных).
-    func claimNextPrioritized(allowExport: Bool) -> DownloadTask? {
+    func claimNextPrioritized(allowExport: Bool, providers: Set<CloudProviderKind>) -> DownloadTask? {
         lock.lock(); defer { lock.unlock() }
+        let filter = Self.providerFilter(providers)
         guard (try? execute("BEGIN IMMEDIATE TRANSACTION;")) != nil else { return nil }
         let exportFilter = allowExport ? "" : "AND size_class <> \(TaskSizeClass.export.rawValue)"
         let task = (try? query(
-            "SELECT \(Self.taskColumns) FROM download_tasks WHERE status = 'queued' AND priority > 0 \(exportFilter) ORDER BY rowid LIMIT 1",
-            map: Self.task))?.first
+            "SELECT \(Self.taskColumns) FROM download_tasks WHERE status = 'queued' AND priority > 0 \(exportFilter) AND \(filter.sql) ORDER BY rowid LIMIT 1",
+            filter.values, map: Self.task))?.first
         guard let task else {
             _ = try? execute("COMMIT;")
             return nil
@@ -689,11 +746,17 @@ final class DatabaseManager: @unchecked Sendable {
 
     /// Переводит задачи из одних статусов в другой (например, после перезапуска приложения).
     @discardableResult
-    func moveStatuses(_ from: [TaskStatus], to: TaskStatus) -> Int {
+    /// - Parameter provider: только задачи этого облака (nil — всех).
+    func moveStatuses(_ from: [TaskStatus], to: TaskStatus, provider: CloudProviderKind? = nil) -> Int {
         guard !from.isEmpty else { return 0 }
         let placeholders = from.map { _ in "?" }.joined(separator: ",")
-        let values: [Value] = [.text(to.rawValue), .int(Self.now)] + from.map { .text($0.rawValue) }
-        return (try? run("UPDATE download_tasks SET status = ?, updated_at = ? WHERE status IN (\(placeholders))", values)) ?? 0
+        var values: [Value] = [.text(to.rawValue), .int(Self.now)] + from.map { .text($0.rawValue) }
+        var sql = "UPDATE download_tasks SET status = ?, updated_at = ? WHERE status IN (\(placeholders))"
+        if let provider {
+            sql += " AND provider = ?"
+            values.append(.text(provider.rawValue))
+        }
+        return (try? run(sql, values)) ?? 0
     }
 
     /// Корневые пути томов (`/Volumes/<Name>`), задачи на которых ждут подключения диска.
@@ -817,16 +880,18 @@ final class DatabaseManager: @unchecked Sendable {
         _ = try? run("DELETE FROM download_tasks WHERE status IN (\(placeholders))", statuses.map { .text($0.rawValue) })
     }
 
-    func tasks(statuses: [TaskStatus], limit: Int = 500) -> [DownloadTask] {
+    func tasks(statuses: [TaskStatus], limit: Int = 500, provider: CloudProviderKind? = nil) -> [DownloadTask] {
         let placeholders = statuses.map { _ in "?" }.joined(separator: ",")
         let order = statuses.allSatisfy({ TaskStatus.pending.contains($0) }) ? "rowid ASC" : "updated_at DESC"
+        let providerSQL = provider == nil ? "" : "AND provider = ?"
         let sql = """
             SELECT \(Self.taskColumns) FROM download_tasks
-            WHERE status IN (\(placeholders))
+            WHERE status IN (\(placeholders)) \(providerSQL)
             ORDER BY CASE status WHEN 'downloading' THEN 0 ELSE 1 END, \(order)
             LIMIT ?
             """
-        let values: [Value] = statuses.map { .text($0.rawValue) } + [.int(Int64(limit))]
+        let values: [Value] = statuses.map { .text($0.rawValue) } + (provider.map { [.text($0.rawValue)] } ?? [])
+            + [.int(Int64(limit))]
         return (try? query(sql, values, reader: true, map: Self.task)) ?? []
     }
 
@@ -913,11 +978,13 @@ extension DatabaseManager {
     }
 
     /// Атомарно забирает следующую задачу (сначала возобновлённые вручную, затем в порядке очереди).
-    func claimNextUpload() -> UploadTask? {
+    func claimNextUpload(providers: Set<CloudProviderKind>) -> UploadTask? {
         lock.lock(); defer { lock.unlock() }
+        let filter = Self.providerFilter(providers)
         guard var task = (try? query("""
-            SELECT \(Self.uploadColumns) FROM upload_tasks WHERE status = 'queued' ORDER BY priority DESC, rowid LIMIT 1
-            """, map: Self.upload))?.first else { return nil }
+            SELECT \(Self.uploadColumns) FROM upload_tasks WHERE status = 'queued' AND \(filter.sql)
+            ORDER BY priority DESC, rowid LIMIT 1
+            """, filter.values, map: Self.upload))?.first else { return nil }
         let changed = (try? run("UPDATE upload_tasks SET status = 'uploading', priority = 0, updated_at = ? WHERE id = ? AND status = 'queued'",
                                 [.int(Self.now), .text(task.id)])) ?? 0
         guard changed == 1 else { return nil }
@@ -935,10 +1002,12 @@ extension DatabaseManager {
                            [.text(status.rawValue), .int(Int64(limit))], reader: true, map: Self.upload)) ?? []
     }
 
-    func uploads(statuses: [UploadStatus]) -> [UploadTask] {
+    func uploads(statuses: [UploadStatus], provider: CloudProviderKind? = nil) -> [UploadTask] {
         let placeholders = statuses.map { _ in "?" }.joined(separator: ",")
-        return (try? query("SELECT \(Self.uploadColumns) FROM upload_tasks WHERE status IN (\(placeholders)) ORDER BY rowid",
-                           statuses.map { .text($0.rawValue) }, map: Self.upload)) ?? []
+        let providerSQL = provider == nil ? "" : "AND provider = ?"
+        return (try? query("SELECT \(Self.uploadColumns) FROM upload_tasks WHERE status IN (\(placeholders)) \(providerSQL) ORDER BY rowid",
+                           statuses.map { .text($0.rawValue) } + (provider.map { [.text($0.rawValue)] } ?? []),
+                           map: Self.upload)) ?? []
     }
 
     func updateUploadStatus(id: String, status: UploadStatus, error: String? = nil, kind: UploadErrorKind? = nil) {
@@ -982,11 +1051,16 @@ extension DatabaseManager {
     }
 
     @discardableResult
-    func moveUploadStatuses(_ from: [UploadStatus], to: UploadStatus) -> Int {
+    func moveUploadStatuses(_ from: [UploadStatus], to: UploadStatus, provider: CloudProviderKind? = nil) -> Int {
         guard !from.isEmpty else { return 0 }
         let placeholders = from.map { _ in "?" }.joined(separator: ",")
-        let values: [Value] = [.text(to.rawValue), .int(Self.now)] + from.map { .text($0.rawValue) }
-        return (try? run("UPDATE upload_tasks SET status = ?, updated_at = ? WHERE status IN (\(placeholders))", values)) ?? 0
+        var values: [Value] = [.text(to.rawValue), .int(Self.now)] + from.map { .text($0.rawValue) }
+        var sql = "UPDATE upload_tasks SET status = ?, updated_at = ? WHERE status IN (\(placeholders))"
+        if let provider {
+            sql += " AND provider = ?"
+            values.append(.text(provider.rawValue))
+        }
+        return (try? run(sql, values)) ?? 0
     }
 
     /// «Возобновить» / «Повторить»: в начало очереди. Докачка продолжится с подтверждённого сервером байта.

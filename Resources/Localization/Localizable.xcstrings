@@ -237,12 +237,44 @@
         }
       }
     },
+    "Access to Dropbox has expired. Please sign in again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access to Dropbox has expired. Please sign in again."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступ к Dropbox истёк. Войдите снова."
+          }
+        }
+      }
+    },
     "Access to Google Drive has expired. Please sign in again.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Доступ к Google Drive истёк, войдите снова."
+          }
+        }
+      }
+    },
+    "Access wasn’t granted. To use NaviDrive with Dropbox, click “Allow” on the Dropbox page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access wasn’t granted. To use NaviDrive with Dropbox, click “Allow” on the Dropbox page."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступ не выдан. Чтобы работать с Dropbox в NaviDrive, нажмите «Разрешить» на странице Dropbox."
           }
         }
       }
@@ -257,12 +289,18 @@
         }
       }
     },
-    "Account": {
+    "Accounts": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accounts"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Аккаунт"
+            "value": "Аккаунты"
           }
         }
       }
@@ -547,6 +585,22 @@
         }
       }
     },
+    "Can’t connect to Dropbox. Check your internet connection and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can’t connect to Dropbox. Check your internet connection and try again."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удаётся подключиться к Dropbox. Проверьте подключение к интернету и попробуйте снова."
+          }
+        }
+      }
+    },
     "Can’t connect to Google Drive. Check your internet connection and try again.": {
       "localizations": {
         "ru": {
@@ -573,6 +627,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не удаётся открыть файл «%@»"
+          }
+        }
+      }
+    },
+    "Can’t reach Dropbox. Check your internet connection and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can’t reach Dropbox. Check your internet connection and try again."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox недоступен. Проверьте подключение к интернету и попробуйте снова."
           }
         }
       }
@@ -667,6 +737,22 @@
         }
       }
     },
+    "Choose what to connect. You can add the other one later.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose what to connect. You can add the other one later."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выберите, что подключить. Второе облако можно добавить позже."
+          }
+        }
+      }
+    },
     "Clear History": {
       "localizations": {
         "ru": {
@@ -699,12 +785,140 @@
         }
       }
     },
+    "Cloud": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloud"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Облако"
+          }
+        }
+      }
+    },
+    "Cloud Folder/File": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloud Folder/File"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка или файл в облаке"
+          }
+        }
+      }
+    },
+    "Cloud shown in the sidebar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloud shown in the sidebar"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Облако, показанное в боковой панели"
+          }
+        }
+      }
+    },
     "Completed": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Завершённые"
+          }
+        }
+      }
+    },
+    "Connect %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключить %@"
+          }
+        }
+      }
+    },
+    "Connect %@…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect %@…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключить %@…"
+          }
+        }
+      }
+    },
+    "Connect Dropbox in Settings first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect Dropbox in Settings first."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сначала подключите Dropbox в настройках."
+          }
+        }
+      }
+    },
+    "Connect Google Drive or Dropbox to upload files.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect Google Drive or Dropbox to upload files."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключите Google Drive или Dropbox, чтобы загружать файлы."
+          }
+        }
+      }
+    },
+    "Connect a Cloud…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect a Cloud…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключить облако…"
           }
         }
       }
@@ -979,6 +1193,22 @@
         }
       }
     },
+    "Deleted items can be restored in Dropbox under Deleted files.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted items can be restored in Dropbox under Deleted files."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалённое можно восстановить в Dropbox в разделе «Удалённые файлы»."
+          }
+        }
+      }
+    },
     "Details…": {
       "localizations": {
         "ru": {
@@ -1079,12 +1309,18 @@
         }
       }
     },
-    "Download and upload Google Drive files reliably — even very large ones, with resume after interruptions.": {
+    "Download and upload Google Drive and Dropbox files reliably — even very large ones, with resume after interruptions.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download and upload Google Drive and Dropbox files reliably — even very large ones, with resume after interruptions."
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Надёжно скачивает и загружает файлы Google Drive — даже очень большие, с продолжением после обрывов."
+            "value": "Надёжное скачивание и загрузка файлов Google Drive и Dropbox — даже очень больших, с докачкой после обрывов."
           }
         }
       }
@@ -1175,6 +1411,150 @@
           "stringUnit": {
             "state": "translated",
             "value": "Перетащите файлы или папки из Finder в папку «Мой Диск» или нажмите «Загрузить…» в тулбаре браузера."
+          }
+        }
+      }
+    },
+    "Dropbox Paper": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox Paper"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox Paper"
+          }
+        }
+      }
+    },
+    "Dropbox denied authorization: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox denied authorization: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox отказал в авторизации: %@"
+          }
+        }
+      }
+    },
+    "Dropbox didn’t respond within 5 minutes — perhaps the sign-in tab was closed. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox didn’t respond within 5 minutes — perhaps the sign-in tab was closed. Try again."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox не ответил за 5 минут — возможно, вкладку входа закрыли. Попробуйте снова."
+          }
+        }
+      }
+    },
+    "Dropbox is out of storage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox is out of storage"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В Dropbox закончилось место"
+          }
+        }
+      }
+    },
+    "Dropbox rate-limited requests (HTTP 429)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox rate-limited requests (HTTP 429)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox ограничил частоту запросов (HTTP 429)"
+          }
+        }
+      }
+    },
+    "Dropbox refused the sign-in (%@).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox refused the sign-in (%@)."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox отклонил вход (%@)."
+          }
+        }
+      }
+    },
+    "Dropbox rejected the operation: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox rejected the operation: %@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox отклонил операцию: %@"
+          }
+        }
+      }
+    },
+    "Dropbox server is temporarily unavailable (HTTP %lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox server is temporarily unavailable (HTTP %lld)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер Dropbox временно недоступен (HTTP %lld)"
+          }
+        }
+      }
+    },
+    "Dropbox shared link": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dropbox shared link"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общая ссылка Dropbox"
           }
         }
       }
@@ -1460,16 +1840,6 @@
         }
       }
     },
-    "Google Account": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Аккаунт Google"
-          }
-        }
-      }
-    },
     "Google Doc": {
       "localizations": {
         "ru": {
@@ -1486,17 +1856,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Google Рисунок"
-          }
-        }
-      }
-    },
-    "Google Drive": {},
-    "Google Drive Folder/File": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Папка/файл в Google Drive"
           }
         }
       }
@@ -2412,6 +2771,22 @@
         }
       }
     },
+    "Not signed in to Dropbox": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not signed in to Dropbox"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вход в Dropbox не выполнен"
+          }
+        }
+      }
+    },
     "Not signed in to Google": {
       "localizations": {
         "ru": {
@@ -2543,6 +2918,22 @@
         }
       }
     },
+    "Paste a Dropbox shared link to a file or folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste a Dropbox shared link to a file or folder"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставьте общую ссылку Dropbox на файл или папку"
+          }
+        }
+      }
+    },
     "Paste a link to a Google Drive file or folder": {
       "localizations": {
         "ru": {
@@ -2661,6 +3052,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Постоянный путь сохранения для «%@»"
+          }
+        }
+      }
+    },
+    "Port %@ on this Mac is used by another app, so NaviDrive can’t receive the sign-in response. Quit the app that uses it (or restart the Mac) and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Port %@ on this Mac is used by another app, so NaviDrive can’t receive the sign-in response. Quit the app that uses it (or restart the Mac) and try again."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Порт %@ на этом Mac занят другой программой, поэтому NaviDrive не может получить ответ входа. Закройте программу, которая его использует (или перезагрузите Mac), и попробуйте снова."
           }
         }
       }
@@ -3189,16 +3596,6 @@
         }
       }
     },
-    "Shortcut": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ярлык"
-          }
-        }
-      }
-    },
     "Shortcut (no target)": {
       "localizations": {
         "ru": {
@@ -3309,26 +3706,6 @@
         }
       }
     },
-    "Sign In with Google": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Войти через Google"
-          }
-        }
-      }
-    },
-    "Sign In with Google…": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Войти через Google…"
-          }
-        }
-      }
-    },
     "Sign Out": {
       "localizations": {
         "ru": {
@@ -3365,16 +3742,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сначала войдите в Google в Настройках."
-          }
-        }
-      }
-    },
-    "Sign in to Google to upload files.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Войдите в Google, чтобы отправлять файлы."
           }
         }
       }
@@ -3539,6 +3906,22 @@
         }
       }
     },
+    "The Dropbox app must allow the redirect URI %@. The sign-in token is stored in the system Keychain.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Dropbox app must allow the redirect URI %@. The sign-in token is stored in the system Keychain."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В приложении Dropbox должен быть разрешён redirect URI %@. Токен входа хранится в системной Связке ключей."
+          }
+        }
+      }
+    },
     "The MD5 of the file on this Mac matches the Google Drive checksum": {
       "localizations": {
         "ru": {
@@ -3569,12 +3952,44 @@
         }
       }
     },
+    "The content hash of the file on this Mac matches the Dropbox content_hash": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The content hash of the file on this Mac matches the Dropbox content_hash"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Хеш файла на этом Mac совпадает с content_hash Dropbox"
+          }
+        }
+      }
+    },
     "The download and upload queue belongs to %@. What should be done with it?": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Очередь загрузок и отправок осталась от аккаунта %@. Что с ней сделать?"
+          }
+        }
+      }
+    },
+    "The download and upload queue belongs to the previous Dropbox account. What should be done with it?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The download and upload queue belongs to the previous Dropbox account. What should be done with it?"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очередь скачивания и загрузки принадлежит предыдущему аккаунту Dropbox. Что с ней сделать?"
           }
         }
       }
@@ -3781,6 +4196,22 @@
         }
       }
     },
+    "The shared link wasn’t found. It may have been deleted or have expired.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The shared link wasn’t found. It may have been deleted or have expired."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общая ссылка не найдена. Возможно, её удалили или срок её действия истёк."
+          }
+        }
+      }
+    },
     "The task will be moved to history as cancelled.": {
       "localizations": {
         "ru": {
@@ -3833,6 +4264,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Эта копия NaviDrive собрана без учётных данных для входа в Google. Включите «Использовать свои учётные данные OAuth» в Настройках → Аккаунт → Дополнительно и введите свои Client ID и Client Secret."
+          }
+        }
+      }
+    },
+    "This copy of NaviDrive was built without a Dropbox app key (DROPBOX_APP_KEY in Config/Secrets.xcconfig).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This copy of NaviDrive was built without a Dropbox app key (DROPBOX_APP_KEY in Config/Secrets.xcconfig)."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Эта копия NaviDrive собрана без app key Dropbox (DROPBOX_APP_KEY в Config/Secrets.xcconfig)."
+          }
+        }
+      }
+    },
+    "This doesn’t look like a Dropbox link. Paste a shared link like dropbox.com/scl/fo/…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This doesn’t look like a Dropbox link. Paste a shared link like dropbox.com/scl/fo/…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это не похоже на ссылку Dropbox. Вставьте общую ссылку вида dropbox.com/scl/fo/…"
           }
         }
       }
@@ -4411,6 +4874,22 @@
         }
       }
     },
+    "Your Dropbox session has expired — sign in again in Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Dropbox session has expired — sign in again in Settings"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сеанс Dropbox истёк — войдите снова в настройках"
+          }
+        }
+      }
+    },
     "Your Google session has expired — sign in again in Settings": {
       "localizations": {
         "ru": {
@@ -4457,6 +4936,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "уже в очереди: %lld"
+          }
+        }
+      }
+    },
+    "content_hash matches the Dropbox checksum": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "content_hash matches the Dropbox checksum"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "content_hash совпадает с контрольной суммой Dropbox"
           }
         }
       }

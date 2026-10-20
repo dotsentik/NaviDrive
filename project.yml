@@ -28,7 +28,7 @@ targets:
     type: application
     platform: macOS
     deploymentTarget: "15.0"
-    # Client ID/Secret Google OAuth: Config/NaviDrive.xcconfig подключает Config/Secrets.xcconfig (не в git).
+    # Client ID/Secret Google OAuth и app key Dropbox: Config/NaviDrive.xcconfig подключает Config/Secrets.xcconfig (не в git).
     configFiles:
       Debug: Config/NaviDrive.xcconfig
       Release: Config/NaviDrive.xcconfig
@@ -66,11 +66,14 @@ targets:
         Release:
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
     preBuildScripts:
-      - name: Check Google OAuth credentials
+      - name: Check cloud credentials
         basedOnDependencyAnalysis: false
         script: |
           if [ -z "${GOOGLE_CLIENT_ID}" ] || [ -z "${GOOGLE_CLIENT_SECRET}" ]; then
             echo "warning: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are empty in Config/Secrets.xcconfig — this build has no built-in Google sign-in; users will have to enter their own OAuth credentials in Settings."
+          fi
+          if [ -z "${DROPBOX_APP_KEY}" ]; then
+            echo "warning: DROPBOX_APP_KEY is empty in Config/Secrets.xcconfig — Dropbox sign-in is unavailable in this build."
           fi
     info:
       path: Support/Info.plist
@@ -87,6 +90,7 @@ targets:
         NSHumanReadableCopyright: "NaviDrive"
         NaviDriveGoogleClientID: $(GOOGLE_CLIENT_ID)
         NaviDriveGoogleClientSecret: $(GOOGLE_CLIENT_SECRET)
+        NaviDriveDropboxAppKey: $(DROPBOX_APP_KEY)
         NSServices:
           - NSMenuItem:
               default: Upload to Google Drive (NaviDrive)

@@ -3,5 +3,7 @@
 // в Config/Secrets.xcconfig (файл не хранится в git, см. Secrets.example.xcconfig).
 GOOGLE_CLIENT_ID =
 GOOGLE_CLIENT_SECRET =
+// App key Dropbox (пустой — вход в Dropbox недоступен).
+DROPBOX_APP_KEY =
 
 #include? "Secrets.xcconfig"

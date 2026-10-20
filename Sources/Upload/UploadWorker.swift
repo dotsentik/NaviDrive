@@ -71,11 +71,11 @@ struct UploadWorker: Sendable {
                     return .failed(error.localizedDescription, nil)
                 }
                 continue
-            } catch CloudTransferError.rateLimited(let message) {
+            } catch CloudTransferError.rateLimited(let message, let retryAfter) {
                 await scheduler.reportRateLimit()
                 rateLimitRetries += 1
                 guard rateLimitRetries <= Self.maxRateLimitRetries else { return .failed(message, nil) }
-                let delay = DownloadWorker.jitteredDelay(attempt: rateLimitRetries, cap: 64)
+                let delay = max(DownloadWorker.jitteredDelay(attempt: rateLimitRetries, cap: 64), retryAfter ?? 0)
                 db.recordUploadRetry(id: task.id, retryCount: retries + rateLimitRetries,
                                      error: String(localized: "\(message) — retrying in \(Int(delay.rounded())) s"))
                 do { try await retryWaiter.sleep(seconds: delay) } catch { return .stopped }

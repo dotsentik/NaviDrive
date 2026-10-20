@@ -27,8 +27,17 @@ struct StoredSecrets: Codable, Sendable, Equatable {
     var tokenClientId: String?
     /// Выданные права (scope).
     var scope: String?
+    /// Вход в Dropbox — отдельный раздел той же записи (nil — не подключён).
+    var dropbox: DropboxSecrets?
 
     var isEmpty: Bool { self == StoredSecrets() }
+}
+
+/// refresh_token Dropbox и его атрибуты. Короткоживущий access_token в Связку ключей не попадает.
+struct DropboxSecrets: Codable, Sendable, Equatable {
+    var refreshToken: String
+    var accountId: String?
+    var scope: String?
 }
 
 /// Хранение секретов (Client ID/Secret, OAuth-токены) в системном Keychain.
@@ -257,6 +266,21 @@ struct KeychainStore: Sendable {
             $0.tokenClientId = nil
             $0.scope = nil
         }
+    }
+
+    // MARK: - Dropbox
+
+    func loadDropboxSecrets() throws -> DropboxSecrets? {
+        guard let stored = try secrets().dropbox, !stored.refreshToken.isEmpty else { return nil }
+        return stored
+    }
+
+    func saveDropboxSecrets(_ value: DropboxSecrets) throws {
+        try updateSecrets { $0.dropbox = value }
+    }
+
+    func deleteDropboxSecrets() throws {
+        try updateSecrets { $0.dropbox = nil }
     }
 
     // MARK: - One-time migration from ad-hoc builds

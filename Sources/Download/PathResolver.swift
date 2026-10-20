@@ -49,7 +49,7 @@ enum PathResolver {
         result = String(String.UnicodeScalarView(result.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }))
         result = result.trimmingCharacters(in: .whitespacesAndNewlines)
         if result.isEmpty || result == "." || result == ".." { result = "untitled" }
-        // Ограничение длины имени (255 байт UTF-8) с запасом под ".gdrive.part".
+        // Ограничение длины имени (255 байт UTF-8) с запасом под ".gdrive.part" / ".dropbox.part".
         while result.utf8.count > 230 { result.removeLast() }
         return result
     }

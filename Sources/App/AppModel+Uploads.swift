@@ -43,8 +43,8 @@ extension AppModel {
     // MARK: - Write access
 
     /// Вход заведомо без права записи — окно «нужно заново войти». Скачивание при этом продолжает работать.
-    func ensureWriteAccess() async -> Bool {
-        if await provider.lacksWriteAccess() {
+    func ensureWriteAccess(_ cloud: CloudProviderKind) async -> Bool {
+        if await providers[cloud]?.lacksWriteAccess() == true {
             showReauthPrompt = true
             return false
         }
@@ -52,24 +52,31 @@ extension AppModel {
     }
 
     /// Понятный текст ошибки изменения диска. Нехватка прав входа — окно повторного входа.
-    private func reportEditError(_ error: Error, forbidden: String) {
+    private func reportEditError(_ error: Error, forbidden: String, cloud: CloudProviderKind) {
         if case CloudAPIError.insufficientScope = error {
             showReauthPrompt = true
-            Task { await uploadScheduler?.requireReauth() }
+            Task { await uploadScheduler?.requireReauth(cloud) }
             return
         }
         if error is CancellationError { return }
         switch error {
-        case CloudAPIError.storageFull:
+        case CloudAPIError.storageFull(_):
             errorMessage = error.localizedDescription
         case CloudAPIError.http(403, _, _):
             errorMessage = forbidden
         case CloudAPIError.http(404, _, _):
             errorMessage = String(localized: "Item not found — it may have been deleted or moved. Refresh the list.")
+        case CloudAPIError.http(409, let message, _) where cloud == .dropbox:
+            // Конфликт имён и прочие отказы Dropbox (error_summary, например «path/conflict/folder»).
+            errorMessage = String(localized: "Dropbox rejected the operation: \(message)")
         case CloudAPIError.http(400, let message, _):
-            errorMessage = String(localized: "Google Drive rejected the operation: \(message)")
+            errorMessage = cloud == .dropbox
+                ? String(localized: "Dropbox rejected the operation: \(message)")
+                : String(localized: "Google Drive rejected the operation: \(message)")
         case let urlError as URLError where CloudNetwork.isTransientError(urlError):
-            errorMessage = String(localized: "Can’t connect to Google Drive. Check your internet connection and try again.")
+            errorMessage = cloud == .dropbox
+                ? String(localized: "Can’t connect to Dropbox. Check your internet connection and try again.")
+                : String(localized: "Can’t connect to Google Drive. Check your internet connection and try again.")
         default:
             errorMessage = error.localizedDescription
         }
@@ -79,7 +86,7 @@ extension AppModel {
 
     /// «Новая папка» в текущей папке: первое свободное имя «Новая папка», «Новая папка 2», …
     func createFolder(in target: UploadTarget, existingNames: Set<String>) async -> CloudItem? {
-        guard await ensureWriteAccess() else { return nil }
+        guard await ensureWriteAccess(target.provider) else { return nil }
         var name = String(localized: "New Folder")
         var counter = 2
         while existingNames.contains(name) {
@@ -89,7 +96,7 @@ extension AppModel {
         do {
             return try await providers.provider(for: target.provider).createFolder(named: name, in: target)
         } catch {
-            reportEditError(error, forbidden: String(localized: "You don’t have permission to change folder “\(target.name)”"))
+            reportEditError(error, forbidden: String(localized: "You don’t have permission to change folder “\(target.name)”"), cloud: target.provider)
             return nil
         }
     }
@@ -97,25 +104,25 @@ extension AppModel {
     func rename(_ item: CloudItem, to newName: String) async -> CloudItem? {
         let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name != item.name else { return nil }
-        guard await ensureWriteAccess() else { return nil }
+        guard await ensureWriteAccess(item.provider) else { return nil }
         do {
             return try await providers.provider(for: item.provider).rename(item, to: name)
         } catch {
-            reportEditError(error, forbidden: String(localized: "You don’t have permission to rename “\(item.name)”"))
+            reportEditError(error, forbidden: String(localized: "You don’t have permission to rename “\(item.name)”"), cloud: item.provider)
             return nil
         }
     }
 
     /// Возвращает id перемещённых объектов (при ошибке остальные не трогаются).
     func move(_ items: [CloudItem], to target: UploadTarget) async -> Set<String> {
-        guard await ensureWriteAccess() else { return [] }
+        guard await ensureWriteAccess(target.provider) else { return [] }
         var moved = Set<String>()
         for item in items where item.id != target.id {
             do {
                 try await providers.provider(for: item.provider).move(item, to: target)
                 moved.insert(item.id)
             } catch {
-                reportEditError(error, forbidden: String(localized: "You don’t have permission to move “\(item.name)” to “\(target.name)”"))
+                reportEditError(error, forbidden: String(localized: "You don’t have permission to move “\(item.name)” to “\(target.name)”"), cloud: target.provider)
                 break
             }
         }
@@ -124,14 +131,14 @@ extension AppModel {
 
     /// В корзину (окончательное удаление не используется). Возвращает id перемещённых в корзину.
     func trash(_ items: [CloudItem]) async -> Set<String> {
-        guard await ensureWriteAccess() else { return [] }
+        guard await ensureWriteAccess(items.first?.provider ?? activeCloud) else { return [] }
         var trashed = Set<String>()
         for item in items {
             do {
                 try await providers.provider(for: item.provider).trash(item)
                 trashed.insert(item.id)
             } catch {
-                reportEditError(error, forbidden: String(localized: "You don’t have permission to delete “\(item.name)”"))
+                reportEditError(error, forbidden: String(localized: "You don’t have permission to delete “\(item.name)”"), cloud: items.first?.provider ?? activeCloud)
                 break
             }
         }
@@ -155,7 +162,7 @@ extension AppModel {
                 errorMessage = error.localizedDescription
                 return
             }
-            guard await ensureWriteAccess() else { return }
+            guard await ensureWriteAccess(target.provider) else { return }
             await uploadScheduler.beginPreparing(title)
             do {
                 let plan = try await Task.detached(priority: .userInitiated) {
@@ -182,7 +189,7 @@ extension AppModel {
                 report.unreadable = plan.unreadable
                 showUploadBanner(report.message)
             } catch {
-                reportEditError(error, forbidden: String(localized: "You don’t have permission to upload to folder “\(target.name)”"))
+                reportEditError(error, forbidden: String(localized: "You don’t have permission to upload to folder “\(target.name)”"), cloud: target.provider)
             }
             await uploadScheduler.endPreparing(title)
             await refresh()

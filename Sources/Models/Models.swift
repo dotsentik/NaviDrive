@@ -83,6 +83,8 @@ struct DownloadTask: Sendable, Identifiable, Hashable {
     /// Время следующей попытки (Unix) для задач в ожидании квоты.
     var nextAttemptAt: Int64? = nil
     var provider: CloudProviderKind = .googleDrive
+    /// Путь в облаке; для объектов из общей ссылки — путь относительно корня ссылки (`resourceKey` — сама ссылка).
+    var cloudPath: String? = nil
 
     var finalPath: String { (targetDirPath as NSString).appendingPathComponent(fileName) }
     var hashKind: CloudHashKind { provider.hashKind }
@@ -90,7 +92,8 @@ struct DownloadTask: Sendable, Identifiable, Hashable {
     var needsChecksumVerification: Bool {
         exportFormat == nil && !(checksum ?? "").isEmpty
     }
-    var partPath: String { finalPath + ".gdrive.part" }
+    /// `.gdrive.part` у Google, `.dropbox.part` у Dropbox.
+    var partPath: String { finalPath + provider.partialSuffix }
     var exportFormat: CloudExportFormat? { provider.exportFormat(forContentType: mimeType) }
 
     /// Финальный файл уже лежит на диске с ожидаемым размером и докачка не идёт.
@@ -130,7 +133,8 @@ struct DownloadTask: Sendable, Identifiable, Hashable {
             updatedAt: Int64(Date().timeIntervalSince1970),
             resourceKey: item.accessKey,
             driveModifiedAt: item.modifiedAt.map { Int64($0.timeIntervalSince1970) },
-            provider: item.provider
+            provider: item.provider,
+            cloudPath: item.path
         )
     }
 }
@@ -207,8 +211,10 @@ struct EnqueueReport: Sendable, Equatable {
     }
 }
 
-/// Объект Google Drive, добавленный по ссылке (раздел «Добавленные по ссылке»).
+/// Объект облака, добавленный по ссылке (раздел «Добавленные по ссылке»).
+/// Поля заполняет и читает провайдер (`linkRecord(for:)` / `item(fromLinked:)`).
 struct LinkedItem: Sendable, Identifiable, Hashable {
+    let provider: CloudProviderKind
     let driveId: String
     let name: String
     let mimeType: String
@@ -217,10 +223,11 @@ struct LinkedItem: Sendable, Identifiable, Hashable {
     let sharedDriveId: String?
     let addedAt: Int64
 
-    var id: String { driveId }
+    var id: RouteKey { RouteKey(provider: provider, id: driveId) }
 
-    init(driveId: String, name: String, mimeType: String, resourceKey: String?, size: Int64?,
+    init(provider: CloudProviderKind, driveId: String, name: String, mimeType: String, resourceKey: String?, size: Int64?,
          sharedDriveId: String?, addedAt: Int64) {
+        self.provider = provider
         self.driveId = driveId
         self.name = name
         self.mimeType = mimeType

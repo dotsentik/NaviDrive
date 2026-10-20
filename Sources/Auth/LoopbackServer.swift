@@ -1,10 +1,11 @@
 import Foundation
 import Network
 
-/// Временный HTTP-сервер на 127.0.0.1 (свободный порт) для перехвата OAuth redirect с `code`.
+/// Временный HTTP-сервер на 127.0.0.1 для перехвата OAuth redirect с `code`: свободный порт (Google)
+/// или фиксированный (Dropbox требует точного совпадения redirect_uri с настройками приложения).
 /// Всё состояние меняется только на собственной последовательной очереди.
 ///
-/// Защита: только 127.0.0.1; принимается один запрос на путь «/» с совпадающим `state`
+/// Защита: только 127.0.0.1; принимается один запрос на путь redirect_uri с совпадающим `state`
 /// (остальные получают 400/404, сервер продолжает ждать); после него приём закрывается;
 /// таймаут 5 минут; заголовок запроса не больше 16 КБ; параметры запроса в HTML не попадают.
 final class LoopbackServer: @unchecked Sendable {
@@ -19,12 +20,15 @@ final class LoopbackServer: @unchecked Sendable {
 
     enum ServerError: LocalizedError {
         case failedToStart(String)
+        /// Фиксированный порт занят другой программой.
+        case portInUse(UInt16)
         case cancelled
         case timedOut
 
         var errorDescription: String? {
             switch self {
             case .failedToStart(let m): String(localized: "Couldn’t start the local authorization server: \(m)")
+            case .portInUse(let port): String(localized: "Port \(String(port)) on this Mac is used by another app, so NaviDrive can’t receive the sign-in response. Quit the app that uses it (or restart the Mac) and try again.")
             case .cancelled: String(localized: "Authorization cancelled")
             case .timedOut: String(localized: "No response from Google within 5 minutes. Try signing in again.")
             }
@@ -38,21 +42,29 @@ final class LoopbackServer: @unchecked Sendable {
     private var pendingCallback: Result<Callback, Error>?
     /// `state` текущего входа: запросы с другим значением отклоняются.
     private let expectedState: String
+    /// nil — любой свободный порт.
+    private let fixedPort: UInt16?
+    /// Путь redirect_uri («/» или, например, «/callback»).
+    private let callbackPath: String
     /// Ответ уже получен — новые соединения не принимаются.
     private var finished = false
 
-    init(expectedState: String) {
+    init(expectedState: String, port: UInt16? = nil, callbackPath: String = "/") {
         self.expectedState = expectedState
+        self.fixedPort = port
+        self.callbackPath = callbackPath
     }
 
-    /// Запускает сервер и возвращает выделенный системой порт.
+    /// Запускает сервер и возвращает его порт (выделенный системой или фиксированный).
     func start() async throws -> UInt16 {
         try await withCheckedThrowingContinuation { continuation in
             queue.async {
                 do {
                     let parameters = NWParameters.tcp
-                    parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
-                    parameters.allowLocalEndpointReuse = true
+                    let port = self.fixedPort.flatMap(NWEndpoint.Port.init(rawValue:)) ?? .any
+                    parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: port)
+                    // На фиксированном порту повторное использование адреса не включается: занятый порт — ошибка.
+                    parameters.allowLocalEndpointReuse = self.fixedPort == nil
                     let listener = try NWListener(using: parameters)
                     self.listener = listener
                     self.portContinuation = continuation
@@ -64,7 +76,7 @@ final class LoopbackServer: @unchecked Sendable {
                         server?.deliver(.failure(ServerError.timedOut))
                     }
                 } catch {
-                    continuation.resume(throwing: ServerError.failedToStart(error.localizedDescription))
+                    continuation.resume(throwing: self.startError(error))
                 }
             }
         }
@@ -107,12 +119,18 @@ final class LoopbackServer: @unchecked Sendable {
                 portContinuation = nil
             }
         case .failed(let error):
-            portContinuation?.resume(throwing: ServerError.failedToStart(error.localizedDescription))
+            portContinuation?.resume(throwing: startError(error))
             portContinuation = nil
             deliver(.failure(error))
         default:
             break
         }
+    }
+
+    private func startError(_ error: Error) -> ServerError {
+        if let fixedPort, case NWError.posix(.EADDRINUSE) = error { return .portInUse(fixedPort) }
+        if let fixedPort, (error as? POSIXError)?.code == .EADDRINUSE { return .portInUse(fixedPort) }
+        return .failedToStart(error.localizedDescription)
     }
 
     private func finish(_ result: Result<Callback, Error>) {
@@ -165,9 +183,9 @@ final class LoopbackServer: @unchecked Sendable {
         }
         let requestLine = header.components(separatedBy: "\r\n").first ?? ""
         let parts = requestLine.split(separator: " ")
-        // Только GET на путь redirect_uri («/»); всё остальное — 404.
+        // Только GET на путь redirect_uri; всё остальное — 404.
         guard parts.count >= 2, parts[0] == "GET", let components = URLComponents(string: "http://127.0.0.1" + parts[1]),
-              components.path.isEmpty || components.path == "/" else {
+              components.path == callbackPath || (callbackPath == "/" && components.path.isEmpty) else {
             respond(connection, status: "404 Not Found", body: "")
             return
         }
@@ -176,7 +194,7 @@ final class LoopbackServer: @unchecked Sendable {
 
         let code = value("code")
         let oauthError = value("error")
-        // Запрос без кода или с чужим state отклоняется; сервер продолжает ждать настоящий ответ Google.
+        // Запрос без кода или с чужим state отклоняется; сервер продолжает ждать настоящий ответ облака.
         guard code != nil || oauthError != nil, value("state") == expectedState else {
             respond(connection, status: "400 Bad Request", body: Self.page(success: false))
             return

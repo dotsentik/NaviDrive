@@ -35,7 +35,7 @@ enum AppSettings {
     static let uploadConcurrencyRange = 1...6
     static let defaultUploadConcurrency = 3
 
-    /// Одновременных отправок в Google Drive (отдельно от потоков скачивания).
+    /// Одновременных отправок в облака (отдельно от потоков скачивания).
     static var maxConcurrentUploads: Int {
         get {
             let value = UserDefaults.standard.integer(forKey: uploadConcurrencyKey)
@@ -67,11 +67,27 @@ enum AppSettings {
     static let showSidebarKey = "showSidebar"
     private static let queueOwnerKey = "queueOwnerAwaitingSignIn"
 
-    /// Доступ отозван Google: email аккаунта, чья очередь ждёт нового входа ("" — email неизвестен).
+    /// Ключ для облака: у Google — прежний (совместимость), у остальных — с суффиксом.
+    private static func queueOwnerKey(_ cloud: CloudProviderKind) -> String {
+        cloud == .googleDrive ? queueOwnerKey : queueOwnerKey + "." + cloud.rawValue
+    }
+
+    /// Облако отозвало доступ: email аккаунта, чья очередь ждёт нового входа ("" — email неизвестен).
     /// Вошли тем же аккаунтом — очередь продолжается, другим — спрашиваем, что с ней сделать.
-    static var queueOwnerAwaitingSignIn: String? {
-        get { UserDefaults.standard.string(forKey: queueOwnerKey) }
-        set { UserDefaults.standard.set(newValue, forKey: queueOwnerKey) }
+    static func queueOwnerAwaitingSignIn(for cloud: CloudProviderKind) -> String? {
+        UserDefaults.standard.string(forKey: queueOwnerKey(cloud))
+    }
+
+    static func setQueueOwnerAwaitingSignIn(_ email: String?, for cloud: CloudProviderKind) {
+        UserDefaults.standard.set(email, forKey: queueOwnerKey(cloud))
+    }
+
+    private static let activeCloudKey = "activeCloud"
+
+    /// Облако, выбранное переключателем вверху sidebar.
+    static var activeCloud: CloudProviderKind {
+        get { UserDefaults.standard.string(forKey: activeCloudKey).flatMap(CloudProviderKind.init(rawValue:)) ?? .googleDrive }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: activeCloudKey) }
     }
 
     private static let preventSleepKey = "preventSleepDuringDownloads"

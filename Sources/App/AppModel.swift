@@ -31,6 +31,42 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
         case .routes: "arrow.triangle.branch"
         }
     }
+
+    /// Разделы облака в sidebar: у Google — с общими дисками, у Dropbox — без них
+    /// (командные папки видны в корне).
+    static func cloudItems(for cloud: CloudProviderKind) -> [SidebarItem] {
+        switch cloud {
+        case .googleDrive: [.myDrive, .sharedWithMe, .sharedDrives, .linked]
+        case .dropbox: [.myDrive, .sharedWithMe, .linked]
+        }
+    }
+
+    /// Заголовок с учётом облака: корень Dropbox называется «Dropbox».
+    func title(for cloud: CloudProviderKind) -> String {
+        self == .myDrive && cloud == .dropbox ? cloud.displayName : title
+    }
+
+    func systemImage(for cloud: CloudProviderKind) -> String {
+        self == .myDrive && cloud == .dropbox ? cloud.systemImage : systemImage
+    }
+}
+
+/// Состояние входа одного облака.
+struct CloudAccountState: Equatable {
+    var isSignedIn = false
+    var isSigningIn = false
+    var userName: String?
+    var userEmail: String?
+    /// Понятный текст последней ошибки входа (окно приветствия и настройки).
+    var signInError: String?
+    /// Страница входа текущей попытки — «Открыть страницу входа ещё раз».
+    var signInURL: URL?
+}
+
+/// Путь навигации браузера хранится отдельно для каждого облака и раздела.
+struct BrowserStackKey: Hashable {
+    let cloud: CloudProviderKind
+    let scope: BrowserScope
 }
 
 /// Секции «Менеджера загрузок».
@@ -130,18 +166,30 @@ final class AppModel {
     let keychain = KeychainStore()
     /// Подключённые облака; очереди исполняют задачи провайдером из их колонки `provider`.
     let providers: CloudProviders
-    /// Облако, с которым работают браузер, вход и отправка.
-    var provider: any CloudProvider { providers.primary }
+    /// Облако, с которым работают браузер, ссылки и отправка (переключатель вверху sidebar).
+    var provider: any CloudProvider { providers[activeCloud] ?? providers.primary }
     let db: DatabaseManager?
     let scheduler: DownloadScheduler?
     let uploadScheduler: UploadScheduler?
     private let networkMonitor = NetworkMonitor()
 
-    // Авторизация
+    // Авторизация: входы в облака независимы (можно подключить одно, другое или оба).
     var clientId: String
     var clientSecret: String
-    var isSignedIn = false
-    var isSigningIn = false
+    /// Состояние входа каждого облака.
+    var accounts: [CloudProviderKind: CloudAccountState] = [:]
+    /// Облако, открытое в sidebar (запоминается между запусками).
+    var activeCloud: CloudProviderKind = AppSettings.activeCloud {
+        didSet {
+            guard activeCloud != oldValue else { return }
+            AppSettings.activeCloud = activeCloud
+            browserFilter = ""
+            if !SidebarItem.cloudItems(for: activeCloud).contains(selection ?? .myDrive),
+               SidebarItem.cloudItems(for: oldValue).contains(selection ?? .myDrive) {
+                selection = .myDrive
+            }
+        }
+    }
     /// При запуске был сохранённый вход: сразу главное окно, иначе — только окно приветствия.
     let launchedSignedIn: Bool
     /// Пояснение в окне приветствия (например, «Доступ к Google Drive истёк»).
@@ -151,27 +199,17 @@ final class AppModel {
 
     struct AccountSwitch: Identifiable, Equatable {
         let id = UUID()
+        let provider: CloudProviderKind
         /// Email предыдущего аккаунта ("" — неизвестен).
         let previousEmail: String
     }
-    /// Имя и email вошедшего аккаунта (настройки, меню трея).
-    var userName: String?
-    var userEmail: String?
-    var userDescription: String? {
-        let parts = [userName, userEmail.map { "<\($0)>" }].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
-    }
-    /// «Использовать свои учётные данные OAuth» (Настройки → Аккаунт → Дополнительно).
+    /// «Использовать свои учётные данные OAuth» Google (Настройки → Аккаунты → Дополнительно).
     var useCustomCredentials = false {
         didSet { AppSettings.useCustomOAuthCredentials = useCustomCredentials }
     }
-    /// Понятный текст последней ошибки входа (приветственный экран и настройки).
-    var signInError: String?
-    /// Страница входа Google текущей попытки — «Открыть страницу входа ещё раз».
-    var signInURL: URL?
-    /// В эту копию при сборке вписаны Client ID/Secret.
+    /// В эту копию при сборке вписаны Client ID/Secret Google.
     var hasBundledCredentials: Bool { OAuthCredentials.bundled != nil }
-    private var signInTask: Task<Void, Never>?
+    @ObservationIgnored var signInTasks: [CloudProviderKind: Task<Void, Never>] = [:]
 
     // Настройки
     var defaultDownloadPath: String = AppSettings.defaultDownloadPath {
@@ -252,7 +290,7 @@ final class AppModel {
     var driveReloadToken = 0
     /// Путь навигации в браузерах Drive: сохраняется при переключении разделов
     /// (например, после «Скачать» — переход в «Менеджер загрузок» и обратно).
-    var browserStacks: [BrowserScope: [CloudItem]] = [:]
+    var browserStacks: [BrowserStackKey: [CloudItem]] = [:]
     /// Увеличивается, когда браузер должен перейти к `browserStacks[scope]` (например, из карточки ссылки).
     var browserNavigationToken = 0
     /// Объекты, добавленные по ссылке.
@@ -287,10 +325,10 @@ final class AppModel {
             clientSecret = ""
             notices.append(String(localized: "Couldn’t read the Client ID / Client Secret from the Keychain: \(error.localizedDescription)"))
         }
-        let google = GoogleDriveProvider(keychain: store)
-        providers = CloudProviders([google])
-        launchedSignedIn = google.hadSessionAtLaunch
-        isSignedIn = launchedSignedIn
+        let providers = CloudProviders([GoogleDriveProvider(keychain: store), DropboxProvider(keychain: store)])
+        self.providers = providers
+        let signedIn = providers.all.filter(\.hadSessionAtLaunch).map(\.kind)
+        launchedSignedIn = !signedIn.isEmpty
         do {
             let database = try DatabaseManager()
             db = database
@@ -302,6 +340,9 @@ final class AppModel {
             uploadScheduler = nil
             notices.append(String(localized: "Couldn’t open the database: \(error.localizedDescription)"))
         }
+        for kind in signedIn { accounts[kind] = CloudAccountState(isSignedIn: true) }
+        // Сохранённое облако без входа — показать подключённое.
+        if let first = signedIn.first, !signedIn.contains(activeCloud) { activeCloud = first }
         // Кто уже вводил свои Client ID/Secret, продолжает входить с ними.
         AppSettings.migrateCustomOAuthChoice(hasCustomCredentials: !clientId.isEmpty && !clientSecret.isEmpty)
         useCustomCredentials = AppSettings.useCustomOAuthCredentials
@@ -323,24 +364,31 @@ final class AppModel {
         reloadLinked()
 
         Task {
-            await provider.setAccessRevokedHandler {
-                Task { @MainActor in AppModel.shared.handleAccessRevoked() }
-            }
-            isSignedIn = await provider.isSignedIn()
-            if let keychainError = await provider.credentialLoadError() {
-                // Нет доступа ≠ нет входа: запись не удаляем, а объясняем, что произошло.
-                let message = String(localized: "Couldn’t read the saved sign-in from the Keychain: \(keychainError)\n\nThe sign-in was not deleted. Restart NaviDrive and, if macOS asks for Keychain access, click “Always Allow”.")
-                errorMessage = [errorMessage, message].compactMap { $0 }.joined(separator: "\n\n")
-                openSettings(.account)
+            var authorized: Set<CloudProviderKind> = []
+            for provider in providers.all {
+                let kind = provider.kind
+                await provider.setAccessRevokedHandler {
+                    Task { @MainActor in AppModel.shared.handleAccessRevoked(kind) }
+                }
+                let signedIn = await provider.isSignedIn()
+                accounts[kind, default: CloudAccountState()].isSignedIn = signedIn
+                if let keychainError = await provider.credentialLoadError() {
+                    // Нет доступа ≠ нет входа: запись не удаляем, а объясняем, что произошло.
+                    let message = String(localized: "Couldn’t read the saved sign-in from the Keychain: \(keychainError)\n\nThe sign-in was not deleted. Restart NaviDrive and, if macOS asks for Keychain access, click “Always Allow”.")
+                    if errorMessage?.contains(message) != true {
+                        errorMessage = [errorMessage, message].compactMap { $0 }.joined(separator: "\n\n")
+                    }
+                    openSettings(.account)
+                }
+                // Очередь аккаунта, чей доступ был отозван, ждёт решения после входа (см. resumeQueuesAfterSignIn).
+                if signedIn && AppSettings.queueOwnerAwaitingSignIn(for: kind) == nil { authorized.insert(kind) }
             }
             if errorMessage?.contains(Self.reloginAfterSigningChangeMessage) == true { openSettings(.account) }
-            // Очередь аккаунта, чей доступ был отозван, ждёт решения после входа (см. resumeQueuesAfterSignIn).
-            let authorized = isSignedIn && AppSettings.queueOwnerAwaitingSignIn == nil
             await scheduler?.start(authorized: authorized)
             await uploadScheduler?.start(authorized: authorized)
-            if isSignedIn {
-                await loadUser()
-                if !authorized { await resumeQueuesAfterSignIn() }
+            for kind in connectedClouds {
+                await loadUser(kind)
+                if !authorized.contains(kind) { await resumeQueuesAfterSignIn(kind) }
             }
         }
 
@@ -462,191 +510,25 @@ final class AppModel {
         UNUserNotificationCenter.current().add(request) { _ in }
     }
 
-    // MARK: - Auth
-
-    /// Сохраняет Client ID / Client Secret. false — Связка ключей не приняла запись (сообщение уже показано).
-    @discardableResult
-    func saveCredentials() -> Bool {
-        clientId = clientId.trimmingCharacters(in: .whitespacesAndNewlines)
-        clientSecret = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-        do {
-            try keychain.setCustomCredentials(clientId: clientId, clientSecret: clientSecret)
-            return true
-        } catch {
-            errorMessage = String(localized: "Couldn’t save the Client ID / Client Secret to the Keychain: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    /// Вход через Google: loopback + PKCE, страница входа — в браузере по умолчанию.
-    func signIn() {
-        guard !isSigningIn else { return }
-        signInError = nil
-        // Свои учётные данные сохраняются в Keychain: без них токен нельзя будет обновить после перезапуска.
-        if useCustomCredentials { guard saveCredentials() else { return } }
-        isSigningIn = true
-        let provider = provider
-        signInTask = Task {
-            defer {
-                isSigningIn = false
-                signInURL = nil
-            }
-            do {
-                let result = try await provider.signIn { url in
-                    self.signInURL = url
-                    NSWorkspace.shared.open(url)
-                }
-                if let failure = result.persistenceError {
-                    errorMessage = String(localized: "Couldn’t save the sign-in to the Keychain: \(failure)\n\nYou stay signed in until you quit NaviDrive; after a restart you’ll need to sign in again.")
-                }
-                isSignedIn = true
-                welcomeNotice = nil
-                driveReloadToken += 1
-                // Вход завершён в браузере — окно приветствия закрывается, NaviDrive выходит
-                // на передний план и открывает «Мой Диск».
-                selection = .myDrive
-                showReauthPrompt = false
-                WindowOpener.closeWelcomeWindow()
-                WindowOpener.showMainWindow()
-                NSApp.activate()
-                await loadUser()
-                await resumeQueuesAfterSignIn()
-            } catch is CancellationError {
-            } catch LoopbackServer.ServerError.cancelled {
-            } catch {
-                signInError = Self.describeSignInError(error)
-                NSApp.activate()
-            }
-        }
-    }
-
-    /// Открыть страницу входа ещё раз (например, если вкладку закрыли).
-    func reopenSignInPage() {
-        if let signInURL { NSWorkspace.shared.open(signInURL) }
-    }
-
-    /// Ошибки входа — понятным текстом.
-    static func describeSignInError(_ error: Error) -> String {
-        switch error {
-        case OAuthError.authorizationDenied(let reason) where reason == "access_denied":
-            return String(localized: "Access wasn’t granted. To use NaviDrive, allow access to Google Drive on the Google page.")
-        case OAuthError.authorizationDenied(let reason):
-            return String(localized: "Google refused the sign-in (\(reason)).")
-        case LoopbackServer.ServerError.timedOut:
-            return String(localized: "Google didn’t respond within 5 minutes — perhaps the sign-in tab was closed. Try again.")
-        case let urlError as URLError where CloudNetwork.isTransientError(urlError):
-            return String(localized: "Can’t reach Google. Check your internet connection and try again.")
-        default:
-            return error.localizedDescription
-        }
-    }
-
-    func cancelSignIn() {
-        signInTask?.cancel()
-        signInTask = nil
-        isSigningIn = false
-    }
-
-    func signOut() {
-        Task {
-            await scheduler?.setAuthorized(false)
-            await uploadScheduler?.setAuthorized(false)
-            await provider.signOut()
-            isSignedIn = false
-            userName = nil
-            userEmail = nil
-            signInError = nil
-            welcomeNotice = nil
-            browserStacks = [:]
-            driveReloadToken += 1
-            showWelcome()
-        }
-    }
-
-    /// Без входа главное окно не показывается: только окно приветствия.
-    func showWelcome() {
-        WindowOpener.closeMainWindow()
-        WindowOpener.showWelcomeWindow()
-    }
-
-    /// Google отклонил refresh_token (invalid_grant): токены уже удалены из Связки ключей.
-    /// Очереди останавливаются с сохранением прогресса и продолжатся после входа тем же аккаунтом.
-    func handleAccessRevoked() {
-        guard isSignedIn else { return }
-        if AppSettings.queueOwnerAwaitingSignIn == nil {
-            AppSettings.queueOwnerAwaitingSignIn = userEmail ?? ""
-        }
-        isSignedIn = false
-        userName = nil
-        userEmail = nil
-        showReauthPrompt = false
-        accountSwitch = nil
-        browserStacks = [:]
-        driveReloadToken += 1
-        welcomeNotice = String(localized: "Access to Google Drive has expired. Please sign in again.")
-        Task {
-            await scheduler?.setAuthorized(false)
-            await uploadScheduler?.setAuthorized(false)
-        }
-        showWelcome()
-    }
-
-    /// После входа: тот же аккаунт (или очереди нет) — загрузки и отправки продолжаются;
-    /// другой аккаунт — сначала спросить, что сделать с очередью предыдущего.
-    private func resumeQueuesAfterSignIn() async {
-        if let previous = AppSettings.queueOwnerAwaitingSignIn {
-            await refresh(includeTasks: false)
-            let sameAccount = !previous.isEmpty && previous.caseInsensitiveCompare(userEmail ?? "") == .orderedSame
-            let hasQueue = totals.pendingCount > 0 || uploadTotals.pendingCount > 0
-            if !sameAccount && hasQueue {
-                accountSwitch = AccountSwitch(previousEmail: previous)
-                return
-            }
-            AppSettings.queueOwnerAwaitingSignIn = nil
-        }
-        await scheduler?.setAuthorized(true)
-        await uploadScheduler?.setAuthorized(true)
-    }
-
-    /// Ответ на вопрос об очереди предыдущего аккаунта: оставить на паузе или удалить из очереди.
-    func resolveAccountSwitch(keepPaused: Bool) {
-        accountSwitch = nil
-        AppSettings.queueOwnerAwaitingSignIn = nil
-        Task {
-            if keepPaused {
-                await scheduler?.pauseUnfinished()
-                await uploadScheduler?.pauseUnfinished()
-            } else {
-                await scheduler?.cancelUnfinished()
-                await uploadScheduler?.cancelUnfinished()
-            }
-            guard isSignedIn else { return }
-            await scheduler?.setAuthorized(true)
-            await uploadScheduler?.setAuthorized(true)
-            await refresh()
-        }
-    }
-
-    private func loadUser() async {
-        if let account = try? await provider.currentAccount() {
-            userName = account.displayName
-            userEmail = account.email
-        }
-    }
-
     // MARK: - Routes
 
     // MARK: - Links
 
     enum LinkLookupError: LocalizedError {
-        case invalidLink
+        case invalidLink(CloudProviderKind)
         case notFound(hasResourceKey: Bool)
+        /// Общая ссылка не найдена (удалена или устарела).
+        case linkNotFound
         case noAccess
 
         var errorDescription: String? {
             switch self {
-            case .invalidLink:
+            case .invalidLink(.googleDrive):
                 String(localized: "This doesn’t look like a Google Drive link. Paste a link like drive.google.com/drive/folders/… or an ID.")
+            case .invalidLink(.dropbox):
+                String(localized: "This doesn’t look like a Dropbox link. Paste a shared link like dropbox.com/scl/fo/…")
+            case .linkNotFound:
+                String(localized: "The shared link wasn’t found. It may have been deleted or have expired.")
             case .notFound(let hasKey):
                 hasKey
                     ? String(localized: "Item not found (HTTP 404). Check the link: it may be outdated or have a wrong resourceKey.")
@@ -663,24 +545,28 @@ final class AppModel {
 
     private func reloadLinkedNow() async {
         guard let linked = await inBackground({ $0.linkedItems() }) else { return }
-        for item in linked { provider.rememberAccessKey(item.resourceKey, for: item.driveId) }
+        for item in linked { providers[item.provider]?.rememberAccessKey(item.resourceKey, for: item.driveId) }
         if linked != linkedItems { linkedItems = linked }
     }
 
-    /// Находит объект по ссылке (files.get), раскрывает ярлык и сохраняет в «Добавленные по ссылке».
+    /// Ссылки текущего облака (раздел «Добавленные по ссылке»).
+    var activeLinkedItems: [LinkedItem] { linkedItems.filter { $0.provider == activeCloud } }
+
+    /// Находит объект по ссылке текущего облака, раскрывает ярлык и сохраняет в «Добавленные по ссылке».
     func lookupLink(_ text: String) async throws -> CloudItem {
         let provider = provider
-        guard let link = provider.parseLink(text) else { throw LinkLookupError.invalidLink }
+        guard let link = provider.parseLink(text) else { throw LinkLookupError.invalidLink(provider.kind) }
         var item: CloudItem
         do {
             item = try await provider.item(id: link.id, accessKey: link.accessKey)
             if item.isAlias { item = try await provider.resolveAlias(item) }
         } catch CloudAPIError.http(404, _, _) {
+            if provider.kind == .dropbox { throw LinkLookupError.linkNotFound }
             throw LinkLookupError.notFound(hasResourceKey: link.accessKey != nil)
         } catch CloudAPIError.http(403, let message, _) where !message.lowercased().contains("ratelimit") {
             throw LinkLookupError.noAccess
         }
-        let linked = LinkedItem(item)
+        let linked = provider.linkRecord(for: item)
         let failure = await inBackground { db -> String? in
             do { try db.saveLinked(linked); return nil } catch { return error.localizedDescription }
         }
@@ -690,16 +576,17 @@ final class AppModel {
     }
 
     func removeLinked(_ item: CloudItem) {
-        let id = item.id
+        let id = item.id, kind = item.provider
         Task {
-            _ = await inBackground { try? $0.deleteLinked(driveId: id) }
+            _ = await inBackground { try? $0.deleteLinked(provider: kind, driveId: id) }
             await reloadLinkedNow()
         }
     }
 
     /// «Открыть в браузере NaviDrive»: раздел «Добавленные по ссылке», внутри папки.
     func openInBrowser(_ item: CloudItem) {
-        browserStacks[.linked] = item.isFolder ? [item] : []
+        activeCloud = item.provider
+        browserStacks[BrowserStackKey(cloud: item.provider, scope: .linked)] = item.isFolder ? [item] : []
         browserNavigationToken += 1
         selection = .linked
     }
@@ -852,7 +739,7 @@ final class AppModel {
 
     func revealInFinder(_ item: CloudItem, ancestors: [CloudItem]) {
         let path = PathResolver.localPath(for: item, ancestors: ancestors, routes: routeMap, defaultPath: defaultDownloadPath)
-        revealPath(path, alternatives: [path + ".gdrive.part"])
+        revealPath(path, alternatives: [path + item.provider.partialSuffix])
     }
 
     func revealRoute(_ route: CustomRoute) {
@@ -1047,7 +934,7 @@ final class AppModel {
     /// «Upload to Google Drive (NaviDrive)» в Finder: выбор папки на диске, затем очередь отправки.
     func upload(paths: [String]) {
         guard isSignedIn else {
-            welcomeNotice = String(localized: "Sign in to Google to upload files.")
+            welcomeNotice = String(localized: "Connect Google Drive or Dropbox to upload files.")
             showWelcome()
             return
         }

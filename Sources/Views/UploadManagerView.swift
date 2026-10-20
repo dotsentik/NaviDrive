@@ -186,7 +186,10 @@ private struct UploadTaskRow: View, Equatable {
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(task.fileName).lineLimit(1).truncationMode(.middle)
+                HStack(spacing: 5) {
+                    CloudBadge(cloud: task.provider)
+                    Text(task.fileName).lineLimit(1).truncationMode(.middle)
+                }
                 HStack(spacing: 4) {
                     Text(PathResolver.displayPath(task.localPath)).lineLimit(1).truncationMode(.head)
                     Image(systemName: "arrow.right")
@@ -205,7 +208,9 @@ private struct UploadTaskRow: View, Equatable {
                     }
                     if task.status == .completed && task.checksum != nil {
                         Text("verified ✓").foregroundStyle(.green)
-                            .help("The MD5 of the file on this Mac matches the Google Drive checksum")
+                            .help(task.provider == .dropbox
+                                  ? String(localized: "The content hash of the file on this Mac matches the Dropbox content_hash")
+                                  : String(localized: "The MD5 of the file on this Mac matches the Google Drive checksum"))
                     }
                 }
                 .font(.caption).foregroundStyle(.secondary)

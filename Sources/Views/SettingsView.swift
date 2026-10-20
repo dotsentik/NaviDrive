@@ -4,14 +4,14 @@ enum SettingsTab: String, Hashable {
     case account, downloads, uploads, general
 }
 
-/// Окно настроек macOS (сцена `Settings`, ⌘,): вкладки «Аккаунт», «Скачивание», «Отправка», «Общие».
+/// Окно настроек macOS (сцена `Settings`, ⌘,): вкладки «Аккаунты», «Скачивание», «Отправка», «Общие».
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         @Bindable var model = model
         TabView(selection: $model.settingsTab) {
-            Tab("Account", systemImage: "person.crop.circle", value: SettingsTab.account) {
+            Tab("Accounts", systemImage: "person.crop.circle", value: SettingsTab.account) {
                 SettingsPane { AccountSettings() }
             }
             Tab("Downloads", systemImage: "arrow.down.circle", value: SettingsTab.downloads) {
@@ -46,54 +46,17 @@ private struct AccountSettings: View {
 
     var body: some View {
         @Bindable var model = model
-        Section("Google Account") {
-            if model.isSignedIn {
-                HStack(alignment: .top) {
-                    Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(model.userName ?? String(localized: "Signed in"))
-                        if let email = model.userEmail {
-                            Text(verbatim: email).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                        }
-                    }
-                    Spacer()
-                    Button("Sign Out", role: .destructive) { model.signOut() }
-                }
-            } else if model.isSigningIn {
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text("Waiting for sign-in in your browser…").foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Open Sign-In Page Again") { model.reopenSignInPage() }
-                        .disabled(model.signInURL == nil)
-                    Button("Cancel") { model.cancelSignIn() }
-                }
-            } else {
-                HStack {
-                    Text("Not signed in").foregroundStyle(.secondary)
-                    Spacer()
-                    Button(model.signInError == nil ? String(localized: "Sign In with Google") : String(localized: "Try Again")) {
-                        model.signIn()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            }
-            if let error = model.signInError, !model.isSignedIn {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+        CloudAccountSection(cloud: .googleDrive)
 
         Section {
             Toggle("Use my own OAuth credentials", isOn: $model.useCustomCredentials)
-                .disabled(model.isSignedIn || model.isSigningIn)
+                .disabled(model.account(.googleDrive).isSignedIn || model.account(.googleDrive).isSigningIn)
             if model.useCustomCredentials {
                 TextField("Client ID", text: $model.clientId, prompt: Text("xxxxxxxx.apps.googleusercontent.com"))
                     .textContentType(.username)
-                    .disabled(model.isSignedIn)
+                    .disabled(model.account(.googleDrive).isSignedIn)
                 SecureField("Client Secret", text: $model.clientSecret, prompt: Text("GOCSPX-…"))
-                    .disabled(model.isSignedIn)
+                    .disabled(model.account(.googleDrive).isSignedIn)
             }
         } header: {
             Text("Advanced")
@@ -105,6 +68,71 @@ private struct AccountSettings: View {
                 Text("Create an OAuth Client ID of type “Desktop app” in Google Cloud Console and enable the Google Drive API. Keys and tokens are stored in the system Keychain.")
             }
             .font(.caption).foregroundStyle(.secondary)
+        }
+
+        CloudAccountSection(cloud: .dropbox)
+    }
+}
+
+/// Блок аккаунта облака: статус, имя и email, вход и выход.
+private struct CloudAccountSection: View {
+    @Environment(AppModel.self) private var model
+    let cloud: CloudProviderKind
+
+    private var state: CloudAccountState { model.account(cloud) }
+    private var canSignIn: Bool { model.providers[cloud]?.canSignIn ?? false }
+
+    var body: some View {
+        Section {
+            if state.isSignedIn {
+                HStack(alignment: .top) {
+                    Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(state.userName ?? String(localized: "Signed in"))
+                        if let email = state.userEmail {
+                            Text(verbatim: email).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                        }
+                    }
+                    Spacer()
+                    Button("Sign Out", role: .destructive) { model.signOut(cloud) }
+                }
+            } else if state.isSigningIn {
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text("Waiting for sign-in in your browser…").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Open Sign-In Page Again") { model.reopenSignInPage(cloud) }
+                        .disabled(state.signInURL == nil)
+                    Button("Cancel") { model.cancelSignIn(cloud) }
+                }
+            } else {
+                HStack {
+                    Text("Not signed in").foregroundStyle(.secondary)
+                    Spacer()
+                    Button(state.signInError == nil ? String(localized: "Connect \(cloud.displayName)") : String(localized: "Try Again")) {
+                        model.signIn(cloud)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canSignIn)
+                }
+            }
+            if let error = state.signInError, !state.isSignedIn {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } header: {
+            Label(cloud.displayName, systemImage: cloud.systemImage)
+        } footer: {
+            if cloud == .dropbox {
+                VStack(alignment: .leading, spacing: 4) {
+                    if !canSignIn {
+                        Text("This copy of NaviDrive was built without a Dropbox app key (DROPBOX_APP_KEY in Config/Secrets.xcconfig).")
+                    }
+                    Text("The Dropbox app must allow the redirect URI \(DropboxOAuth.redirectURI). The sign-in token is stored in the system Keychain.")
+                }
+                .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 }

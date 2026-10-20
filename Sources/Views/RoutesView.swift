@@ -8,9 +8,12 @@ struct RoutesView: View {
 
     var body: some View {
         Table(model.routes, selection: $selection) {
-            TableColumn("Google Drive Folder/File") { route in
+            TableColumn("Cloud Folder/File") { route in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(route.driveName.isEmpty ? "—" : route.driveName).lineLimit(1)
+                    HStack(spacing: 5) {
+                        CloudBadge(cloud: route.provider)
+                        Text(route.driveName.isEmpty ? "—" : route.driveName).lineLimit(1)
+                    }
                     Text(route.driveId)
                         .font(.caption2).foregroundStyle(.secondary)
                         .lineLimit(1).textSelection(.enabled)
@@ -79,5 +82,18 @@ private struct DiskStatusLabel: View {
             Label("Internal disk", systemImage: "internaldrive")
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+/// Маленькая иконка облака у задачи или маршрута (Менеджер загрузок, Отправка, Маршруты).
+struct CloudBadge: View {
+    let cloud: CloudProviderKind
+
+    var body: some View {
+        Image(systemName: cloud.systemImage)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .help(cloud.displayName)
+            .accessibilityLabel(cloud.displayName)
     }
 }

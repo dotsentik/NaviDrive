@@ -9,6 +9,8 @@ final class GoogleDriveProvider: CloudProvider {
     private let keychain: KeychainStore
 
     var session: URLSession { api.session }
+    /// Встроенные учётные данные или свои из настроек (их отсутствие объясняет ошибка входа).
+    let canSignIn = true
 
     static let quotaReasons: Set<String> = ["downloadQuotaExceeded", "quotaExceeded"]
     static let rateLimitReasons: Set<String> = ["rateLimitExceeded", "userRateLimitExceeded"]
@@ -69,6 +71,9 @@ final class GoogleDriveProvider: CloudProvider {
         case .folder(let id, let spaceId): scope = .children(of: id, driveId: spaceId)
         case .sharedWithMe: scope = .sharedWithMe
         case .sharedSpaces: scope = .drives
+        case .linkFolder:
+            // Папки по ссылке у Google открываются по ID (resourceKey — заголовком).
+            throw CloudAPIError.invalidResponse
         }
         let page = try await api.listPage(scope, pageToken: pageToken,
                                           orderBy: stableOrder ? "folder,name,createdTime" : "folder,name")
@@ -121,7 +126,8 @@ final class GoogleDriveProvider: CloudProvider {
         return CloudAuthorizedRequest(request: request, credential: token)
     }
 
-    func downloadFailure(status: Int, body: Data, task: DownloadTask, credential: String) -> CloudTransferError {
+    func downloadFailure(_ response: HTTPURLResponse, body: Data, task: DownloadTask, credential: String) -> CloudTransferError {
+        let status = response.statusCode
         let message = "HTTP \(status): \(GoogleDriveAPIClient.errorMessage(from: body))"
         let reasons = Set(GoogleDriveAPIClient.errorReasons(from: body))
         switch status {
@@ -132,9 +138,9 @@ final class GoogleDriveProvider: CloudProvider {
         case 403 where reasons.contains("cannotDownloadFile"):
             return .fatal(DownloadTask.downloadForbiddenMessage)
         case 429:
-            return .rateLimited(message)
+            return .rateLimited(message, retryAfter: nil)
         case 403 where !reasons.isDisjoint(with: Self.rateLimitReasons) || message.lowercased().contains("ratelimit"):
-            return .rateLimited(message)
+            return .rateLimited(message, retryAfter: nil)
         case 500, 502, 503, 504:
             return .transient(message)
         case 404 where task.resourceKey != nil:
@@ -195,9 +201,9 @@ final class GoogleDriveProvider: CloudProvider {
         case 403 where GoogleDriveAPIClient.isInsufficientScope(status: 403, data: data):
             throw CloudAPIError.insufficientScope
         case 403 where !reasons.isDisjoint(with: Self.rateLimitReasons):
-            throw CloudTransferError.rateLimited(String(localized: "Google rate-limited requests (HTTP 403)"))
+            throw CloudTransferError.rateLimited(String(localized: "Google rate-limited requests (HTTP 403)"), retryAfter: nil)
         case 429:
-            throw CloudTransferError.rateLimited(String(localized: "Google rate-limited requests (HTTP 429)"))
+            throw CloudTransferError.rateLimited(String(localized: "Google rate-limited requests (HTTP 429)"), retryAfter: nil)
         case 403 where reasons.contains("storageQuotaExceeded"):
             throw CloudTransferError.fatal(String(localized: "Google Drive is out of storage"))
         case 403:
@@ -232,7 +238,7 @@ final class GoogleDriveProvider: CloudProvider {
         do {
             return try await operation()
         } catch CloudAPIError.http(403, let message, _) where message.contains("storageQuotaExceeded") {
-            throw CloudAPIError.storageFull
+            throw CloudAPIError.storageFull(.googleDrive)
         }
     }
 
@@ -297,16 +303,16 @@ final class GoogleDriveProvider: CloudProvider {
 
 // MARK: - Добавленные по ссылке
 
-extension LinkedItem {
-    init(_ item: CloudItem) {
-        self.init(driveId: item.id, name: item.name, mimeType: GoogleDriveProvider.mimeType(of: item),
-                  resourceKey: item.accessKey, size: item.size, sharedDriveId: item.spaceId,
-                  addedAt: Int64(Date().timeIntervalSince1970))
+extension GoogleDriveProvider {
+    func linkRecord(for item: CloudItem) -> LinkedItem {
+        LinkedItem(provider: kind, driveId: item.id, name: item.name, mimeType: Self.mimeType(of: item),
+                   resourceKey: item.accessKey, size: item.size, sharedDriveId: item.spaceId,
+                   addedAt: Int64(Date().timeIntervalSince1970))
     }
 
-    var cloudItem: CloudItem {
-        GoogleDriveProvider.cloudItem(DriveItem(id: driveId, name: name, mimeType: mimeType, size: size.map(String.init),
-                                                md5Checksum: nil, modifiedTime: nil, resourceKey: resourceKey,
-                                                driveId: sharedDriveId))
+    func item(fromLinked record: LinkedItem) -> CloudItem {
+        Self.cloudItem(DriveItem(id: record.driveId, name: record.name, mimeType: record.mimeType,
+                                 size: record.size.map(String.init), md5Checksum: nil, modifiedTime: nil,
+                                 resourceKey: record.resourceKey, driveId: record.sharedDriveId))
     }
 }

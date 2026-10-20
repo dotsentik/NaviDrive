@@ -11,6 +11,11 @@ enum BrowserScope: Hashable {
         case .linked: String(localized: "Added by Link")
         }
     }
+
+    /// Корень Dropbox называется «Dropbox».
+    func title(for cloud: CloudProviderKind) -> String {
+        self == .myDrive && cloud == .dropbox ? cloud.displayName : title
+    }
 }
 
 struct DriveBrowserView: View {
@@ -48,13 +53,13 @@ struct DriveBrowserView: View {
 
     var body: some View {
         Group {
-            if !model.isSignedIn {
+            if !model.isActiveCloudSignedIn {
                 // Без входа главное окно закрывается и открывается окно приветствия.
                 Color.clear
             } else {
                 VStack(spacing: 0) {
                     if scope == .linked {
-                        LinkInputBar(text: $linkText, error: linkError, isBusy: isOpeningLink,
+                        LinkInputBar(cloud: model.activeCloud, text: $linkText, error: linkError, isBusy: isOpeningLink,
                                      open: openLink, details: { model.showAddLink = true })
                         Divider()
                     }
@@ -87,7 +92,7 @@ struct DriveBrowserView: View {
                 .overlay { if isDropTargeted, let target = uploadTarget { DropZoneOverlay(folderName: target.name) } }
             }
         }
-        .navigationTitle(stack.last?.name ?? scope.title)
+        .navigationTitle(stack.last?.name ?? scope.title(for: model.activeCloud))
         .background {
             // ⌘L «Добавить по ссылке» работает и после переноса кнопки в меню «…».
             Button("Add by Link…") { model.showAddLink = true }
@@ -100,21 +105,25 @@ struct DriveBrowserView: View {
             Button("Move to Trash", role: .destructive) { trash(trashCandidates) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Items can be restored from the Google Drive trash within 30 days.")
+            if model.activeCloud == .dropbox {
+                Text("Deleted items can be restored in Dropbox under Deleted files.")
+            } else {
+                Text("Items can be restored from the Google Drive trash within 30 days.")
+            }
         }
         .sheet(isPresented: $showMovePicker) {
             FolderPickerSheet(title: moveTitle, actionTitle: String(localized: "Move"),
-                              excludedIds: Set(moveCandidates.filter(\.isFolder).map(\.id))) { target in
+                              excludedIds: Set(moveCandidates.filter(\.isFolder).map { model.provider.uploadTarget(for: $0).id })) { target in
                 move(moveCandidates, to: target)
             }
             .environment(model)
         }
-        .task(id: model.isSignedIn) {
-            guard model.isSignedIn else { return }
-            if stack.isEmpty, let saved = model.browserStacks[scope] { stack = saved }
+        .task(id: model.isActiveCloudSignedIn) {
+            guard model.isActiveCloudSignedIn else { return }
+            if stack.isEmpty, let saved = model.browserStacks[stackKey] { stack = saved }
             reload(resetting: true)
         }
-        .onChange(of: stack) { _, newValue in model.browserStacks[scope] = newValue }
+        .onChange(of: stack) { _, newValue in model.browserStacks[stackKey] = newValue }
         // Тулбар (MainView) читает доступность кнопок из модели и шлёт команды сюда.
         .onChange(of: toolbarState, initial: true) { _, state in
             if model.browserToolbar != state { model.browserToolbar = state }
@@ -124,7 +133,7 @@ struct DriveBrowserView: View {
         }
         .onChange(of: model.browserNavigationToken) {
             // Переход, запрошенный извне (например, «Открыть в браузере NaviDrive» из карточки ссылки).
-            let requested = model.browserStacks[scope] ?? []
+            let requested = model.browserStacks[stackKey] ?? []
             if requested != stack {
                 stack = requested
                 reload(resetting: true)
@@ -141,7 +150,7 @@ struct DriveBrowserView: View {
     private var breadcrumbs: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
-                Button(scope.title) { navigate(toDepth: 0) }
+                Button(scope.title(for: model.activeCloud)) { navigate(toDepth: 0) }
                     .buttonStyle(.link)
                 ForEach(Array(stack.enumerated()), id: \.element.id) { index, folder in
                     Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary)
@@ -312,7 +321,7 @@ struct DriveBrowserView: View {
     private var uploadTarget: UploadTarget? {
         if let folder = stack.last {
             guard folder.canAddChildren else { return nil }
-            return UploadTarget(provider: folder.provider, id: folder.targetId, name: folder.name, spaceId: folder.targetSpaceId)
+            return model.provider.uploadTarget(for: folder)
         }
         return scope == .myDrive ? model.provider.rootFolder : nil
     }
@@ -450,6 +459,8 @@ struct DriveBrowserView: View {
     /// ⌘R / кнопка «Обновить»: текущий список остаётся на экране до полной замены.
     private var isLinkedRoot: Bool { scope == .linked && stack.isEmpty }
 
+    private var stackKey: BrowserStackKey { BrowserStackKey(cloud: model.activeCloud, scope: scope) }
+
     /// Разбор ссылки → files.get → папка открывается сразу, файл появляется в списке выделенным.
     private func openLink() {
         let input = linkText
@@ -495,7 +506,8 @@ struct DriveBrowserView: View {
 
         // Корень «Добавленные по ссылке» — локальный список из БД, без запроса к API.
         if isLinkedRoot {
-            let linked = model.linkedItems.map(\.cloudItem)
+            let provider = model.provider
+            let linked = model.activeLinkedItems.map(provider.item(fromLinked:))
             let ids = Set(linked.map(\.id))
             selection = selection.filter { ids.contains($0) }
             items = linked
@@ -515,7 +527,7 @@ struct DriveBrowserView: View {
 
         let location: CloudLocation
         if let folder = stack.last {
-            location = .folder(id: folder.targetId, spaceId: folder.targetSpaceId)
+            location = model.provider.location(of: folder)
         } else {
             switch scope {
             case .myDrive: location = .root
@@ -608,6 +620,7 @@ struct DriveBrowserView: View {
         }
         if item.isFolder { return String(localized: "Folder") }
         switch item.documentType {
+        case .document where item.provider == .dropbox: return String(localized: "Dropbox Paper")
         case .document: return String(localized: "Google Doc")
         case .spreadsheet: return String(localized: "Google Sheet")
         case .presentation: return String(localized: "Google Slides")
@@ -705,8 +718,9 @@ private struct RouteBadge: View {
     }
 }
 
-/// Поле для ссылки на файл или папку Google Drive в разделе «Добавленные по ссылке».
+/// Поле для ссылки на файл или папку облака в разделе «Добавленные по ссылке».
 private struct LinkInputBar: View {
+    let cloud: CloudProviderKind
     @Binding var text: String
     let error: String?
     let isBusy: Bool
@@ -717,9 +731,16 @@ private struct LinkInputBar: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: "link").foregroundStyle(.secondary)
-                TextField("Paste a link to a Google Drive file or folder",
-                          text: $text, prompt: Text("https://drive.google.com/drive/folders/…  or ID"))
-                    .textFieldStyle(.roundedBorder)
+                Group {
+                    if cloud == .dropbox {
+                        TextField("Paste a Dropbox shared link to a file or folder",
+                                  text: $text, prompt: Text(verbatim: "https://www.dropbox.com/scl/fo/…"))
+                    } else {
+                        TextField("Paste a link to a Google Drive file or folder",
+                                  text: $text, prompt: Text("https://drive.google.com/drive/folders/…  or ID"))
+                    }
+                }
+                .textFieldStyle(.roundedBorder)
                     .onSubmit(open)
                 if isBusy { ProgressView().controlSize(.small) }
                 Button("Open", action: open)

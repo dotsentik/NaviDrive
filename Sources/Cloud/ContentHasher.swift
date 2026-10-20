@@ -20,8 +20,7 @@ enum ContentHasher {
                     }
                     defer { try? handle.close() }
                     var hasher = makeHasher(kind)
-                    // Блоки по 4 МБ делят 8 МБ без остатка, поэтому чтение кратно блокам Dropbox.
-                    let chunkSize = kind == .dropboxContentHash ? dropboxBlockSize : readChunkSize
+                    let chunkSize = readChunkSize
                     var total: Int64 = 0
                     var lastReport: Int64 = 0
                     while true {
@@ -68,9 +67,33 @@ private struct MD5Hasher: StreamingHasher {
     func finalize() -> String { md5.finalize().hexString }
 }
 
-/// SHA-256 от конкатенации SHA-256 каждого блока по 4 МБ. Данные приходят целыми блоками.
+/// SHA-256 от конкатенации SHA-256 каждого блока по 4 МБ (последний — короче).
+/// Данные копятся до целого блока: границы блоков не зависят от размера прочитанных кусков.
 private struct DropboxContentHasher: StreamingHasher {
     private var overall = SHA256()
-    mutating func update(_ data: Data) { overall.update(data: Data(SHA256.hash(data: data))) }
-    func finalize() -> String { overall.finalize().hexString }
+    private var block = SHA256()
+    private var blockFill = 0
+
+    mutating func update(_ data: Data) {
+        var rest = data[...]
+        while !rest.isEmpty {
+            let take = min(ContentHasher.dropboxBlockSize - blockFill, rest.count)
+            block.update(data: rest.prefix(take))
+            blockFill += take
+            rest = rest.dropFirst(take)
+            if blockFill == ContentHasher.dropboxBlockSize { closeBlock() }
+        }
+    }
+
+    private mutating func closeBlock() {
+        overall.update(data: Data(block.finalize()))
+        block = SHA256()
+        blockFill = 0
+    }
+
+    func finalize() -> String {
+        var copy = self
+        if copy.blockFill > 0 { copy.closeBlock() }
+        return copy.overall.finalize().hexString
+    }
 }

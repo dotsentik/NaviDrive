@@ -12,6 +12,22 @@ enum CloudProviderKind: String, Sendable, Hashable, CaseIterable, Codable {
         }
     }
 
+    /// Значок облака (SF Symbols) в sidebar и у задач.
+    var systemImage: String {
+        switch self {
+        case .googleDrive: "g.circle.fill"
+        case .dropbox: "shippingbox.fill"
+        }
+    }
+
+    /// Суффикс недокачанного файла рядом с целевым.
+    var partialSuffix: String {
+        switch self {
+        case .googleDrive: ".gdrive.part"
+        case .dropbox: ".dropbox.part"
+        }
+    }
+
     /// Каким хешем сервис подтверждает содержимое файла.
     var hashKind: CloudHashKind {
         switch self {
@@ -25,7 +41,7 @@ enum CloudProviderKind: String, Sendable, Hashable, CaseIterable, Codable {
         guard let contentType else { return nil }
         switch self {
         case .googleDrive: return GoogleDriveProvider.exportFormat(forContentType: contentType)
-        case .dropbox: return nil
+        case .dropbox: return DropboxProvider.exportFormat(forContentType: contentType)
         }
     }
 }
@@ -36,6 +52,8 @@ protocol CloudProvider: AnyObject, Sendable {
     var kind: CloudProviderKind { get }
     /// Сессия для запросов к API, скачивания и загрузки.
     var session: URLSession { get }
+    /// В сборку вписаны учётные данные (или пользователь может ввести свои) — вход возможен.
+    var canSignIn: Bool { get }
 
     // MARK: Авторизация
 
@@ -67,6 +85,13 @@ protocol CloudProvider: AnyObject, Sendable {
     /// Рекурсивный обход папки (по страницам). Каждая папка обходится один раз.
     func traverse(_ folder: CloudItem, resolvingAliases: Bool) -> AsyncStream<CloudTraversalEvent>
     func item(id: String, accessKey: String?) async throws -> CloudItem
+    /// Где лежит содержимое папки (обычная папка, папка внутри ссылки и т. п.).
+    func location(of folder: CloudItem) -> CloudLocation
+    /// Папка как цель для загрузки, создания папок и перемещения.
+    func uploadTarget(for folder: CloudItem) -> UploadTarget
+    /// Запись для раздела «Добавленные по ссылке» и обратно.
+    func linkRecord(for item: CloudItem) -> LinkedItem
+    func item(fromLinked record: LinkedItem) -> CloudItem
     /// Ярлык → объект-цель под именем ярлыка. Обычный объект возвращается как есть.
     func resolveAlias(_ item: CloudItem) async throws -> CloudItem
     func permissions(for item: CloudItem) -> CloudPermissions
@@ -81,7 +106,7 @@ protocol CloudProvider: AnyObject, Sendable {
     /// Подписанный запрос содержимого файла начиная с байта `offset`.
     func downloadRequest(for task: DownloadTask, offset: Int64) async throws -> CloudAuthorizedRequest
     /// Классификация неуспешного ответа на запрос скачивания.
-    func downloadFailure(status: Int, body: Data, task: DownloadTask, credential: String) -> CloudTransferError
+    func downloadFailure(_ response: HTTPURLResponse, body: Data, task: DownloadTask, credential: String) -> CloudTransferError
 
     // MARK: Загрузка с возобновлением
 
@@ -126,6 +151,14 @@ extension CloudProvider {
 
     func permissions(for item: CloudItem) -> CloudPermissions { item.permissions }
 
+    func location(of folder: CloudItem) -> CloudLocation {
+        .folder(id: folder.targetId, spaceId: folder.targetSpaceId)
+    }
+
+    func uploadTarget(for folder: CloudItem) -> UploadTarget {
+        UploadTarget(provider: kind, id: folder.targetId, name: folder.name, spaceId: folder.targetSpaceId)
+    }
+
     func isSignedOutError(_ error: Error) -> Bool {
         (error as? OAuthError)?.meansSignedOut == true
     }
@@ -133,6 +166,11 @@ extension CloudProvider {
     /// Обход по страницам через `listPage`: стек папок, множество посещённых защищает от циклов
     /// (ярлык на папку-предка) и от повторного обхода одной папки.
     func traverse(_ folder: CloudItem, resolvingAliases: Bool) -> AsyncStream<CloudTraversalEvent> {
+        walkFolders(folder, resolvingAliases: resolvingAliases)
+    }
+
+    /// Обход папка за папкой через `listPage` (основа `traverse` по умолчанию).
+    func walkFolders(_ folder: CloudItem, resolvingAliases: Bool) -> AsyncStream<CloudTraversalEvent> {
         let walker = CloudTraversalWalker(provider: self, root: folder, resolvingAliases: resolvingAliases)
         return AsyncStream(unfolding: { await walker.next() })
     }
@@ -154,15 +192,15 @@ enum CloudTraversalEvent: Sendable {
 private actor CloudTraversalWalker {
     private let provider: any CloudProvider
     private let resolvingAliases: Bool
-    private var stack: [(id: String, spaceId: String?)]
+    private var stack: [(id: String, location: CloudLocation)]
     private var visited: Set<String>
-    private var current: (id: String, spaceId: String?, token: String?)?
+    private var current: (id: String, location: CloudLocation, token: String?)?
     private var pending: [CloudTraversalEvent] = []
 
     init(provider: any CloudProvider, root: CloudItem, resolvingAliases: Bool) {
         self.provider = provider
         self.resolvingAliases = resolvingAliases
-        stack = [(root.targetId, root.targetSpaceId)]
+        stack = [(root.targetId, provider.location(of: root))]
         visited = [root.targetId]
     }
 
@@ -172,14 +210,13 @@ private actor CloudTraversalWalker {
             if Task.isCancelled { return nil }
             if current == nil {
                 guard let folder = stack.popLast() else { return nil }
-                current = (folder.id, folder.spaceId, nil)
+                current = (folder.id, folder.location, nil)
             }
             guard let folder = current else { return nil }
 
             let page: CloudPage
             do {
-                page = try await provider.listPage(.folder(id: folder.id, spaceId: folder.spaceId),
-                                                   pageToken: folder.token, stableOrder: true)
+                page = try await provider.listPage(folder.location, pageToken: folder.token, stableOrder: true)
             } catch {
                 current = nil
                 return .folderFailed(folderId: folder.id, error: error)
@@ -200,11 +237,11 @@ private actor CloudTraversalWalker {
                 if item.isFolder {
                     // Цикл через ярлык или повторная ссылка на уже обойдённую папку — пропускаем.
                     guard visited.insert(item.targetId).inserted else { continue }
-                    stack.append((item.targetId, item.targetSpaceId))
+                    stack.append((item.targetId, provider.location(of: item)))
                 }
                 items.append(item)
             }
-            current = page.nextPageToken.map { (folder.id, folder.spaceId, $0) }
+            current = page.nextPageToken.map { (folder.id, folder.location, $0) }
             // Ошибки раскрытия ярлыков — до страницы, как и при последовательном разборе.
             pending.append(.page(folderId: folder.id, items: items))
         }
@@ -226,6 +263,9 @@ final class CloudProviders: Sendable {
     }
 
     subscript(kind: CloudProviderKind) -> (any CloudProvider)? { providers[kind] }
+
+    /// Все подключённые к сборке облака в порядке `CloudProviderKind.allCases`.
+    var all: [any CloudProvider] { CloudProviderKind.allCases.compactMap { providers[$0] } }
 
     static var unavailableMessage: String { String(localized: "This cloud service isn’t available in this version of NaviDrive") }
 

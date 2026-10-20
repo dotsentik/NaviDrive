@@ -35,10 +35,11 @@ actor UploadScheduler {
 
     private var started = false
     private var isOnline = true
-    private var isAuthorized = false
+    /// Облака с действующим входом.
+    private var authorized: Set<CloudProviderKind> = []
     private var isPaused = false
     /// Вход без права записи: отправка стоит, пока пользователь не войдёт заново.
-    private var writeBlocked = false
+    private var writeBlocked: Set<CloudProviderKind> = []
     private var reauthRequests = 0
     private var preparing: [String] = []
 
@@ -58,10 +59,10 @@ actor UploadScheduler {
 
     /// После перезапуска: прерванные отправки снова в очереди (продолжатся с подтверждённого сервером байта),
     /// прерванные проверки хеша — снова в проверке.
-    func start(authorized: Bool) {
+    func start(authorized: Set<CloudProviderKind>) {
         guard !started else { return }
         started = true
-        isAuthorized = authorized
+        self.authorized = authorized
         db.moveUploadStatuses([.uploading, .waitingForNetwork], to: .queued)
         verificationQueue = db.uploads(statuses: [.verifying])
         startVerifications()
@@ -75,13 +76,14 @@ actor UploadScheduler {
         schedule()
     }
 
-    func setAuthorized(_ authorized: Bool) {
-        isAuthorized = authorized
-        if authorized {
-            writeBlocked = false
+    func setAuthorized(_ provider: CloudProviderKind, _ isAuthorized: Bool) {
+        if isAuthorized {
+            authorized.insert(provider)
+            writeBlocked.remove(provider)
             schedule()
         } else {
-            stopAll(.requeue)
+            authorized.remove(provider)
+            stopAll(.requeue, provider: provider)
         }
     }
 
@@ -205,13 +207,13 @@ actor UploadScheduler {
     private static let unfinishedStatuses: [UploadStatus] = [.queued, .waitingForNetwork, .waitingForVolume]
 
     /// Очередь предыдущего аккаунта после входа другим: всё незавершённое — на паузу.
-    func pauseUnfinished() {
-        db.moveUploadStatuses(Self.unfinishedStatuses, to: .paused)
+    func pauseUnfinished(_ provider: CloudProviderKind) {
+        db.moveUploadStatuses(Self.unfinishedStatuses, to: .paused, provider: provider)
     }
 
     /// Очередь предыдущего аккаунта после входа другим: незавершённое удаляется из очереди.
-    func cancelUnfinished() {
-        for task in db.uploads(statuses: Self.unfinishedStatuses + [.paused, .failed]) where running[task.id] == nil {
+    func cancelUnfinished(_ provider: CloudProviderKind) {
+        for task in db.uploads(statuses: Self.unfinishedStatuses + [.paused, .failed], provider: provider) where running[task.id] == nil {
             cancelSession(of: task.id)
             db.updateUploadStatus(id: task.id, status: .cancelled)
         }
@@ -255,8 +257,9 @@ actor UploadScheduler {
     // MARK: - Scheduling
 
     private func schedule() {
-        guard started, isAuthorized, isOnline, !isPaused, !writeBlocked else { return }
-        while running.count < limit, let task = db.claimNextUpload() {
+        let providers = authorized.subtracting(writeBlocked)
+        guard started, !providers.isEmpty, isOnline, !isPaused else { return }
+        while running.count < limit, let task = db.claimNextUpload(providers: providers) {
             if case .missing(let message) = PathResolver.volumeState(for: task.localPath) {
                 db.updateUploadStatus(id: task.id, status: .waitingForVolume, error: message)
                 if let root = PathResolver.volumeRoot(for: task.localPath) {
@@ -308,15 +311,14 @@ actor UploadScheduler {
         case .signedOut:
             // Вход отозван: очередь стоит до нового входа; сессия и подтверждённые части сохранены.
             db.updateUploadStatus(id: task.id, status: reason == .pause ? .paused : .queued)
-            isAuthorized = false
-            stopAll(.requeue)
+            authorized.remove(task.provider)
+            stopAll(.requeue, provider: task.provider)
         case .needsReauth:
             // Отправка встаёт целиком; задачи ждут в очереди повторного входа. Скачивание не затрагивается.
             db.updateUploadStatus(id: task.id, status: .queued, error: String(localized: "Sign in to Google again to upload"))
-            if !writeBlocked {
-                writeBlocked = true
+            if writeBlocked.insert(task.provider).inserted {
                 reauthRequests += 1
-                stopAll(.requeue)
+                stopAll(.requeue, provider: task.provider)
             }
         case .stopped:
             switch reason {
@@ -329,11 +331,10 @@ actor UploadScheduler {
     }
 
     /// Нужен повторный вход (обнаружено при операции в браузере диска).
-    func requireReauth() {
-        guard !writeBlocked else { return }
-        writeBlocked = true
+    func requireReauth(_ provider: CloudProviderKind) {
+        guard writeBlocked.insert(provider).inserted else { return }
         reauthRequests += 1
-        stopAll(.requeue)
+        stopAll(.requeue, provider: provider)
     }
 
     private func stop(_ id: String, _ reason: StopReason) {
@@ -342,8 +343,9 @@ actor UploadScheduler {
         entry.handle.cancel()
     }
 
-    private func stopAll(_ reason: StopReason) {
-        for id in running.keys { stop(id, reason) }
+    /// - Parameter provider: только задачи этого облака (nil — все).
+    private func stopAll(_ reason: StopReason, provider: CloudProviderKind? = nil) {
+        for (id, entry) in running where provider == nil || entry.task.provider == provider { stop(id, reason) }
     }
 
     private func cancelSession(of id: String) {
