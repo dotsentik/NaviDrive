@@ -94,9 +94,9 @@ extension AppModel {
             return String(localized: "Access wasn’t granted. To use NaviDrive with Dropbox, click “Allow” on the Dropbox page.")
         case (DropboxAuthError.authorizationDenied(let reason), _):
             return String(localized: "Dropbox refused the sign-in (\(reason)).")
-        case (LoopbackServer.ServerError.timedOut, .googleDrive):
+        case (LoopbackServer.ServerError.timedOut(_), .googleDrive):
             return String(localized: "Google didn’t respond within 5 minutes — perhaps the sign-in tab was closed. Try again.")
-        case (LoopbackServer.ServerError.timedOut, .dropbox):
+        case (LoopbackServer.ServerError.timedOut(_), .dropbox):
             return String(localized: "Dropbox didn’t respond within 5 minutes — perhaps the sign-in tab was closed. Try again.")
         case (let urlError as URLError, .googleDrive) where CloudNetwork.isTransientError(urlError):
             return String(localized: "Can’t reach Google. Check your internet connection and try again.")

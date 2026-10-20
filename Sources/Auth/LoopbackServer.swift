@@ -23,14 +23,15 @@ final class LoopbackServer: @unchecked Sendable {
         /// Фиксированный порт занят другой программой.
         case portInUse(UInt16)
         case cancelled
-        case timedOut
+        /// Облако не вернуло ответ за отведённое время.
+        case timedOut(cloudName: String)
 
         var errorDescription: String? {
             switch self {
             case .failedToStart(let m): String(localized: "Couldn’t start the local authorization server: \(m)")
             case .portInUse(let port): String(localized: "Port \(String(port)) on this Mac is used by another app, so NaviDrive can’t receive the sign-in response. Quit the app that uses it (or restart the Mac) and try again.")
             case .cancelled: String(localized: "Authorization cancelled")
-            case .timedOut: String(localized: "No response from Google within 5 minutes. Try signing in again.")
+            case .timedOut(let cloudName): String(localized: "No response from \(cloudName) within 5 minutes. Try signing in again.")
             }
         }
     }
@@ -80,7 +81,7 @@ final class LoopbackServer: @unchecked Sendable {
                     self.queue.asyncAfter(deadline: .now() + Self.timeout) { [weak server = self] in
                         guard let server, !server.finished else { return }
                         server.timedOut = true
-                        server.deliver(.failure(ServerError.timedOut))
+                        server.deliver(.failure(ServerError.timedOut(cloudName: server.cloudName)))
                     }
                 } catch {
                     continuation.resume(throwing: self.startError(error))

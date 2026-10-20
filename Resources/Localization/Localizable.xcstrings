@@ -4399,12 +4399,18 @@
         }
       }
     },
-    "No response from Google within 5 minutes. Try signing in again.": {
+    "No response from %@ within 5 minutes. Try signing in again.": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No response from %@ within 5 minutes. Try signing in again."
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Google не ответил за 5 минут. Попробуйте войти ещё раз."
+            "value": "%@ не ответил за 5 минут. Попробуйте войти ещё раз."
           }
         }
       }
