@@ -6,8 +6,6 @@
 
 <p align="center">Ein nativer macOS-Client für Google Drive und Dropbox, ausgelegt auf schnelle, fortsetzbare Downloads und Uploads großer Dateien und Ordner.</p>
 
-Ein nativer macOS-Client für Google Drive und Dropbox, ausgelegt auf schnelle, fortsetzbare Downloads und Uploads großer Dateien und Ordner.
-
 ## Funktionen
 
 - Google Drive („Meine Ablage“, „Für mich freigegeben“) und Dropbox durchsuchen; mehrere Clouds gleichzeitig verbunden.

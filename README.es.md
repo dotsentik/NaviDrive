@@ -6,8 +6,6 @@
 
 <p align="center">Un cliente nativo de Google Drive y Dropbox para macOS, centrado en descargas y subidas rápidas y reanudables de archivos y carpetas grandes.</p>
 
-Un cliente nativo de Google Drive y Dropbox para macOS, centrado en descargas y subidas rápidas y reanudables de archivos y carpetas grandes.
-
 ## Funciones
 
 - Explora Google Drive («Mi unidad», «Compartido conmigo») y Dropbox; varias nubes conectadas a la vez.
