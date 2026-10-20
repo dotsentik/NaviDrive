@@ -7,6 +7,11 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-20
+
+### Fixed
+- The sign-in timeout message names the cloud being connected: Dropbox no longer reports "No response from Google".
+
 ## [1.1.0] - 2026-10-20
 
 ### Added
