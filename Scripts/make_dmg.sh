@@ -2,12 +2,13 @@
 # Собирает установочный DMG NaviDrive: приложение слева, ярлык Applications справа, фон со стрелкой.
 # Только встроенные инструменты macOS: hdiutil, ditto, osascript, sips, tiffutil, PlistBuddy, swift.
 # Запуск из любой папки: scripts/make_dmg.sh
-# Результат: ~/Desktop/NaviDrive-<версия>.dmg (существующий файл с тем же именем перезаписывается).
+# Результат: ~/Desktop/NaviDrive-<версия>.dmg (или $NAVIDRIVE_DMG_DIR) (существующий файл с тем же именем перезаписывается).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-APP="$ROOT/DerivedData/Build/Products/Release/NaviDrive.app"
+# NAVIDRIVE_APP и NAVIDRIVE_DMG_DIR переопределяют собранное приложение и папку результата (release.sh, тесты).
+APP="${NAVIDRIVE_APP:-$ROOT/DerivedData/Build/Products/Release/NaviDrive.app}"
 VOLUME_NAME="NaviDrive"
 BACKGROUND="$SCRIPT_DIR/dmg-background.png"
 BACKGROUND_2X="$SCRIPT_DIR/dmg-background@2x.png"
@@ -30,7 +31,7 @@ step() { echo "==> $*"; }
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null)" \
     || fail "в $APP/Contents/Info.plist нет CFBundleShortVersionString"
-DMG="$HOME/Desktop/NaviDrive-$VERSION.dmg"
+DMG="${NAVIDRIVE_DMG_DIR:-$HOME/Desktop}/NaviDrive-$VERSION.dmg"
 
 if [ -d "/Volumes/$VOLUME_NAME" ]; then
     fail "уже подключён том /Volumes/$VOLUME_NAME (например, старый DMG). Извлеките его в Finder и запустите скрипт снова."
