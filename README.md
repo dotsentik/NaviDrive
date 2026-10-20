@@ -1,3 +1,5 @@
+<p align="center"><b>English</b> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.de.md">Deutsch</a> · <a href="README.es.md">Español</a> · <a href="README.hi.md">हिन्दी</a> · <a href="README.el.md">Ελληνικά</a></p>
+
 # NaviDrive
 
 <p align="center"><img src="docs/screenshots/navidrive-hero.png" alt="NaviDrive: клиент Google Drive и Dropbox для macOS" width="880"></p>
@@ -5,8 +7,6 @@
 <p align="center">A native macOS client for Google Drive and Dropbox, focused on fast, resumable downloads and uploads of large files and folders.</p>
 
 A native macOS client for Google Drive and Dropbox, focused on fast, resumable downloads and uploads of large files and folders.
-
-[Русская версия](README.ru.md)
 
 ## Features
 

@@ -1,3 +1,5 @@
+<p align="center"><a href="README.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.de.md">Deutsch</a> · <a href="README.es.md">Español</a> · <b>हिन्दी</b> · <a href="README.el.md">Ελληνικά</a></p>
+
 # NaviDrive
 
 <p align="center"><img src="docs/screenshots/navidrive-hero.png" alt="NaviDrive: macOS के लिए Google Drive और Dropbox क्लाइंट" width="880"></p>
@@ -5,8 +7,6 @@
 <p align="center">macOS के लिए Google Drive और Dropbox का नेटिव क्लाइंट, जो बड़ी फ़ाइलों और फ़ोल्डरों को तेज़ी से डाउनलोड और अपलोड करने पर केंद्रित है, और रुकने के बाद वहीं से फिर शुरू कर सकता है।</p>
 
 macOS के लिए Google Drive और Dropbox का नेटिव क्लाइंट, जो बड़ी फ़ाइलों और फ़ोल्डरों को तेज़ी से डाउनलोड और अपलोड करने पर केंद्रित है, और रुकने के बाद वहीं से फिर शुरू कर सकता है।
-
-[English version](README.md)
 
 ## सुविधाएँ
 

@@ -1,3 +1,5 @@
+<p align="center"><a href="README.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.de.md">Deutsch</a> · <a href="README.es.md">Español</a> · <a href="README.hi.md">हिन्दी</a> · <b>Ελληνικά</b></p>
+
 # NaviDrive
 
 <p align="center"><img src="docs/screenshots/navidrive-hero.png" alt="NaviDrive: πρόγραμμα-πελάτης Google Drive και Dropbox για macOS" width="880"></p>
@@ -5,8 +7,6 @@
 <p align="center">Εγγενές πρόγραμμα-πελάτης Google Drive και Dropbox για macOS, εστιασμένο σε γρήγορες λήψεις και μεταφορτώσεις μεγάλων αρχείων και φακέλων με δυνατότητα συνέχισης.</p>
 
 Εγγενές πρόγραμμα-πελάτης Google Drive και Dropbox για macOS, εστιασμένο σε γρήγορες λήψεις και μεταφορτώσεις μεγάλων αρχείων και φακέλων με δυνατότητα συνέχισης.
-
-[English version](README.md)
 
 ## Δυνατότητες
 
