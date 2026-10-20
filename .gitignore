@@ -1,9 +1,12 @@
 # Сборка
 build/
+.build/
 DerivedData/
 *.app
 *.dSYM
 *.xcarchive
+*.profraw
+*.profdata
 
 # Xcode: пользовательские данные
 xcuserdata/
@@ -21,8 +24,9 @@ Config/Secrets.xcconfig
 *.mobileprovision
 .env*
 
-# Дистрибутивы
+# Дистрибутивы (Scripts/release.sh, make_dmg.sh)
 *.dmg
+*.dmg.sha256
 *.zip
 
 # Системный мусор macOS
@@ -41,4 +45,4 @@ scratchpad/
 # Локальные заметки, не для репозитория
 PROMPT.md
 CLAUDE.md
-scripts/install.sh
+Scripts/install.sh
