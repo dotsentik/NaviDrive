@@ -39,6 +39,13 @@ struct DiskSidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Подсветка, когда к строке ведёт сообщение карточки статуса.
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.accentColor.opacity(model.highlightedVolume == volume.id ? 0.22 : 0))
+                .padding(.horizontal, -4)
+                .animation(.easeInOut(duration: 0.3), value: model.highlightedVolume)
+        }
         .help(volume.details)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)

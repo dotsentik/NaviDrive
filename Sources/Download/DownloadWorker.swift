@@ -30,8 +30,8 @@ struct DownloadWorker: Sendable {
         case downloaded(Int64)
         case failed(String)
         case waitingForVolume(String)
-        /// Квота облака на скачивание файла — повтор через часы, без траты лимита повторов.
-        case waitingForQuota(String)
+        /// Облако сообщило о лимите — задача ждёт (прогресс сохранён), без траты лимита повторов.
+        case limitReached
         /// Вход отозван или истёк: задача возвращается в очередь до нового входа (прогресс сохранён).
         case signedOut
         case stopped
@@ -40,7 +40,7 @@ struct DownloadWorker: Sendable {
     private enum AttemptError: Error {
         case transient(String)
         case rateLimited(String, retryAfter: TimeInterval?)
-        case quota(String)
+        case limit
         case fatal(String)
         case volume(String)
         case unauthorized(String)
@@ -67,8 +67,8 @@ struct DownloadWorker: Sendable {
                 return try await attempt(task, useAsyncBytes: frequentOverflows >= 2)
             } catch AttemptError.fatal(let message) {
                 return .failed(message)
-            } catch AttemptError.quota(let message) {
-                return .waitingForQuota(message)
+            } catch AttemptError.limit {
+                return .limitReached
             } catch AttemptError.volume(let message) {
                 return .waitingForVolume(message)
             } catch AttemptError.unauthorized(let token) {
@@ -254,7 +254,7 @@ struct DownloadWorker: Sendable {
             switch provider.downloadFailure(http, body: body, task: task, credential: token) {
             case .unauthorized(let credential): throw AttemptError.unauthorized(credential)
             case .rateLimited(let message, let retryAfter): throw AttemptError.rateLimited(message, retryAfter: retryAfter)
-            case .quotaExceeded(let message): throw AttemptError.quota(message)
+            case .limitReached: throw AttemptError.limit
             case .transient(let message): throw AttemptError.transient(message)
             case .fatal(let message): throw AttemptError.fatal(message)
             }

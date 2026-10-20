@@ -100,7 +100,7 @@ enum TaskSectionKind: String, CaseIterable, Identifiable, Sendable {
         case .downloading: [.downloading, .verifying]
         case .paused: [.paused, .pausedAll]
         case .queued: [.queued]
-        case .waiting: [.waitingForVolume, .waitingForSpace, .waitingForNetwork, .waitingForQuota]
+        case .waiting: [.waitingForVolume, .waitingForSpace, .waitingForNetwork, .waitingDailyLimit]
         case .failed: [.failed]
         case .completed: [.completed, .cancelled]
         }
@@ -242,6 +242,62 @@ final class AppModel {
         }
     }
 
+    /// Свои лимиты Google Drive за скользящие 24 часа (Настройки → Скачивание / Отправка).
+    var googleDownloadLimitEnabled: Bool = AppSettings.googleLimitEnabled(.download) {
+        didSet { AppSettings.setGoogleLimitEnabled(googleDownloadLimitEnabled, .download); limitsChanged() }
+    }
+    var googleDownloadLimitGB: Int = AppSettings.googleLimitGB(.download) {
+        didSet { AppSettings.setGoogleLimitGB(googleDownloadLimitGB, .download); limitsChanged() }
+    }
+    var googleUploadLimitEnabled: Bool = AppSettings.googleLimitEnabled(.upload) {
+        didSet { AppSettings.setGoogleLimitEnabled(googleUploadLimitEnabled, .upload); limitsChanged() }
+    }
+    var googleUploadLimitGB: Int = AppSettings.googleLimitGB(.upload) {
+        didSet { AppSettings.setGoogleLimitGB(googleUploadLimitGB, .upload); limitsChanged() }
+    }
+
+    private func limitsChanged() {
+        Task {
+            await scheduler?.limitsChanged()
+            await uploadScheduler?.limitsChanged()
+            await refresh()
+        }
+    }
+
+    /// Лимиты обоих направлений и облаков: свой счётчик за 24 часа и остановка по ответу облака.
+    var limits: [TransferLimitStatus] = []
+    /// Остановки по лимиту, о которых уже было системное уведомление (nil — ещё не было первого снимка).
+    @ObservationIgnored var notifiedLimits: Set<String>?
+
+    /// Карточка статуса: сообщения о том, что происходит во всех облаках.
+    var statusMessages: [StatusMessage] = []
+    /// Передачи идут → «Готово: …» (~3 с) → покой; см. `updateTransferActivity`.
+    @ObservationIgnored var transferActivity = TransferActivity.idle
+    /// Файлы, которые передавались с начала текущей активности (для сообщения «Готово: …»).
+    @ObservationIgnored var transferLog = TransferLog()
+    @ObservationIgnored var completionMessage: StatusMessage?
+    /// Байты реально идут (скачивание или отправка в любом облаке) — зелёная точка в трее.
+    var isTransferring = false
+    /// Зелёная пульсация карточки: пока идёт передача и во время «Готово: …»; гаснет вместе с переходом в покой.
+    var pulseActive = false
+    /// Оранжевая пульсация: пока идёт перемещение в корзину и во время «В корзину перемещено …».
+    var trashPulseActive = false
+    /// Текущее (или только что закончившееся) перемещение в корзину — для карточки статуса.
+    @ObservationIgnored var trashOperation: TrashOperation?
+    /// Перемещение с ошибками: красное сообщение, пока список причин не открыли.
+    @ObservationIgnored var trashFailures: TrashOperation?
+    @ObservationIgnored var trashCounter = 0
+    @ObservationIgnored var lastBytesFlowAt: Date?
+    /// Строка диска, к которой ведёт сообщение карточки (подсвечивается в разделе «Диски»).
+    var highlightedVolume: String?
+    /// Секция менеджера, к которой ведёт сообщение карточки.
+    var pendingDownloadSection: TaskSectionKind?
+    var pendingUploadSection: UploadSectionKind?
+    #if DEBUG
+    /// Debug → Simulate: подставные сообщения для проверки карточки (диск, сеть).
+    var debugSimulations: Set<DebugSimulation> = []
+    #endif
+
     var maxConcurrentDownloads: Int = AppSettings.maxConcurrentDownloads {
         didSet {
             AppSettings.maxConcurrentDownloads = maxConcurrentDownloads
@@ -270,6 +326,13 @@ final class AppModel {
     var routeMap: [RouteKey: String] = [:]
     /// Маршруты, чей внешний диск сейчас не подключён (проверяется в фоне, не в body).
     var routeVolumeMissing: Set<RouteKey> = []
+    /// Посчитанные по запросу размеры папок облака (из SQLite).
+    var folderSizes: [RouteKey: FolderSize] = [:]
+    /// Папки, размер которых сейчас считается или ждёт очереди (промежуточный итог — у идущего подсчёта).
+    var folderSizeJobs: [RouteKey: FolderSizeJob] = [:]
+    /// Очередь подсчёта по облакам: одновременно идёт один подсчёт на облако.
+    @ObservationIgnored var folderSizeQueue: [CloudProviderKind: [CloudItem]] = [:]
+    @ObservationIgnored var folderSizeTasks: [RouteKey: Task<Void, Never>] = [:]
     /// Есть ли активная работа (загрузки, обход, проверка). Меняется только на переходах —
     /// в отличие от счётчиков, которые при скачивании мелких файлов меняются несколько раз в секунду.
     var hasActiveDownloads = false
@@ -382,6 +445,7 @@ final class AppModel {
         started = true
         reloadRoutes()
         reloadLinked()
+        reloadFolderSizes()
 
         Task {
             var authorized: Set<CloudProviderKind> = []
@@ -491,8 +555,24 @@ final class AppModel {
         }
         await refreshUploads(includeTasks: includeTasks && selection == .uploads)
         await refreshBrowserTransfers()
+        let newLimits = state.limits + uploadSnapshot.limits
+        if newLimits != limits { limits = newLimits }
         updateSleepAssertion()
         notifyIfQueueFinished()
+        notifyLimitChanges()
+        let transfersSettled = await updateTransferActivity()
+        let trashSettled = updateTrashActivity()
+        if transfersSettled || trashSettled {
+            // Переход в покой — одним анимационным шагом из одного обновления состояния:
+            // пульсация, обводка, точки ротации и текст «Online» меняются вместе.
+            withAnimation(StatusCard.settleAnimation) {
+                if transfersSettled { pulseActive = false }
+                if trashSettled { trashPulseActive = false }
+                rebuildStatusFeed()
+            }
+        } else {
+            rebuildStatusFeed()
+        }
     }
 
     // MARK: - Sleep & notifications
@@ -500,7 +580,7 @@ final class AppModel {
     /// Пока есть активные или ожидающие загрузки (и не всё на паузе), система не засыпает.
     private func updateSleepAssertion() {
         let counts = totals.countsByStatus
-        let waiting = [TaskStatus.queued, .downloading, .verifying, .waitingForNetwork, .waitingForQuota]
+        let waiting = [TaskStatus.queued, .downloading, .verifying, .waitingForNetwork, .waitingDailyLimit]
             .reduce(0) { $0 + (counts[$1] ?? 0) }
         let busy = snapshot.runningCount > 0 || snapshot.scanningFolders > 0
             || !snapshot.verificationProgress.isEmpty || waiting > 0
@@ -521,10 +601,12 @@ final class AppModel {
         }
     }
 
-    /// Системное уведомление «Проект „…“ скачан: N файлов, X ГБ, все проверены».
+    /// Системное уведомление «Проект „…“ скачан: N файлов, X ГБ, все проверены» — только для большой
+    /// очереди (от 10 файлов или от 1 ГБ) и при ошибках; о малой хватает сообщения в карточке статуса.
     private func notifyIfQueueFinished() {
         guard let summary = snapshot.lastSession, summary.id != lastNotifiedSession else { return }
         lastNotifiedSession = summary.id
+        guard summary.files >= 10 || summary.bytes >= 1_000_000_000 || summary.failed > 0 else { return }
         let content = UNMutableNotificationContent()
         content.title = summary.notificationTitle
         content.body = summary.notificationBody
@@ -639,11 +721,11 @@ final class AppModel {
             guard let path = chooseDirectory(message: String(localized: "Where should “\(item.name)” be downloaded? You can choose an external disk in /Volumes.")) else { return }
             guard confirmFreeSpace(requiredBytes, at: path) else { return }
             setRoute(for: item, path: path)
-            enqueue([item], groups: [path: [item]])
+            enqueue([item], groups: [path: [item]], checksFreeSpace: false)
         } else {
             let dir = PathResolver.destinationDirectory(for: item, ancestors: [], routes: routeMap, defaultPath: defaultDownloadPath)
             guard confirmFreeSpace(requiredBytes, at: dir) else { return }
-            enqueue([item], groups: [dir: [item]])
+            enqueue([item], groups: [dir: [item]], checksFreeSpace: false)
         }
     }
 
@@ -661,7 +743,7 @@ final class AppModel {
 
     /// Работа с SQLite вне главного потока: главный поток никогда не ждёт блокировку базы,
     /// которую в это время держат обход папок и планировщик.
-    private func inBackground<T: Sendable>(_ work: @escaping @Sendable (DatabaseManager) -> T) async -> T? {
+    func inBackground<T: Sendable>(_ work: @escaping @Sendable (DatabaseManager) -> T) async -> T? {
         guard let db else { return nil }
         return await Task.detached(priority: .userInitiated) { work(db) }.value
     }
@@ -732,8 +814,20 @@ final class AppModel {
 
     /// Постановка в очередь и баннер с итогом. Экран не переключается: прогресс виден
     /// индикаторами в списке файлов облака, «Менеджер загрузок» открывается только по запросу.
-    private func enqueue(_ items: [CloudItem], groups: [String: [CloudItem]], ancestors: [CloudItem] = []) {
+    private func enqueue(_ items: [CloudItem], groups: [String: [CloudItem]], ancestors: [CloudItem] = [],
+                         checksFreeSpace: Bool = true) {
         guard let scheduler, !items.isEmpty else { return }
+        var groups = groups
+        if checksFreeSpace {
+            // Свободное место проверяется, только если у папок есть свежий посчитанный размер.
+            groups = groups.filter { dir, group in
+                let known = group.compactMap { $0.isFolder ? freshFolderSize($0)?.tally.totalSize : nil }
+                guard !known.isEmpty else { return true }
+                let required = known.reduce(0, +) + group.filter { !$0.isFolder }.reduce(0) { $0 + $1.sizeValue }
+                return confirmFreeSpace(required, at: dir)
+            }
+            guard !groups.isEmpty else { return }
+        }
         let title = Self.title(for: items)
         let ancestorIds = ancestors.map(\.targetId)
         Task {
@@ -877,7 +971,22 @@ final class AppModel {
     func cancel(_ task: DownloadTask) { Task { await scheduler?.cancelTask(task.id); await refresh() } }
     func retryFailed() { Task { await scheduler?.retryFailed(); await refresh() } }
     func resumeAllPaused() { Task { await scheduler?.resumeAllPaused(); await refresh() } }
-    func retryQuotaNow() { Task { await scheduler?.requeueDueQuotaTasks(force: true); await refresh() } }
+    /// «Попробовать сейчас» для скачиваний, ждущих лимита Google.
+    func retryQuotaNow() { retryLimit(.googleDrive, .download) }
+
+    func retryLimit(_ provider: CloudProviderKind, _ direction: TransferDirection) {
+        Task {
+            switch direction {
+            case .download: await scheduler?.retryLimitNow()
+            case .upload: await uploadScheduler?.retryLimitNow(provider)
+            }
+            await refresh()
+        }
+    }
+
+    func limit(_ provider: CloudProviderKind, _ direction: TransferDirection) -> TransferLimitStatus? {
+        limits.first { $0.provider == provider && $0.direction == direction }
+    }
 
     func clearHistory() {
         Task {
@@ -1016,6 +1125,14 @@ final class AppModel {
     }
 
     // MARK: - Derived
+
+    /// «412 ГБ из 900 ГБ» за последние 24 часа или «412 ГБ», если лимит выключен.
+    func googleUsageText(_ direction: TransferDirection) -> String {
+        guard let status = limit(.googleDrive, direction) else { return Format.diskBytes(0) }
+        let used = Format.diskBytes(status.used)
+        guard let limit = status.limit else { return used }
+        return String(localized: "\(used) of \(Format.diskBytes(limit))")
+    }
 
     var networkStatusText: String { snapshot.isOnline ? String(localized: "Online") : String(localized: "Waiting for network…") }
 

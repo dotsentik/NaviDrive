@@ -12,6 +12,14 @@ enum CloudProviderKind: String, Sendable, Hashable, CaseIterable, Codable {
         }
     }
 
+    /// Короткое имя для тесных строк: «Google за 24 ч: …».
+    var shortName: String {
+        switch self {
+        case .googleDrive: "Google"
+        case .dropbox: "Dropbox"
+        }
+    }
+
     /// Значок облака (SF Symbols) в sidebar и у задач.
     var systemImage: String {
         switch self {
@@ -100,6 +108,9 @@ protocol CloudProvider: AnyObject, Sendable {
     func parseLink(_ text: String) -> CloudLink?
     /// Папка в веб-интерфейсе облака.
     func webURL(forFolder id: String) -> URL?
+    /// Размер папки по запросу пользователя: рекурсивный обход только её содержимого.
+    /// `progress` получает промежуточные итоги не чаще `FolderSizeTally.progressInterval`.
+    func folderSize(_ folder: CloudItem, progress: @escaping @Sendable (FolderSizeTally) async -> Void) async throws -> FolderSizeTally
 
     // MARK: Скачивание (HTTP Range)
 
@@ -136,9 +147,19 @@ protocol CloudProvider: AnyObject, Sendable {
     func move(_ item: CloudItem, to parent: UploadTarget) async throws
     /// В корзину (не окончательное удаление).
     func trash(_ item: CloudItem) async throws
+    /// Можно ли отменить перемещение в корзину из приложения (Google — да; Dropbox — только на сайте).
+    var canUntrash: Bool { get }
+    /// Вернуть объект из корзины.
+    func untrash(_ item: CloudItem) async throws
 }
 
 extension CloudProvider {
+    var canUntrash: Bool { false }
+
+    func untrash(_ item: CloudItem) async throws {
+        throw CloudAPIError.invalidResponse
+    }
+
     func listPage(_ location: CloudLocation, pageToken: String?) async throws -> CloudPage {
         try await listPage(location, pageToken: pageToken, stableOrder: false)
     }
@@ -175,6 +196,31 @@ extension CloudProvider {
         (error as? OAuthError)?.meansSignedOut == true
     }
 
+    func folderSize(_ folder: CloudItem, progress: @escaping @Sendable (FolderSizeTally) async -> Void) async throws -> FolderSizeTally {
+        try await walkFolderSize(folder, progress: progress)
+    }
+
+    /// Подсчёт через общий обход (`traverse`): ярлыки не раскрываются и не учитываются,
+    /// каждая папка обходится один раз, любая непрочитанная папка — ошибка всего подсчёта.
+    func walkFolderSize(_ folder: CloudItem,
+                        progress: @escaping @Sendable (FolderSizeTally) async -> Void) async throws -> FolderSizeTally {
+        var tally = FolderSizeTally()
+        var reporter = FolderSizeTally.Reporter()
+        for await event in traverse(folder, resolvingAliases: false) {
+            switch event {
+            case .page(_, let items):
+                for item in items { tally.add(item) }
+                if reporter.due() { await progress(tally) }
+            case .folderFailed(_, let error):
+                throw error
+            case .itemFailed:
+                break
+            }
+        }
+        try Task.checkCancellation()
+        return tally
+    }
+
     /// Обход по страницам через `listPage`: стек папок, множество посещённых защищает от циклов
     /// (ярлык на папку-предка) и от повторного обхода одной папки.
     func traverse(_ folder: CloudItem, resolvingAliases: Bool) -> AsyncStream<CloudTraversalEvent> {
@@ -185,6 +231,45 @@ extension CloudProvider {
     func walkFolders(_ folder: CloudItem, resolvingAliases: Bool) -> AsyncStream<CloudTraversalEvent> {
         let walker = CloudTraversalWalker(provider: self, root: folder, resolvingAliases: resolvingAliases)
         return AsyncStream(unfolding: { await walker.next() })
+    }
+}
+
+// MARK: - Folder size
+
+/// Итог (или промежуточный итог) подсчёта размера папки.
+struct FolderSizeTally: Sendable, Equatable {
+    var totalSize: Int64 = 0
+    var fileCount = 0
+    var folderCount = 0
+    /// Документы облака без собственного размера (Google Docs, Sheets, Slides и т. п.).
+    var nativeDocCount = 0
+
+    /// Не чаще двух обновлений в секунду.
+    static let progressInterval: Duration = .milliseconds(500)
+
+    /// Учитывает объект из листинга. Ярлыки пропускаются.
+    mutating func add(_ item: CloudItem) {
+        if item.isAlias { return }
+        if item.isFolder {
+            folderCount += 1
+        } else if item.isCloudDocument, item.provider == .googleDrive {
+            nativeDocCount += 1
+        } else {
+            fileCount += 1
+            totalSize += max(0, item.sizeValue)
+        }
+    }
+
+    /// Ограничитель частоты промежуточных итогов.
+    struct Reporter {
+        private var last = ContinuousClock.now
+
+        mutating func due() -> Bool {
+            let now = ContinuousClock.now
+            guard now - last >= FolderSizeTally.progressInterval else { return false }
+            last = now
+            return true
+        }
     }
 }
 

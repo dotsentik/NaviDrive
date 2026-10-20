@@ -22,6 +22,8 @@ struct UploadWorker: Sendable {
         case skipped
         case failed(String, UploadErrorKind?)
         case waitingForVolume(String)
+        /// Облако сообщило о лимите отправки — задача ждёт (подтверждённые части сохранены).
+        case limitReached
         /// Вход без права записи — задача остаётся в очереди до повторного входа.
         case needsReauth
         /// Вход отозван или истёк: задача возвращается в очередь до нового входа (сессия сохранена).
@@ -84,7 +86,9 @@ struct UploadWorker: Sendable {
                 db.recordUploadRetry(id: task.id, retryCount: retries + rateLimitRetries,
                                      error: String(localized: "\(message) — retrying in \(Int(delay.rounded())) s"))
                 do { try await retryWaiter.sleep(seconds: delay) } catch { return .stopped }
-            } catch CloudTransferError.fatal(let message), CloudTransferError.quotaExceeded(let message) {
+            } catch CloudTransferError.limitReached {
+                return .limitReached
+            } catch CloudTransferError.fatal(let message) {
                 return .failed(message, nil)
             } catch CloudAPIError.insufficientScope {
                 return .needsReauth

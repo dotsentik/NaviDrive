@@ -231,8 +231,8 @@ struct DriveBrowserView: View {
             }
             .width(min: 240, ideal: 420)
 
-            TableColumn("Size") { item in
-                Text(sizeText(item)).monospacedDigit().foregroundStyle(.secondary)
+            TableColumn("Size", value: \.sizeValue) { item in
+                sizeCell(item)
             }
             .width(min: 70, ideal: 100)
 
@@ -314,6 +314,7 @@ struct DriveBrowserView: View {
             if selected.count == 1, let item = selected.first, let route = model.route(for: item) {
                 Button("Remove Custom Location") { model.deleteRoute(route) }
             }
+            folderSizeMenu(for: selected)
             Divider()
             Button("Show in Finder") {
                 if let first = selected.first { model.revealInFinder(first, ancestors: stack) }
@@ -383,6 +384,30 @@ struct DriveBrowserView: View {
                 Button("Show in Download Manager") { model.showTransferManager(first.subject) }
             }
             Divider()
+        }
+    }
+
+    /// «Посчитать размер» / «Пересчитать размер» / «Остановить подсчёт» для выбранных папок.
+    @ViewBuilder
+    private func folderSizeMenu(for selected: [CloudItem]) -> some View {
+        let folders = selected.filter(AppModel.canCalculateSize)
+        if !folders.isEmpty {
+            let calculating = folders.filter { model.folderSizeJobs[$0.routeKey] != nil }
+            let idle = folders.filter { model.folderSizeJobs[$0.routeKey] == nil }
+            if !idle.isEmpty {
+                Button {
+                    model.calculateFolderSizes(idle)
+                } label: {
+                    if idle.allSatisfy({ model.folderSizes[$0.routeKey] != nil }) {
+                        Text("Recalculate Size")
+                    } else {
+                        Text("Calculate Size")
+                    }
+                }
+            }
+            if !calculating.isEmpty {
+                Button("Stop Calculating") { model.stopCalculatingFolderSizes(calculating) }
+            }
         }
     }
 
@@ -490,7 +515,7 @@ struct DriveBrowserView: View {
 
     private func trash(_ selected: [CloudItem]) {
         Task {
-            let trashed = await model.trash(selected)
+            let trashed = await model.trash(selected, location: stack.last?.name)
             guard !trashed.isEmpty else { return }
             items.removeAll { trashed.contains($0.id) }
             selection.subtract(trashed)
@@ -510,9 +535,28 @@ struct DriveBrowserView: View {
         let filter = model.browserFilter
         let rows = allRows
         let filtered = filter.isEmpty ? rows : rows.filter { $0.name.localizedCaseInsensitiveContains(filter) }
-        let folders = filtered.filter(\.isFolder).sorted(using: sortOrder)
         let files = filtered.filter { !$0.isFolder }.sorted(using: sortOrder)
-        return folders + files
+        return sortedFolders(filtered.filter(\.isFolder)) + files
+    }
+
+    /// При сортировке по размеру папки упорядочены по посчитанному размеру, непосчитанные — в конце
+    /// (в любом направлении, по имени).
+    private func sortedFolders(_ folders: [CloudItem]) -> [CloudItem] {
+        guard let first = sortOrder.first, first.keyPath == \CloudItem.sizeValue as PartialKeyPath<CloudItem> else {
+            return folders.sorted(using: sortOrder)
+        }
+        let sizes = model.folderSizes
+        let byName = KeyPathComparator(\CloudItem.name, comparator: .localizedStandard)
+        var counted: [(item: CloudItem, size: Int64)] = []
+        var uncounted: [CloudItem] = []
+        for folder in folders {
+            if let size = sizes[folder.routeKey] { counted.append((folder, size.tally.totalSize)) } else { uncounted.append(folder) }
+        }
+        counted.sort { a, b in
+            if a.size != b.size { return first.order == .forward ? a.size < b.size : a.size > b.size }
+            return byName.compare(a.item, b.item) == .orderedAscending
+        }
+        return counted.map(\.item) + uncounted.sorted(using: byName)
     }
 
     /// Выделение для команд тулбара (скачать и т. п.): без файлов, которые ещё отправляются.
@@ -529,6 +573,27 @@ struct DriveBrowserView: View {
         guard hasRoute else { return nil }
         return PathResolver.localPath(for: folder, ancestors: ancestors, routes: model.routeMap,
                                       defaultPath: model.defaultDownloadPath)
+    }
+
+    /// Колонка «Размер»: у папки — посчитанный по запросу размер, идущий подсчёт или «—».
+    @ViewBuilder
+    private func sizeCell(_ item: CloudItem) -> some View {
+        if item.isFolder, let job = model.folderSizeJobs[item.routeKey] {
+            HStack(spacing: 5) {
+                ProgressView().controlSize(.mini)
+                Text(job.progress.map { Format.folderBytes($0.totalSize) + "…" } ?? "…")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            .help(AppModel.folderSizeProgressHelp(job))
+        } else if item.isFolder, let size = model.folderSizes[item.routeKey] {
+            Text(Format.folderBytes(size.tally.totalSize))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .help(AppModel.folderSizeHelp(size))
+        } else {
+            Text(sizeText(item)).monospacedDigit().foregroundStyle(.secondary)
+        }
     }
 
     private func sizeText(_ item: CloudItem) -> String {

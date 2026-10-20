@@ -8,6 +8,8 @@ enum UploadStatus: String, Sendable, CaseIterable, Codable {
     case paused
     case waitingForNetwork = "waiting_for_network"
     case waitingForVolume = "waiting_for_volume"
+    /// Лимит отправки облака (свой дневной лимит Google или ответ облака) — продолжится сама.
+    case waitingDailyLimit = "waiting_daily_limit"
     /// Файл передан, идёт сверка хеша локального файла с хешем из ответа облака.
     case verifying
     case completed
@@ -21,6 +23,7 @@ enum UploadStatus: String, Sendable, CaseIterable, Codable {
         case .paused: String(localized: "Paused")
         case .waitingForNetwork: String(localized: "Waiting for network")
         case .waitingForVolume: String(localized: "Waiting for disk")
+        case .waitingDailyLimit: String(localized: "Waiting for daily limit")
         case .verifying: String(localized: "Verifying…")
         case .completed: String(localized: "Uploaded")
         case .failed: String(localized: "Error")
@@ -35,6 +38,7 @@ enum UploadStatus: String, Sendable, CaseIterable, Codable {
         case .paused: "pause.circle"
         case .waitingForNetwork: "wifi.exclamationmark"
         case .waitingForVolume: "externaldrive.badge.exclamationmark"
+        case .waitingDailyLimit: "hourglass"
         case .verifying: "checkmark.shield"
         case .completed: "checkmark.circle.fill"
         case .failed: "exclamationmark.triangle.fill"
@@ -43,7 +47,7 @@ enum UploadStatus: String, Sendable, CaseIterable, Codable {
     }
 
     /// Ещё не завершённая работа.
-    static let pending: [UploadStatus] = [.queued, .uploading, .paused, .waitingForNetwork, .waitingForVolume, .verifying]
+    static let pending: [UploadStatus] = [.queued, .uploading, .paused, .waitingForNetwork, .waitingForVolume, .waitingDailyLimit, .verifying]
     /// Активные отправки — бейдж в боковой панели.
     static let active: [UploadStatus] = [.queued, .uploading, .verifying]
 }
@@ -135,7 +139,7 @@ enum UploadSectionKind: String, CaseIterable, Identifiable, Sendable {
         case .uploading: [.uploading, .verifying]
         case .paused: [.paused]
         case .queued: [.queued]
-        case .waiting: [.waitingForNetwork, .waitingForVolume]
+        case .waiting: [.waitingForNetwork, .waitingForVolume, .waitingDailyLimit]
         case .failed: [.failed]
         case .completed: [.completed, .cancelled]
         }
@@ -170,6 +174,8 @@ struct UploadTotals: Sendable, Equatable {
     var totalBytes: Int64 = 0
     var uploadedBytes: Int64 = 0
     var pendingCount = 0
+    /// Идущие и ждущие своей очереди файлы по облакам.
+    var byProvider: [CloudProviderKind: TransferProgress] = [:]
 
     var activeCount: Int { UploadStatus.active.reduce(0) { $0 + (countsByStatus[$1] ?? 0) } }
 
@@ -196,6 +202,9 @@ struct UploadSnapshot: Sendable, Equatable {
     /// Растёт, когда нужен повторный вход с правом записи.
     var reauthRequests = 0
     var preparing: [String] = []
+    var runningTasks: [RunningTransfer] = []
+    /// Лимиты отправки облаков (свой счётчик Google за 24 часа, остановка по ответу облака).
+    var limits: [TransferLimitStatus] = []
 }
 
 // MARK: - Planning

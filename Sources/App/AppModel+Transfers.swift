@@ -155,7 +155,7 @@ extension AppModel {
         case .failed:
             return TransferIndicator(subject: subject, phase: .failed, fraction: task.fraction,
                                      help: task.lastError ?? UploadStatus.failed.title)
-        case .waitingForNetwork, .waitingForVolume:
+        case .waitingForNetwork, .waitingForVolume, .waitingDailyLimit:
             return TransferIndicator(subject: subject, phase: .waiting, fraction: task.fraction,
                                      help: task.lastError ?? task.status.title)
         case .verifying:
@@ -182,7 +182,7 @@ extension AppModel {
         case .failed:
             return TransferIndicator(subject: subject, phase: .failed, fraction: fraction,
                                      help: task.lastError ?? TaskStatus.failed.title)
-        case .waitingForVolume, .waitingForNetwork, .waitingForSpace, .waitingForQuota:
+        case .waitingForVolume, .waitingForNetwork, .waitingForSpace, .waitingDailyLimit:
             return TransferIndicator(subject: subject, phase: .waiting, fraction: fraction,
                                      help: Self.waitingHelp(task))
         case .verifying:
@@ -251,7 +251,7 @@ extension AppModel {
         case .failed: 6
         case .downloading, .verifying: 5
         case .queued: 4
-        case .waitingForVolume, .waitingForNetwork, .waitingForSpace, .waitingForQuota: 3
+        case .waitingForVolume, .waitingForNetwork, .waitingForSpace, .waitingDailyLimit: 3
         case .paused, .pausedAll: 2
         case .completed, .cancelled: 0
         }

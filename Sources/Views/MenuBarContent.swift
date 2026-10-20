@@ -6,6 +6,17 @@ struct MenuBarContent: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
+        // Верхняя строка — самое важное текущее сообщение карточки статуса (красное, если есть).
+        if model.isSignedIn, let top = model.topStatusMessage, !top.isIdle {
+            Button {
+                WindowOpener.openAction = { id in openWindow(id: id) }
+                if top.target == .none { WindowOpener.showMainWindow() } else { model.openStatusTarget(top.target) }
+            } label: {
+                Label(top.title, systemImage: Self.symbol(for: top))
+            }
+            Divider()
+        }
+
         // Без входа пункты, которым нужен аккаунт, неактивны.
         Button("Show Main Window") {
             WindowOpener.openAction = { id in openWindow(id: id) }
@@ -80,12 +91,11 @@ struct MenuBarContent: View {
         Text(model.threadsSummary)
         Text("Progress: \(model.progressSummary)")
         Text("Queued: \(model.totals.countsByStatus[.queued] ?? 0)")
-        if let quota = model.totals.countsByStatus[.waitingForQuota], quota > 0 {
-            if let next = model.totals.nextQuotaAttemptAt {
-                let time = Date(timeIntervalSince1970: TimeInterval(next)).formatted(date: .omitted, time: .shortened)
-                Text("Waiting for Google quota: \(quota) · next attempt at \(time)")
+        if let quota = model.totals.countsByStatus[.waitingDailyLimit], quota > 0 {
+            if let resume = model.limit(.googleDrive, .download)?.resumeAt {
+                Text("Waiting for daily limit: \(quota) · resumes around \(TransferLimiter.time(resume))")
             } else {
-                Text("Waiting for Google quota: \(quota)")
+                Text("Waiting for daily limit: \(quota)")
             }
         }
         if model.snapshot.scanningFolders > 0 {
@@ -95,5 +105,57 @@ struct MenuBarContent: View {
             Text("Uploading: \(model.uploadProgressSummary) · \(Format.speed(model.uploadSnapshot.isPaused ? 0 : model.uploadSnapshot.bytesPerSecond))")
         }
         Text("Network: \(model.networkStatusText)")
+    }
+
+    private static func symbol(for message: StatusMessage) -> String {
+        switch message.severity {
+        case .critical: "exclamationmark.octagon.fill"
+        case .warning: "exclamationmark.triangle.fill"
+        case .normal where message.isTrash: "trash"
+        case .normal: message.direction == .upload ? "arrow.up.circle" : "arrow.down.circle"
+        }
+    }
+}
+
+/// Значок трея: шаблонная иконка; при красном состоянии — с маленькой красной точкой,
+/// во время передачи — с зелёной (без анимации).
+struct MenuBarIcon: View {
+    let alert: Bool
+    var transferring = false
+
+    var body: some View {
+        if alert, let image = Self.alertImage {
+            Image(nsImage: image)
+        } else if transferring, let image = Self.transferImage {
+            Image(nsImage: image)
+        } else {
+            // Шаблонная иконка (Render As: Template): система сама делает её белой в тёмной теме и чёрной в светлой.
+            Image("MenuBarIcon")
+        }
+    }
+
+    private static let alertImage = badged(.systemRed, description: String(localized: "NaviDrive: attention needed"))
+    private static let transferImage = badged(.systemGreen, description: String(localized: "NaviDrive: transferring"))
+
+    /// Иконка цвета текста строки меню (рисуется при каждой отрисовке — в текущем оформлении) и цветная точка.
+    private static func badged(_ color: NSColor, description: String) -> NSImage? {
+        guard let base = NSImage(named: "MenuBarIcon") else { return nil }
+        let size = base.size
+        let image = NSImage(size: size, flipped: false) { rect in
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            base.draw(in: rect)
+            NSColor.labelColor.set()
+            rect.fill(using: .sourceAtop)
+            context.endTransparencyLayer()
+            let diameter = (size.height * 0.4).rounded()
+            let dot = NSRect(x: rect.maxX - diameter, y: rect.maxY - diameter, width: diameter, height: diameter)
+            color.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+            return true
+        }
+        image.isTemplate = false
+        image.accessibilityDescription = description
+        return image
     }
 }

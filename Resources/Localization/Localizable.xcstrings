@@ -47,12 +47,42 @@
         }
       }
     },
+    "%@ download limit reached (%@ per 24 hours)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: достигнут лимит скачивания (%@ за 24 часа)"
+          }
+        }
+      }
+    },
+    "%@ download limit reached (%@ per 24 hours) — resumes around %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: достигнут лимит скачивания (%@ за 24 часа) — продолжим около %@"
+          }
+        }
+      }
+    },
     "%@ free of %@": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Свободно %@ из %@"
+          }
+        }
+      }
+    },
+    "%@ in 24 h: %@ of %@ (%lld%%)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ за 24 ч: %@ из %@ (%lld%%)"
           }
         }
       }
@@ -77,6 +107,56 @@
         }
       }
     },
+    "%@ reported its download limit was reached — next check at %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ сообщает, что лимит скачивания исчерпан — следующая проверка в %@"
+          }
+        }
+      }
+    },
+    "%@ reported its upload limit was reached — next check at %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ сообщает, что лимит отправки исчерпан — следующая проверка в %@"
+          }
+        }
+      }
+    },
+    "%@ stopped accepting requests · %@ waiting": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ не принимает запросы · ждут: %@"
+          }
+        }
+      }
+    },
+    "%@ upload limit reached (%@ per 24 hours)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: достигнут лимит отправки (%@ за 24 часа)"
+          }
+        }
+      }
+    },
+    "%@ upload limit reached (%@ per 24 hours) — resumes around %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: достигнут лимит отправки (%@ за 24 часа) — продолжим около %@"
+          }
+        }
+      }
+    },
     "%@ used": {
       "localizations": {
         "ru": {
@@ -87,7 +167,37 @@
         }
       }
     },
+    "%@ waiting for sign-in": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ждут входа: %@"
+          }
+        }
+      }
+    },
+    "%@ waiting · free up space": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ждут: %@ · освободите место"
+          }
+        }
+      }
+    },
     "%@ · %@": {},
+    "%@ · folder %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · папка %@"
+          }
+        }
+      }
+    },
     "%@ — retrying in %lld s": {
       "localizations": {
         "ru": {
@@ -128,6 +238,36 @@
         }
       }
     },
+    "%@: %@ · %@ of %@ · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %@ · %@ из %@ · %@"
+          }
+        }
+      }
+    },
+    "%@: downloads resumed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: скачивание продолжено"
+          }
+        }
+      }
+    },
+    "%@: downloads stopped by the limit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: скачивание остановлено по лимиту"
+          }
+        }
+      }
+    },
     "%@: starting at %lld": {
       "localizations": {
         "ru": {
@@ -138,7 +278,79 @@
         }
       }
     },
+    "%@: uploads resumed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: отправка продолжена"
+          }
+        }
+      }
+    },
+    "%@: uploads stopped by the limit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: отправка остановлена по лимиту"
+          }
+        }
+      }
+    },
     "%lld": {},
+    "%lld Google Docs": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Google Doc"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Google Docs"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld документа Google"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld документов Google"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld документ Google"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld документа Google"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld files": {
       "localizations": {
         "en": {
@@ -184,6 +396,58 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld файла"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld folders": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld folder"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld folders"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld папки"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld папок"
+                }
+              },
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld папка"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld папки"
                 }
               }
             }
@@ -269,6 +533,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "+%@ можно освободить"
+          }
+        }
+      }
+    },
+    "80% Limit Warning": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предупреждение: 80% лимита"
           }
         }
       }
@@ -407,6 +681,16 @@
         }
       }
     },
+    "Active transfers: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Активных передач: %lld"
+          }
+        }
+      }
+    },
     "Active: %lld of %lld": {
       "localizations": {
         "ru": {
@@ -503,6 +787,16 @@
         }
       }
     },
+    "Already deleted or not found": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уже удалён или не найден"
+          }
+        }
+      }
+    },
     "Also: View → Show/Hide Sidebar (⌃⌘S)": {
       "localizations": {
         "ru": {
@@ -579,6 +873,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "По умолчанию NaviDrive использует встроенные в эту копию учётные данные Google. Свои учётные данные имеют приоритет и хранятся в Связке ключей. Чтобы изменить параметр, выйдите из аккаунта."
+          }
+        }
+      }
+    },
+    "Calculate Size": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Посчитать размер"
+          }
+        }
+      }
+    },
+    "Calculating size…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Идёт подсчёт размера…"
           }
         }
       }
@@ -889,6 +1203,16 @@
         }
       }
     },
+    "Click to see the reasons": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нажмите, чтобы увидеть причины"
+          }
+        }
+      }
+    },
     "Client ID": {},
     "Client Secret": {},
     "Close": {
@@ -1023,6 +1347,16 @@
         }
       }
     },
+    "Connect the disk and downloads continue automatically": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключите диск — скачивание продолжится само"
+          }
+        }
+      }
+    },
     "Connected": {
       "localizations": {
         "ru": {
@@ -1091,6 +1425,16 @@
         }
       }
     },
+    "Couldn’t calculate the size of “%@”: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось посчитать размер «%1$@»: %2$@"
+          }
+        }
+      }
+    },
     "Couldn’t create folder %@: %@": {
       "localizations": {
         "ru": {
@@ -1107,6 +1451,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не удалось извлечь диск «%@»: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t move %lld of %lld to Trash": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось переместить %lld из %lld"
+          }
+        }
+      }
+    },
+    "Couldn’t move %lld of %lld to Trash:": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось переместить в корзину %lld из %lld:"
           }
         }
       }
@@ -1177,6 +1541,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не удалось перезапустить NaviDrive: %@. Завершите приложение и откройте его снова вручную."
+          }
+        }
+      }
+    },
+    "Couldn’t restore %lld of %lld from Trash:": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось восстановить %lld из %lld:"
           }
         }
       }
@@ -1311,6 +1685,36 @@
         }
       }
     },
+    "Daily %@ download limit reached": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Достигнут дневной лимит %@"
+          }
+        }
+      }
+    },
+    "Daily %@ upload limit reached": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Достигнут дневной лимит отправки %@"
+          }
+        }
+      }
+    },
+    "Debug": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отладка"
+          }
+        }
+      }
+    },
     "Default download folder": {
       "localizations": {
         "ru": {
@@ -1431,6 +1835,16 @@
         }
       }
     },
+    "Disk Disconnected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отключение диска"
+          }
+        }
+      }
+    },
     "Disk Status": {
       "localizations": {
         "ru": {
@@ -1457,6 +1871,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "Диски"
+          }
+        }
+      }
+    },
+    "Done: %@ downloaded": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово: скачано %@"
+          }
+        }
+      }
+    },
+    "Done: %@ downloaded from %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово: %@ скачан из %@"
+          }
+        }
+      }
+    },
+    "Done: %@ uploaded to %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово: %@ отправлен в %@"
+          }
+        }
+      }
+    },
+    "Done: transferred %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово: передано %@"
+          }
+        }
+      }
+    },
+    "Done: uploaded %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово: отправлено %@"
+          }
+        }
+      }
+    },
+    "Done: uploaded %@ to %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово: отправлено %@ в %@"
           }
         }
       }
@@ -1511,12 +1985,32 @@
         }
       }
     },
+    "Download errors: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибки скачивания: %@"
+          }
+        }
+      }
+    },
     "Download files using the context menu in My Drive.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Скачивайте файлы через контекстное меню в «Мой Диск»."
+          }
+        }
+      }
+    },
+    "Download limit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимит скачивания"
           }
         }
       }
@@ -1537,6 +2031,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Скачать в дефолтную папку"
+          }
+        }
+      }
+    },
+    "Downloaded from Google Drive in the last 24 hours (rolling window). The limit is shared by everyone who uses this Google Client ID.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачано из Google Drive за последние 24 часа (скользящее окно). Лимит общий для всех, кто использует этот Client ID Google."
           }
         }
       }
@@ -1629,6 +2133,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dropbox Paper"
+          }
+        }
+      }
+    },
+    "Dropbox data transport limit reached": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Достигнут лимит передачи данных Dropbox"
           }
         }
       }
@@ -2021,6 +2535,16 @@
         }
       }
     },
+    "GB": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ГБ"
+          }
+        }
+      }
+    },
     "GOCSPX-…": {},
     "General": {
       "localizations": {
@@ -2058,6 +2582,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Google Рисунок"
+          }
+        }
+      }
+    },
+    "Google Drive Daily Limit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дневной лимит Google Drive"
+          }
+        }
+      }
+    },
+    "Google Drive download limit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимит скачивания Google Drive"
+          }
+        }
+      }
+    },
+    "Google Drive downloads are stopped by the daily limit; progress is saved. They continue automatically when the 24-hour budget frees up, or — if Google itself reported the limit — after an hourly check succeeds.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачивание из Google Drive остановлено дневным лимитом; прогресс сохранён. Оно продолжится само, когда освободится бюджет за 24 часа, а если о лимите сообщил сам Google — после успешной ежечасной проверки."
           }
         }
       }
@@ -2102,6 +2656,16 @@
         }
       }
     },
+    "Google Drive upload limit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимит отправки Google Drive"
+          }
+        }
+      }
+    },
     "Google Sheet": {
       "localizations": {
         "ru": {
@@ -2118,6 +2682,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Google Презентация"
+          }
+        }
+      }
+    },
+    "Google allows 750 GB of uploads per day per user; the default 700 GB keeps a reserve. A new file starts only if it fits in the remaining budget. When the limit is reached, uploads stop with progress saved and continue once the budget frees up.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google разрешает отправлять 750 ГБ в сутки на пользователя; 700 ГБ по умолчанию оставляют запас. Новый файл запускается, только если помещается в остаток бюджета. При достижении лимита отправка останавливается с сохранением прогресса и продолжается, когда бюджет освободится."
+          }
+        }
+      }
+    },
+    "Google allows about 1 TB of downloads per day per project; the default 900 GB keeps a 10% reserve. A new file starts only if it fits in the remaining budget (files larger than the whole limit download in parts over several days). When the limit is reached, downloads stop with progress saved and continue from the same byte once the budget frees up.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google разрешает скачивать около 1 ТБ в сутки на проект; 900 ГБ по умолчанию оставляют запас 10%. Новый файл запускается, только если помещается в остаток бюджета (файлы больше всего лимита скачиваются частями по дням). При достижении лимита скачивание останавливается с сохранением прогресса и продолжается с того же байта, когда бюджет освободится."
           }
         }
       }
@@ -2142,22 +2726,12 @@
         }
       }
     },
-    "Google has limited downloads of these files. NaviDrive will retry after 1 h, 2 h, 4 h … up to 24 h; other files keep downloading as usual.": {
+    "Google in 24 h": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Google ограничил число скачиваний этих файлов. NaviDrive повторит попытку через 1 ч, 2 ч, 4 ч … до 24 ч; остальные файлы качаются как обычно."
-          }
-        }
-      }
-    },
-    "Google has temporarily limited downloads of this file (quota). Next attempt at %@. %@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Google временно ограничил скачивание этого файла (квота). Следующая попытка в %@. %@"
+            "value": "Google за 24 ч"
           }
         }
       }
@@ -2388,6 +2962,16 @@
         }
       }
     },
+    "Last 24 hours": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За последние 24 часа"
+          }
+        }
+      }
+    },
     "Later": {
       "localizations": {
         "ru": {
@@ -2428,6 +3012,16 @@
         }
       }
     },
+    "Low space on “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мало места на «%@»"
+          }
+        }
+      }
+    },
     "MD5 matches the Google Drive checksum": {
       "localizations": {
         "ru": {
@@ -2438,12 +3032,32 @@
         }
       }
     },
+    "Macintosh HD": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Macintosh HD"
+          }
+        }
+      }
+    },
     "Maximum threads": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Максимум потоков"
+          }
+        }
+      }
+    },
+    "Message %lld of %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сообщение %lld из %lld"
           }
         }
       }
@@ -2642,6 +3256,78 @@
         }
       }
     },
+    "Moved %lld items to Trash": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Moved %lld item to Trash"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Moved %lld items to Trash"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "В корзину перемещён %lld объект"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "В корзину перемещено %lld объекта"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "В корзину перемещено %lld объектов"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "В корзину перемещено %lld объекта"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Moving to Trash: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перемещение в корзину: %@"
+          }
+        }
+      }
+    },
+    "Moving to Trash: %lld of %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перемещение в корзину: %lld из %lld"
+          }
+        }
+      }
+    },
     "My Drive": {
       "localizations": {
         "ru": {
@@ -2689,6 +3375,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "NaviDrive не получил доступ к %@. Чтобы подключить облако, вернитесь в NaviDrive и войдите снова."
+          }
+        }
+      }
+    },
+    "NaviDrive will continue automatically around %@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive продолжит автоматически около %@."
+          }
+        }
+      }
+    },
+    "NaviDrive: attention needed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive: требуется внимание"
+          }
+        }
+      }
+    },
+    "NaviDrive: transferring": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive: идёт передача"
           }
         }
       }
@@ -2773,6 +3489,26 @@
         }
       }
     },
+    "Next check at %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Следующая проверка в %@"
+          }
+        }
+      }
+    },
+    "No Network": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет сети"
+          }
+        }
+      }
+    },
     "No Tasks": {
       "localizations": {
         "ru": {
@@ -2809,6 +3545,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Нет доступа к Связке ключей: %@"
+          }
+        }
+      }
+    },
+    "No active transfers": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет активных передач"
+          }
+        }
+      }
+    },
+    "No connection": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет связи"
           }
         }
       }
@@ -2859,12 +3615,32 @@
         }
       }
     },
+    "No network · waiting": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет сети · ожидание"
+          }
+        }
+      }
+    },
     "No new files to upload": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Новых файлов для отправки нет"
+          }
+        }
+      }
+    },
+    "No permission": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет прав"
           }
         }
       }
@@ -2945,6 +3721,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не хватает места"
+          }
+        }
+      }
+    },
+    "Not enough space on “%@”": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не хватает места на «%@»"
           }
         }
       }
@@ -3036,6 +3822,16 @@
       }
     },
     "OK": {},
+    "Offline": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не в сети"
+          }
+        }
+      }
+    },
     "Online": {
       "localizations": {
         "ru": {
@@ -3238,6 +4034,16 @@
         }
       }
     },
+    "Per 24 hours": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За 24 часа"
+          }
+        }
+      }
+    },
     "Permanent save location for %lld items": {
       "localizations": {
         "en": {
@@ -3326,6 +4132,26 @@
         }
       }
     },
+    "Progress is saved · %@ waiting": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прогресс сохранён · ждут: %@"
+          }
+        }
+      }
+    },
+    "Progress is saved.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прогресс сохранён."
+          }
+        }
+      }
+    },
     "Progress: %@": {
       "localizations": {
         "ru": {
@@ -3366,12 +4192,42 @@
         }
       }
     },
+    "Queue needs %@, %@ free": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очереди нужно %@, свободно %@"
+          }
+        }
+      }
+    },
     "Queued": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "В очереди"
+          }
+        }
+      }
+    },
+    "Queued for download": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В очереди на скачивание"
+          }
+        }
+      }
+    },
+    "Queued for upload": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В очереди на отправку"
           }
         }
       }
@@ -3432,6 +4288,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Достигнут предел %lld"
+          }
+        }
+      }
+    },
+    "Recalculate Size": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пересчитать размер"
           }
         }
       }
@@ -3624,6 +4490,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Возобновлено"
+          }
+        }
+      }
+    },
+    "Resumes around %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Продолжим около %@"
           }
         }
       }
@@ -4020,6 +4896,16 @@
         }
       }
     },
+    "Sign In": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войти"
+          }
+        }
+      }
+    },
     "Sign In to Google": {
       "localizations": {
         "ru": {
@@ -4036,6 +4922,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Выйти"
+          }
+        }
+      }
+    },
+    "Sign in again to allow changes": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войдите заново, чтобы разрешить изменения"
+          }
+        }
+      }
+    },
+    "Sign in to %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Войдите в %@"
           }
         }
       }
@@ -4112,6 +5018,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Вход выполнен"
+          }
+        }
+      }
+    },
+    "Simulate": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Симуляция"
           }
         }
       }
@@ -4238,6 +5154,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "База состояния"
+          }
+        }
+      }
+    },
+    "Stop Calculating": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Остановить подсчёт"
           }
         }
       }
@@ -4396,6 +5322,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Язык изменится после перезапуска NaviDrive"
+          }
+        }
+      }
+    },
+    "The limit has freed up; files continue from where they stopped.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимит освободился — файлы продолжаются с места остановки."
+          }
+        }
+      }
+    },
+    "The limit is shared by everyone who uses this Google Client ID.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимит общий для всех, кто использует этот Client ID Google."
           }
         }
       }
@@ -4762,6 +5708,26 @@
         }
       }
     },
+    "Transfers continue when the connection is back": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Передачи продолжатся, когда появится связь"
+          }
+        }
+      }
+    },
+    "Try %@ Now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попробовать %@ сейчас"
+          }
+        }
+      }
+    },
     "Try Again": {
       "localizations": {
         "ru": {
@@ -4772,12 +5738,12 @@
         }
       }
     },
-    "Try Files Waiting for Quota Now": {
+    "Try Files Waiting for Google Limit Now": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Попробовать сейчас файлы в ожидании квоты"
+            "value": "Попробовать сейчас файлы, ждущие лимита Google"
           }
         }
       }
@@ -4792,12 +5758,22 @@
         }
       }
     },
-    "Try Quota Now": {
+    "Try Waiting for Google Now": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Попробовать квоту сейчас"
+            "value": "Попробовать сейчас"
+          }
+        }
+      }
+    },
+    "Undo": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить"
           }
         }
       }
@@ -4822,12 +5798,32 @@
         }
       }
     },
+    "Upload errors: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибки отправки: %@"
+          }
+        }
+      }
+    },
     "Upload files and folders to “%@”…": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Загрузить файлы и папки в «%@»…"
+          }
+        }
+      }
+    },
+    "Upload limit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимит отправки"
           }
         }
       }
@@ -4848,6 +5844,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Загружено"
+          }
+        }
+      }
+    },
+    "Uploaded to Google Drive in the last 24 hours (rolling window). The limit is shared by everyone who uses this Google Client ID.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправлено в Google Drive за последние 24 часа (скользящее окно). Лимит общий для всех, кто использует этот Client ID Google."
           }
         }
       }
@@ -4942,32 +5948,32 @@
         }
       }
     },
-    "Waiting for Google quota": {
+    "Waiting for daily limit": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ожидание квоты Google"
+            "value": "Ожидает дневного лимита"
           }
         }
       }
     },
-    "Waiting for Google quota: %lld": {
+    "Waiting for daily limit: %lld": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ждут квоту Google: %lld"
+            "value": "Ждут дневного лимита: %lld"
           }
         }
       }
     },
-    "Waiting for Google quota: %lld · next attempt at %@": {
+    "Waiting for daily limit: %lld · resumes around %@": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ждут квоту Google: %lld · попытка в %@"
+            "value": "Ждут дневного лимита: %lld · продолжим около %@"
           }
         }
       }
@@ -4994,6 +6000,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ожидание диска %@"
+          }
+        }
+      }
+    },
+    "Waiting for disk %@ · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидает диск %@ · %@"
           }
         }
       }
@@ -5050,6 +6066,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ожидание входа в браузере…"
+          }
+        }
+      }
+    },
+    "Waiting to calculate size…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидает подсчёта размера…"
           }
         }
       }
@@ -5224,6 +6250,16 @@
         }
       }
     },
+    "You can restore items on the Dropbox website": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Восстановить можно на сайте Dropbox"
+          }
+        }
+      }
+    },
     "You can’t create folders here": {
       "localizations": {
         "ru": {
@@ -5260,16 +6296,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Нет прав на изменение папки «%@»"
-          }
-        }
-      }
-    },
-    "You don’t have permission to delete “%@”": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нет прав на удаление «%@»"
           }
         }
       }
@@ -5402,6 +6428,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "content_hash совпадает с контрольной суммой Dropbox"
+          }
+        }
+      }
+    },
+    "counted %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "посчитано %@"
           }
         }
       }
@@ -5569,6 +6605,16 @@
         }
       }
     },
+    "next check ~%@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "проверим снова ~%@"
+          }
+        }
+      }
+    },
     "no access to the shortcut target (HTTP %lld)": {
       "localizations": {
         "ru": {
@@ -5595,6 +6641,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "чтение"
+          }
+        }
+      }
+    },
+    "resumes ~%@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "продолжим ~%@"
           }
         }
       }

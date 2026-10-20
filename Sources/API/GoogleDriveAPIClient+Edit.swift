@@ -68,8 +68,18 @@ extension GoogleDriveAPIClient {
 
     /// В корзину (не окончательное удаление).
     func trash(id: String) async throws {
+        try await setTrashed(id: id, true)
+    }
+
+    /// Из корзины обратно — отмена перемещения в корзину.
+    func untrash(id: String) async throws {
+        try await setTrashed(id: id, false)
+    }
+
+    /// files.update с trashed=true / false.
+    private func setTrashed(id: String, _ trashed: Bool) async throws {
         guard let url = fileURL(id) else { throw CloudAPIError.invalidResponse }
-        let body = try JSONSerialization.data(withJSONObject: ["trashed": true])
+        let body = try JSONSerialization.data(withJSONObject: ["trashed": trashed])
         _ = try await send {
             var request = URLRequest(url: url)
             request.httpMethod = "PATCH"

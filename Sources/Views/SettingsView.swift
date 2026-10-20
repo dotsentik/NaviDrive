@@ -169,6 +169,45 @@ private struct DownloadSettings: View {
             Text("This is the upper limit. The engine starts with 4 threads and adds one every 15 seconds while total speed keeps growing. If Google reports rate limiting (429), the number of threads is halved immediately. Changes apply on the fly; running downloads are not interrupted.")
                 .font(.caption).foregroundStyle(.secondary)
         }
+
+        GoogleLimitSection(direction: .download)
+    }
+}
+
+/// Свой дневной лимит Google Drive за скользящие 24 часа (Скачивание / Отправка).
+private struct GoogleLimitSection: View {
+    @Environment(AppModel.self) private var model
+    let direction: TransferDirection
+
+    var body: some View {
+        @Bindable var model = model
+        let enabled = direction == .download ? $model.googleDownloadLimitEnabled : $model.googleUploadLimitEnabled
+        let gigabytes = direction == .download ? $model.googleDownloadLimitGB : $model.googleUploadLimitGB
+        Section {
+            Toggle(direction == .download ? String(localized: "Google Drive download limit") : String(localized: "Google Drive upload limit"), isOn: enabled)
+            if enabled.wrappedValue {
+                LabeledContent("Per 24 hours") {
+                    HStack(spacing: 6) {
+                        TextField("Per 24 hours", value: gigabytes, format: .number)
+                            .labelsHidden()
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                        Text("GB").foregroundStyle(.secondary)
+                    }
+                }
+            }
+            LabeledContent("Last 24 hours") {
+                Text(model.googleUsageText(direction)).monospacedDigit().foregroundStyle(.secondary)
+            }
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(direction == .download
+                     ? String(localized: "Google allows about 1 TB of downloads per day per project; the default 900 GB keeps a 10% reserve. A new file starts only if it fits in the remaining budget (files larger than the whole limit download in parts over several days). When the limit is reached, downloads stop with progress saved and continue from the same byte once the budget frees up.")
+                     : String(localized: "Google allows 750 GB of uploads per day per user; the default 700 GB keeps a reserve. A new file starts only if it fits in the remaining budget. When the limit is reached, uploads stop with progress saved and continue once the budget frees up."))
+                Text("The limit is shared by everyone who uses this Google Client ID.")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -190,6 +229,7 @@ private struct UploadSettings: View {
             Text("Separate from download threads: downloads and uploads run at the same time. If Google rate-limits requests, the number of uploads is temporarily reduced. Files are sent in 32 MB parts and continue from where they stopped after a connection drop.")
                 .font(.caption).foregroundStyle(.secondary)
         }
+        GoogleLimitSection(direction: .upload)
     }
 }
 

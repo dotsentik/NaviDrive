@@ -198,8 +198,10 @@ enum CloudTransferError: Error, Sendable {
     case unauthorized(credential: String)
     /// `retryAfter` — пауза, которую назначил сервер (заголовок Retry-After).
     case rateLimited(String, retryAfter: TimeInterval?)
-    /// Квота на скачивание файла исчерпана — повтор через часы.
-    case quotaExceeded(String)
+    /// Облако сообщило о лимите (Google: downloadQuotaExceeded, quotaExceeded, dailyLimitExceeded,
+    /// uploadLimitExceeded; Dropbox: лимит передачи данных бизнес-тарифа): передача этого направления
+    /// останавливается с сохранением прогресса, пробный запрос — раз в час.
+    case limitReached(String)
     case transient(String)
     case fatal(String)
 }

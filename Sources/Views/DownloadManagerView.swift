@@ -45,24 +45,29 @@ struct DownloadManagerView: View {
             }
             .help("The number of threads is tuned automatically (AIMD): +1 every 15 s while speed grows; ×½ when Google rate-limits.")
             stat("Network", model.networkStatusText, color: model.snapshot.isOnline ? .green : .orange)
+            // Свой счётчик Google за скользящие 24 часа — только когда в переключателе выбран Google Drive.
+            if model.activeCloud == .googleDrive, model.connectedClouds.contains(.googleDrive) {
+                stat("Google in 24 h", model.googleUsageText(.download), color: googleUsageColor)
+                    .help("Downloaded from Google Drive in the last 24 hours (rolling window). The limit is shared by everyone who uses this Google Client ID.")
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Overall progress").font(.caption).foregroundStyle(.secondary)
                 ProgressView(value: model.totals.fraction)
                 Text(model.progressSummary).font(.caption).monospacedDigit()
             }
             .frame(maxWidth: .infinity)
-            if let quota = model.totals.countsByStatus[.waitingForQuota], quota > 0 {
+            if let status = model.limit(.googleDrive, .download), status.isReached {
                 VStack(alignment: .leading, spacing: 4) {
-                    Label("Waiting for Google quota: \(quota)", systemImage: "hourglass")
-                        .font(.caption).foregroundStyle(.orange)
-                    if let next = model.totals.nextQuotaAttemptAt {
-                        Text("Next attempt: \(Date(timeIntervalSince1970: TimeInterval(next)).formatted(date: .omitted, time: .shortened))")
+                    Label("Waiting for daily limit: \(status.waitingCount)", systemImage: "hourglass")
+                        .font(.caption).foregroundStyle(.red)
+                    if let resume = status.resumeAt {
+                        Text(status.serverBlocked ? String(localized: "Next check at \(TransferLimiter.time(resume))") : String(localized: "Resumes around \(TransferLimiter.time(resume))"))
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                     Button("Try Now") { model.retryQuotaNow() }
                         .buttonStyle(.link).font(.caption)
                 }
-                .help("Google has limited downloads of these files. NaviDrive will retry after 1 h, 2 h, 4 h … up to 24 h; other files keep downloading as usual.")
+                .help("Google Drive downloads are stopped by the daily limit; progress is saved. They continue automatically when the 24-hour budget frees up, or — if Google itself reported the limit — after an hourly check succeeds.")
             }
             if model.snapshot.scanningFolders > 0 {
                 HStack(spacing: 6) {
@@ -73,6 +78,13 @@ struct DownloadManagerView: View {
             }
         }
         .padding(16)
+    }
+
+    /// 80% — жёлтый, 95% и достигнут — красный.
+    private var googleUsageColor: Color {
+        guard let status = model.limit(.googleDrive, .download) else { return .primary }
+        if status.isReached || (status.fraction ?? 0) >= 0.95 { return .red }
+        return (status.fraction ?? 0) >= 0.8 ? .orange : .primary
     }
 
     private func stat(_ title: LocalizedStringKey, _ value: String, color: Color = .primary) -> some View {
@@ -114,34 +126,46 @@ struct DownloadManagerView: View {
 
     private var taskList: some View {
         let kinds = model.downloadFilter.sections
-        return List {
-            ForEach(kinds) { kind in
-                let rows = model.sections[kind] ?? []
-                // Строки и счётчики — из одного снимка состояния: число в заголовке совпадает со строками
-                // (кроме секций длиннее предела загрузки, где строки показываются первыми N).
-                let total = max(sectionCount(kind), rows.count)
-                if !rows.isEmpty {
-                    Section {
-                        // Ленивая отрисовка; Equatable — строка перерисовывается, только если изменились её данные.
-                        ForEach(rows) { task in
-                            DownloadTaskRow(task: task, liveBytes: model.snapshot.liveProgress[task.id],
-                                            verifyBytes: model.snapshot.verificationProgress[task.id],
-                                            isConnecting: model.snapshot.connecting.contains(task.id))
-                                .equatable()
+        return ScrollViewReader { proxy in
+            List {
+                ForEach(kinds) { kind in
+                    let rows = model.sections[kind] ?? []
+                    // Строки и счётчики — из одного снимка состояния: число в заголовке совпадает со строками
+                    // (кроме секций длиннее предела загрузки, где строки показываются первыми N).
+                    let total = max(sectionCount(kind), rows.count)
+                    if !rows.isEmpty {
+                        Section {
+                            // Ленивая отрисовка; Equatable — строка перерисовывается, только если изменились её данные.
+                            ForEach(rows) { task in
+                                DownloadTaskRow(task: task, liveBytes: model.snapshot.liveProgress[task.id],
+                                                verifyBytes: model.snapshot.verificationProgress[task.id],
+                                                isConnecting: model.snapshot.connecting.contains(task.id))
+                                    .equatable()
+                            }
+                        } header: {
+                            sectionHeader(kind, total: total)
+                                .id(kind)
                         }
-                    } header: {
-                        sectionHeader(kind, total: total)
                     }
                 }
             }
-        }
-        .listStyle(.inset)
-        .overlay {
-            if kinds.allSatisfy({ (model.sections[$0] ?? []).isEmpty }) {
-                ContentUnavailableView("No Tasks", systemImage: "tray",
-                                       description: Text("Download files using the context menu in My Drive."))
+            .listStyle(.inset)
+            .overlay {
+                if kinds.allSatisfy({ (model.sections[$0] ?? []).isEmpty }) {
+                    ContentUnavailableView("No Tasks", systemImage: "tray",
+                                           description: Text("Download files using the context menu in My Drive."))
+                }
             }
+            // Переход из карточки статуса к секции (например, «Ожидают»), когда её строки загружены.
+            .onChange(of: model.pendingDownloadSection, initial: true) { scrollToPending(proxy) }
+            .onChange(of: model.pendingDownloadSection.map { model.sections[$0]?.count ?? 0 }) { scrollToPending(proxy) }
         }
+    }
+
+    private func scrollToPending(_ proxy: ScrollViewProxy) {
+        guard let section = model.pendingDownloadSection, !(model.sections[section] ?? []).isEmpty else { return }
+        withAnimation { proxy.scrollTo(section, anchor: .top) }
+        model.pendingDownloadSection = nil
     }
 
     @ViewBuilder
@@ -168,8 +192,8 @@ struct DownloadManagerView: View {
                     .buttonStyle(.link)
                     .help("Removes only the history entries; downloaded files stay on disk")
             case .waiting:
-                if (model.totals.countsByStatus[.waitingForQuota] ?? 0) > 0 {
-                    Button("Try Quota Now") { model.retryQuotaNow() }.buttonStyle(.link)
+                if (model.totals.countsByStatus[.waitingDailyLimit] ?? 0) > 0 {
+                    Button("Try Waiting for Google Now") { model.retryQuotaNow() }.buttonStyle(.link)
                 }
             case .downloading, .queued:
                 EmptyView()
@@ -233,7 +257,7 @@ private struct DownloadTaskRow: View, Equatable {
                     }
                 }
                 .font(.caption).foregroundStyle(.secondary)
-                if task.status == .waitingForQuota, let next = task.nextAttemptAt {
+                if task.status == .waitingDailyLimit, let next = task.nextAttemptAt {
                     Label("Next attempt: \(Date(timeIntervalSince1970: TimeInterval(next)).formatted(date: .abbreviated, time: .shortened))",
                           systemImage: "hourglass")
                         .font(.caption).foregroundStyle(.orange)
@@ -250,7 +274,7 @@ private struct DownloadTaskRow: View, Equatable {
                 switch task.status {
                 case .downloading, .queued, .waitingForNetwork, .waitingForVolume, .waitingForSpace:
                     iconButton("pause.fill", "Pause") { model.pause(task) }
-                case .paused, .pausedAll, .cancelled, .waitingForQuota:
+                case .paused, .pausedAll, .cancelled, .waitingDailyLimit:
                     iconButton("play.fill", "Resume") { model.resume(task) }
                 case .failed:
                     iconButton("arrow.clockwise", "Retry") { model.resume(task) }
@@ -269,7 +293,7 @@ private struct DownloadTaskRow: View, Equatable {
             if [.downloading, .queued, .waitingForNetwork, .waitingForVolume, .waitingForSpace].contains(task.status) {
                 Button("Pause") { model.pause(task) }
             }
-            if [.paused, .pausedAll, .cancelled, .waitingForQuota].contains(task.status) { Button("Resume") { model.resume(task) } }
+            if [.paused, .pausedAll, .cancelled, .waitingDailyLimit].contains(task.status) { Button("Resume") { model.resume(task) } }
             if task.status == .failed { Button("Retry") { model.resume(task) } }
             if canCancel {
                 Divider()
@@ -298,7 +322,7 @@ private struct DownloadTaskRow: View, Equatable {
             }
         case .downloading:
             if let fraction { ProgressView(value: fraction) } else { ProgressView().progressViewStyle(.linear) }
-        case .paused, .pausedAll, .queued, .waitingForNetwork, .waitingForVolume, .waitingForSpace, .waitingForQuota, .failed:
+        case .paused, .pausedAll, .queued, .waitingForNetwork, .waitingForVolume, .waitingForSpace, .waitingDailyLimit, .failed:
             // Серый прогресс — сколько уже лежит в .gdrive.part.
             if downloaded > 0, let fraction { ProgressView(value: fraction).tint(.gray) }
         case .completed, .cancelled:
@@ -325,7 +349,7 @@ private struct DownloadTaskRow: View, Equatable {
         case .completed: .green
         case .failed: .red
         case .downloading: .accentColor
-        case .waitingForVolume, .waitingForSpace, .waitingForNetwork, .waitingForQuota: .orange
+        case .waitingForVolume, .waitingForSpace, .waitingForNetwork, .waitingDailyLimit: .orange
         default: .secondary
         }
     }

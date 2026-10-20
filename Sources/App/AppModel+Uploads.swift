@@ -129,22 +129,6 @@ extension AppModel {
         return moved
     }
 
-    /// В корзину (окончательное удаление не используется). Возвращает id перемещённых в корзину.
-    func trash(_ items: [CloudItem]) async -> Set<String> {
-        guard await ensureWriteAccess(items.first?.provider ?? activeCloud) else { return [] }
-        var trashed = Set<String>()
-        for item in items {
-            do {
-                try await providers.provider(for: item.provider).trash(item)
-                trashed.insert(item.id)
-            } catch {
-                reportEditError(error, forbidden: String(localized: "You don’t have permission to delete “\(item.name)”"), cloud: items.first?.provider ?? activeCloud)
-                break
-            }
-        }
-        return trashed
-    }
-
     // MARK: - Upload
 
     /// Пачка файлов и папок в папку на диске: обход, один вопрос про конфликты имён,

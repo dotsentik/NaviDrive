@@ -56,28 +56,35 @@ struct MainView: View {
                     .padding(.top, 8)
                     // Как интервал между разделами sidebar: переключатель не касается выделенного пункта.
                     .padding(.bottom, 11)
-                List(selection: $model.selection) {
-                    Section {
-                        ForEach(SidebarItem.cloudItems(for: model.activeCloud)) { item in
-                            sidebarRow(item, badge: item == .linked ? model.activeLinkedItems.count : 0)
+                ScrollViewReader { proxy in
+                    List(selection: $model.selection) {
+                        Section {
+                            ForEach(SidebarItem.cloudItems(for: model.activeCloud)) { item in
+                                sidebarRow(item, badge: item == .linked ? model.activeLinkedItems.count : 0)
+                            }
+                        }
+                        Section("Transfers") {
+                            // Счётчик активных потоков в строке не показываем — активность видна в строке статуса.
+                            sidebarRow(.downloads)
+                            sidebarRow(.uploads, badge: model.uploadTotals.activeCount)
+                            sidebarRow(.routes, badge: model.routes.count)
+                        }
+                        if !model.volumes.isEmpty {
+                            // Строки дисков — кнопки без `.tag`: в выборе экрана через List(selection:) они не участвуют.
+                            Section("Disks") {
+                                ForEach(model.volumes) { DiskSidebarRow(volume: $0).id("disk-\($0.id)") }
+                            }
                         }
                     }
-                    Section("Transfers") {
-                        // Счётчик активных потоков в строке не показываем — активность видна в строке статуса.
-                        sidebarRow(.downloads)
-                        sidebarRow(.uploads, badge: model.uploadTotals.activeCount)
-                        sidebarRow(.routes, badge: model.routes.count)
-                    }
-                    if !model.volumes.isEmpty {
-                        // Строки дисков — кнопки без `.tag`: в выборе экрана через List(selection:) они не участвуют.
-                        Section("Disks") {
-                            ForEach(model.volumes) { DiskSidebarRow(volume: $0) }
-                        }
+                    .frame(minHeight: 160)
+                    .focused($focus, equals: .sidebar)
+                    // Сообщение карточки о диске ведёт к его строке в разделе «Диски».
+                    .onChange(of: model.highlightedVolume) { _, root in
+                        guard let root else { return }
+                        withAnimation { proxy.scrollTo("disk-\(root)", anchor: .center) }
                     }
                 }
-                .frame(minHeight: 160)
-                .focused($focus, equals: .sidebar)
-                SidebarStatus()
+                StatusCard()
                     .contentShape(Rectangle())
                     .onTapGesture { focus = .sidebar }
             }
@@ -252,14 +259,15 @@ private struct CloudHeaderRow<Content: View>: View {
 /// Значок облака — простой круг с буквой (не логотип сервиса). Sidebar и окно приветствия.
 struct CloudLetterIcon: View {
     let cloud: CloudProviderKind
+    var size: CGFloat = 20
 
     var body: some View {
         Circle()
             .fill(cloud == .dropbox ? Color.blue : Color.gray)
-            .frame(width: 20, height: 20)
+            .frame(width: size, height: size)
             .overlay {
                 Text(verbatim: cloud == .dropbox ? "D" : "G")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: size * 0.55, weight: .semibold))
                     .foregroundStyle(.white)
             }
             .accessibilityHidden(true)
@@ -318,86 +326,6 @@ private struct ConnectCloudRow: View {
                     .padding(.horizontal, 6)
                     .help(error)
             }
-        }
-    }
-}
-
-private struct SidebarStatus: View {
-    @Environment(AppModel.self) private var model
-    private let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-
-    /// Идут скачивания (или обход папок) — показываются скорость и общий прогресс.
-    private var downloadsActive: Bool { model.hasActiveDownloads }
-    private var uploadsActive: Bool { model.uploadSnapshot.runningCount > 0 }
-
-    var body: some View {
-        // Без активных передач — одна строка с индикатором сети; высота по содержимому.
-        // Строки скорости и прогресса появляются и исчезают с плавной анимацией высоты
-        // (только на переходах, а не при каждом обновлении счётчиков).
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(model.snapshot.isOnline ? Color.green : Color.orange)
-                    .frame(width: 8, height: 8)
-                Text(model.networkStatusText)
-                Spacer()
-                if downloadsActive && model.snapshot.runningCount > 0 {
-                    Text(Format.speed(model.snapshot.bytesPerSecond))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .transition(.opacity)
-                }
-            }
-            if downloadsActive {
-                VStack(alignment: .leading, spacing: 4) {
-                    if model.snapshot.scanningFolders > 0 {
-                        Text("Scanning folders: \(model.snapshot.scannedFiles) files found")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                    if model.totals.pendingCount > 0 {
-                        ProgressView(value: model.totals.fraction)
-                        Text(model.progressSummary)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-            if uploadsActive {
-                Text("Uploading: \(model.uploadProgressSummary) · \(Format.speed(model.uploadSnapshot.isPaused ? 0 : model.uploadSnapshot.bytesPerSecond))")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-        }
-        .font(.caption)
-        .lineLimit(1)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
-        .modifier(StatusCardBackground(shape: shape))
-        // Парящая карточка: отступ от краёв sidebar и от нижнего края окна.
-        .padding(.horizontal, 10)
-        .padding(.bottom, 10)
-        .padding(.top, 6)
-        .animation(.smooth(duration: 0.3), value: downloadsActive)
-        .animation(.smooth(duration: 0.3), value: uploadsActive)
-    }
-}
-
-/// Фон карточки статуса: Liquid Glass на macOS 26+, на macOS 15 — материал с тонкой обводкой.
-private struct StatusCardBackground: ViewModifier {
-    let shape: RoundedRectangle
-
-    func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content.glassEffect(.regular, in: shape)
-        } else {
-            content
-                .background(.regularMaterial, in: shape)
-                .overlay(shape.strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
         }
     }
 }

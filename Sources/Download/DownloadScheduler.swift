@@ -19,6 +19,8 @@ actor DownloadScheduler {
 
     private enum StopReason {
         case pauseTask, pauseAll, network, cancel, requeue
+        /// Лимит облака (свой счётчик за 24 часа или ответ облака): задача ждёт, прогресс сохранён.
+        case dailyLimit
     }
 
     private struct Running {
@@ -72,6 +74,10 @@ actor DownloadScheduler {
     /// Запас, который очередь не занимает: диск не заполняется до последнего байта.
     static let spaceMargin: Int64 = 2_000_000_000
 
+    /// Лимит скачивания Google Drive: свой бюджет за скользящие 24 часа и остановка по ответу Google.
+    /// У Dropbox своих лимитов скачивания нет (только пауза и повтор при 429).
+    private var googleLimit: TransferLimiter
+
     /// Паузы перед повтором, которые будятся досрочно (пробуждение Mac, возврат сети).
     private let retryWaiter = RetryWaiter()
 
@@ -83,6 +89,15 @@ actor DownloadScheduler {
         var bytes: Int64 = 0
         var verified = 0
         var failed = 0
+        /// Общая папка скачанных файлов — для сообщения «Готово: … скачано в …».
+        var directory: String?
+
+        mutating func addDirectory(_ path: String) {
+            guard let current = directory else { directory = path; return }
+            let a = current.split(separator: "/"), b = path.split(separator: "/")
+            let common = zip(a, b).prefix { $0 == $1 }.map(\.0)
+            directory = "/" + common.joined(separator: "/")
+        }
     }
     private var session = Session()
     private var sessionCounter = 0
@@ -93,6 +108,7 @@ actor DownloadScheduler {
         self.providers = providers
         self.progress = ProgressStore(db: db)
         self.balancer = AdaptiveConcurrency(userLimit: AppSettings.maxConcurrentDownloads)
+        self.googleLimit = TransferLimiter(provider: .googleDrive, direction: .download, db: db)
     }
 
     // MARK: - Lifecycle
@@ -120,7 +136,7 @@ actor DownloadScheduler {
                 try? await Task.sleep(for: .seconds(30))
                 await self?.recheckVolumes()
                 await self?.recheckSpace()
-                await self?.requeueDueQuotaTasks()
+                await self?.checkLimits()
             }
         })
         schedule()
@@ -159,6 +175,7 @@ actor DownloadScheduler {
     /// После запуска очередь продолжается автоматически.
     func stopForRelaunch() async {
         isHalted = true
+        googleLimit.flush(db: db)
         let handles = running.values.map(\.handle)
         stopAll(.requeue)
         for handle in handles { await handle.value }
@@ -309,7 +326,7 @@ actor DownloadScheduler {
 
     /// Незавершённые задачи, которые ждут своей очереди (не идут и не проверяются).
     private static let unfinishedStatuses: [TaskStatus] = [
-        .queued, .waitingForVolume, .waitingForSpace, .waitingForNetwork, .waitingForQuota,
+        .queued, .waitingForVolume, .waitingForSpace, .waitingForNetwork, .waitingDailyLimit,
     ]
 
     /// Очередь предыдущего аккаунта после входа другим: всё незавершённое — на паузу (прогресс сохраняется).
@@ -331,7 +348,7 @@ actor DownloadScheduler {
         Task { await retryWaiter.wakeAll() }
         recheckVolumes()
         recheckSpace()
-        requeueDueQuotaTasks()
+        checkLimits()
     }
 
     func recheckVolumes() {
@@ -412,6 +429,7 @@ actor DownloadScheduler {
         guard running[id] != nil else { return }
         liveProgress[id] = total
         if delta > 0 {
+            if running[id]?.task.provider == .googleDrive { countGoogleTraffic(delta, id: id) }
             receivedBytes.insert(id)
             let now = Date().timeIntervalSinceReferenceDate
             meter.add(delta, at: now)
@@ -443,8 +461,10 @@ actor DownloadScheduler {
         var snapshot = snapshot()
         snapshot.isPaused = !totals.hasPausable && totals.pausedAllCount > 0
         stateVersion += 1
+        let stats = db.downloadLimitStats(provider: .googleDrive, limit: googleLimit.budget)
+        let limits = [googleLimit.status(stats, reserved: reservedGoogleBytes())]
         return DownloadState(version: stateVersion, snapshot: snapshot, totals: totals,
-                             sections: AppModel.loadSections(kinds, from: db))
+                             sections: AppModel.loadSections(kinds, from: db), limits: limits)
     }
 
     func snapshot() -> EngineSnapshot {
@@ -454,7 +474,8 @@ actor DownloadScheduler {
             isPaused: false,
             isOnline: isOnline,
             isAuthorized: !authorized.isEmpty,
-            bytesPerSecond: meter.bytesPerSecond(window: 3, now: Date().timeIntervalSinceReferenceDate),
+            // Нет идущих потоков — скорость сразу 0 (а не затухающее среднее за 3 с).
+            bytesPerSecond: active.isEmpty ? 0 : meter.bytesPerSecond(window: 3, now: Date().timeIntervalSinceReferenceDate),
             liveProgress: liveProgress,
             // Останавливающиеся потоки уже не считаются: их задачи показаны в паузе / ожидании.
             runningCount: active.count,
@@ -470,7 +491,10 @@ actor DownloadScheduler {
             lastSession: lastSession,
             scanningFolders: scanningFolders,
             scannedFiles: scannedFiles,
-            scanErrors: scanErrors
+            scanErrors: scanErrors,
+            runningTasks: running.values.filter { stopReasons[$0.task.id] == nil }.map {
+                RunningTransfer(id: $0.task.id, name: $0.task.fileName, provider: $0.task.provider, size: $0.task.expectedSize)
+            }
         )
     }
 
@@ -520,18 +544,36 @@ actor DownloadScheduler {
 
     private func schedule() {
         guard started, !authorized.isEmpty, isOnline, !isHalted else { return }
+        let googleAuthorized = authorized.contains(.googleDrive)
+        if googleAuthorized, googleLimit.isServerBlocked {
+            // Google ответил «лимит исчерпан»: новые задачи Google сразу ждут, раз в час — одна пробная.
+            db.moveQueuedToDailyLimit(provider: .googleDrive, nextAttemptAt: googleLimit.nextProbe.map(Self.unix),
+                                      error: googleLimit.serverMessage())
+            launchGoogleProbeIfDue()
+        }
+        var claimedGoogle = false
         while running.count < balancer.limit {
+            var claimable = authorized
+            var budget: TransferBudget?
+            if googleAuthorized {
+                switch googleLimit.gate(reserved: reservedGoogleBytes()) {
+                case .open: break
+                case .budget(let value): budget = value
+                case .closed: claimable.remove(.googleDrive)
+                }
+            }
+            guard !claimable.isEmpty else { break }
             let task: DownloadTask
             let sizeClass: TaskSizeClass
             // Сначала — файлы, которые пользователь возобновил вручную.
             if let prioritized = db.claimNextPrioritized(allowExport: runningCounts().export < Self.exportLimit,
-                                                         providers: authorized) {
+                                                         providers: claimable, budget: budget) {
                 task = prioritized
                 sizeClass = TaskSizeClass(prioritized)
             } else {
-                let heads = db.queueHeads(providers: authorized)
+                let heads = db.queueHeads(providers: claimable, budget: budget)
                 guard let picked = pickClass(heads: heads),
-                      let claimed = db.claimNext(sizeClass: picked, providers: authorized) else { return }
+                      let claimed = db.claimNext(sizeClass: picked, providers: claimable, budget: budget) else { break }
                 task = claimed
                 sizeClass = picked
             }
@@ -554,9 +596,19 @@ actor DownloadScheduler {
                                 error: String(localized: "Another download is already writing to “\(task.fileName)” (same name in the same folder)"))
                 continue
             }
+            if task.provider == .googleDrive { claimedGoogle = true }
             launch(task, sizeClass: sizeClass)
         }
+        // Слоты свободны, а ни один файл Google не помещается в остаток своего лимита:
+        // очередь Google ждёт (секция «Ожидают»), пока бюджет не освободится.
+        if googleAuthorized, !claimedGoogle, !googleLimit.isServerBlocked, googleLimit.budget != nil,
+           running.count < balancer.limit, !running.values.contains(where: { $0.task.provider == .googleDrive }),
+           db.hasQueuedDownloads(provider: .googleDrive) {
+            parkGoogleQueue()
+        }
     }
+
+    private static func unix(_ date: Date) -> Int64 { Int64(date.timeIntervalSince1970) }
 
     private func launch(_ task: DownloadTask, sizeClass: TaskSizeClass) {
         liveProgress[task.id] = task.downloadedSize
@@ -572,7 +624,11 @@ actor DownloadScheduler {
     }
 
     private func finish(_ task: DownloadTask, outcome: DownloadWorker.Outcome) {
+        let wasProbe = googleLimit.probeTaskId == task.id
+        if wasProbe { googleLimit.probeTaskId = nil }
         running[task.id] = nil
+        // Последняя передача закончилась — сглаживание скорости обнуляется вместе с ней.
+        if running.isEmpty { meter.reset() }
         activePartPaths.remove(task.partPath)
         liveProgress[task.id] = nil
         taskMeters[task.id] = nil
@@ -593,6 +649,8 @@ actor DownloadScheduler {
             if reason == .cancel {
                 db.updateStatus(id: task.id, status: .cancelled)
                 removePartFile(task.id)
+            } else if reason == .dailyLimit {
+                markLimitWaiting(task)
             } else if let shortage = shortageAfterFailure(task) {
                 // Место кончилось во время скачивания: не ошибка, а ожидание места (часть файла сохранена).
                 db.updateStatus(id: task.id, status: .waitingForSpace, error: shortage)
@@ -605,18 +663,14 @@ actor DownloadScheduler {
             if let root = PathResolver.volumeRoot(for: task.targetDirPath) {
                 db.markWaitingForVolume(volumeRoot: root, message: message)
             }
-        case .waitingForQuota(let message):
+        case .limitReached:
             if reason == .cancel {
                 db.updateStatus(id: task.id, status: .cancelled)
                 removePartFile(task.id)
             } else {
-                // 1 ч → 2 ч → 4 ч → … → 24 ч. Остальные файлы продолжают качаться.
-                let attempts = task.quotaAttempts + 1
-                let delay = Self.quotaDelay(attempt: attempts)
-                let next = Date().addingTimeInterval(delay)
-                let time = next.formatted(date: .omitted, time: .shortened)
-                db.markWaitingForQuota(id: task.id, attempts: attempts, nextAttemptAt: Int64(next.timeIntervalSince1970),
-                                       error: String(localized: "Google has temporarily limited downloads of this file (quota). Next attempt at \(time). \(message)"))
+                // Google ответил «лимит исчерпан»: стоят все скачивания Google, пробный запрос — через час.
+                enterGoogleServerLimit()
+                markLimitWaiting(task)
             }
         case .stopped:
             switch reason {
@@ -626,6 +680,8 @@ actor DownloadScheduler {
                 db.updateStatus(id: task.id, status: .pausedAll)
             case .network:
                 db.updateStatus(id: task.id, status: .waitingForNetwork, error: String(localized: "Waiting for network…"))
+            case .dailyLimit:
+                markLimitWaiting(task)
             case .cancel:
                 db.updateStatus(id: task.id, status: .cancelled)
                 removePartFile(task.id)
@@ -634,6 +690,7 @@ actor DownloadScheduler {
             }
         case .signedOut:
             // Вход отозван: очередь стоит до нового входа, скачанная часть файла сохранена.
+            if wasProbe, googleLimit.isServerBlocked { googleLimit.probeNow() }
             authorized.remove(task.provider)
             stopAll(.requeue, provider: task.provider)
             switch reason {
@@ -646,21 +703,163 @@ actor DownloadScheduler {
                 db.updateStatus(id: task.id, status: .queued)
             }
         }
+        // Проба закончилась без ответа о лимите и без полученных байт (файл уже был на диске, ошибка файла):
+        // сразу пробуем следующую ждущую задачу.
+        if wasProbe, googleLimit.isServerBlocked, !Self.isLimitOutcome(outcome) { googleLimit.probeNow() }
         schedule()
         checkIdle()
     }
 
-    /// Пауза ожидания квоты: 1 ч, 2 ч, 4 ч, … не больше 24 ч.
-    static func quotaDelay(attempt: Int) -> TimeInterval {
-        min(24 * 3600, 3600 * pow(2, Double(max(0, attempt - 1))))
+    private static func isLimitOutcome(_ outcome: DownloadWorker.Outcome) -> Bool {
+        if case .limitReached = outcome { return true }
+        return false
     }
 
-    /// Вернуть в очередь задачи, у которых наступило время повтора после квоты.
-    func requeueDueQuotaTasks(force: Bool = false) {
-        // Во время общей паузы плановый повтор не запускает скачивание (ручное «Попробовать сейчас» — да).
-        guard force || pausedAllAt == nil else { return }
-        if db.requeueDueQuotaTasks(force: force) > 0 { schedule() }
+    // MARK: - Limits
+
+    /// Раз в 30 секунд и после сна: старые минуты выходят из окна 24 часов — ждущие задачи Google
+    /// продолжаются, когда бюджет освободился; после ответа Google о лимите — пробный запрос раз в час.
+    func checkLimits() {
+        googleLimit.prune(db: db)
+        googleLimit.flush(db: db)
+        // Во время общей паузы плановая проверка ничего не запускает (ручное «Попробовать сейчас» — да).
+        guard pausedAllAt == nil else { return }
+        if googleLimit.isServerBlocked {
+            if googleLimit.probeDue { schedule() }
+            return
+        }
+        releaseGoogleWaiting()
     }
+
+    /// «Попробовать сейчас»: после ответа Google — пробный запрос сразу; при своём лимите — перепроверка
+    /// (файлы, которые не помещаются в остаток, вернутся в ожидание).
+    func retryLimitNow() {
+        if googleLimit.isServerBlocked {
+            googleLimit.probeNow()
+        } else if db.requeueLimitWaiting(provider: .googleDrive) == 0 {
+            return
+        }
+        schedule()
+    }
+
+    /// Лимит изменён в настройках: исчерпан — скачивания Google останавливаются; иначе ждущие продолжаются.
+    func limitsChanged() {
+        if googleLimit.isExhausted() {
+            enterGoogleBudgetLimit()
+        } else {
+            releaseGoogleWaiting()
+        }
+        schedule()
+    }
+
+    /// Ждущие своего лимита задачи Google — в очередь, если остатка хватает хотя бы одной из них.
+    private func releaseGoogleWaiting() {
+        guard !googleLimit.isServerBlocked else { return }
+        guard googleLimit.budget != nil else {
+            // Лимит выключен: ждать нечего.
+            if db.requeueLimitWaiting(provider: .googleDrive) > 0 { schedule() }
+            return
+        }
+        guard case .budget(let budget) = googleLimit.gate(reserved: reservedGoogleBytes()) else { return }
+        let stats = db.downloadLimitStats(provider: .googleDrive, limit: budget.limit)
+        guard stats.count > 0, let needed = googleLimit.neededToResume(stats), budget.remaining >= needed else { return }
+        if db.requeueLimitWaiting(provider: .googleDrive) > 0 { schedule() }
+    }
+
+    /// Сколько ещё допишут идущие скачивания Google (бюджет на них уже занят).
+    private func reservedGoogleBytes() -> Int64 {
+        running.values.reduce(0) { sum, entry in
+            guard entry.task.provider == .googleDrive, stopReasons[entry.task.id] == nil, entry.task.expectedSize > 0 else { return sum }
+            return sum + max(0, entry.task.expectedSize - (liveProgress[entry.task.id] ?? entry.task.downloadedSize))
+        }
+    }
+
+    private func countGoogleTraffic(_ bytes: Int64, id: String) {
+        googleLimit.count(bytes, db: db)
+        if id == googleLimit.probeTaskId {
+            // Пробный запрос получил данные: Google снова отдаёт файлы — очередь Google продолжается.
+            googleLimit.unblock()
+            db.requeueLimitWaiting(provider: .googleDrive)
+            schedule()
+        }
+        if googleLimit.isExhausted(),
+           running.contains(where: { $0.value.task.provider == .googleDrive && stopReasons[$0.key] == nil }) {
+            enterGoogleBudgetLimit()
+        }
+    }
+
+    /// Свой лимит исчерпан: идущие скачивания Google останавливаются (часть файла сохраняется
+    /// и продолжится с того же байта), очередь Google ждёт, пока бюджет не освободится.
+    private func enterGoogleBudgetLimit() {
+        googleLimit.flush(db: db)
+        for (id, entry) in running where entry.task.provider == .googleDrive && stopReasons[id] == nil {
+            stop(id, .dailyLimit)
+            markLimitWaiting(entry.task)
+        }
+        parkGoogleQueue()
+    }
+
+    /// Google ответил «лимит исчерпан»: новых запросов нет, пробный — через час.
+    private func enterGoogleServerLimit() {
+        googleLimit.block()
+        googleLimit.flush(db: db)
+        for (id, entry) in running where entry.task.provider == .googleDrive && stopReasons[id] == nil {
+            stop(id, .dailyLimit)
+            markLimitWaiting(entry.task)
+        }
+        db.moveQueuedToDailyLimit(provider: .googleDrive, nextAttemptAt: googleLimit.nextProbe.map(Self.unix),
+                                  error: googleLimit.serverMessage())
+    }
+
+    /// Очередь Google → ожидание своего лимита, с оценкой, когда продолжим.
+    private func parkGoogleQueue() {
+        let stats = db.downloadLimitStats(provider: .googleDrive, limit: googleLimit.budget)
+        var probe = stats
+        // Оценка с учётом и тех задач, что сейчас уходят в ожидание: берём худший случай — порцию.
+        probe.count = max(1, stats.count)
+        if probe.smallestFitting == nil { probe.hasOversized = true }
+        let resume = googleLimit.resumeEstimate(probe, reserved: reservedGoogleBytes())
+        db.moveQueuedToDailyLimit(provider: .googleDrive, nextAttemptAt: resume.map(Self.unix),
+                                  error: googleLimit.budgetMessage(resumeAt: resume))
+    }
+
+    private func markLimitWaiting(_ task: DownloadTask) {
+        if googleLimit.isServerBlocked {
+            db.markLimitWaiting(id: task.id, nextAttemptAt: googleLimit.nextProbe.map(Self.unix), error: googleLimit.serverMessage())
+        } else {
+            let resume = googleLimit.resumeEstimate(LimitWaitingStats(count: 1, hasOversized: true), reserved: 0)
+            db.markLimitWaiting(id: task.id, nextAttemptAt: resume.map(Self.unix), error: googleLimit.budgetMessage(resumeAt: resume))
+        }
+    }
+
+    /// Раз в час (или по «Попробовать сейчас») — одна пробная задача Google: та, что дольше всех ждёт.
+    private func launchGoogleProbeIfDue() {
+        guard googleLimit.probeDue, googleLimit.probeTaskId == nil, pausedAllAt == nil,
+              running.count < balancer.limit, let task = db.claimDownloadProbe(provider: .googleDrive) else { return }
+        googleLimit.beginProbe(task.id)
+        if case .missing(let message) = PathResolver.volumeState(for: task.targetDirPath) {
+            googleLimit.probeTaskId = nil
+            googleLimit.probeNow()
+            db.updateStatus(id: task.id, status: .waitingForVolume, error: message)
+            return
+        }
+        launch(task, sizeClass: TaskSizeClass(task))
+    }
+
+    #if DEBUG
+    /// Debug → Simulate: ответ Google «лимит исчерпан» (тот же путь, что и настоящий ответ).
+    func debugSimulateServerLimit() {
+        enterGoogleServerLimit()
+        schedule()
+    }
+
+    /// Debug → Simulate: счётчик на `fraction` лимита (в базу не пишется); 0 — снять.
+    func debugSimulateUsage(_ fraction: Double) {
+        googleLimit.debugExtraUsed = 0
+        guard fraction > 0, let budget = googleLimit.budget else { return }
+        googleLimit.debugExtraUsed = max(0, Int64(Double(budget) * fraction) - googleLimit.used())
+    }
+    #endif
 
     // MARK: - Verification & finalization
 
@@ -680,6 +879,7 @@ actor DownloadScheduler {
             db.markCompleted(id: task.id, size: size, verified: verified)
             session.files += 1
             session.bytes += size
+            session.addDirectory(task.targetDirPath)
             if verified { session.verified += 1 }
         } catch {
             session.failed += 1
@@ -763,7 +963,8 @@ actor DownloadScheduler {
         lastSession = QueueSessionSummary(
             id: sessionCounter, projects: session.projects, files: session.files, bytes: session.bytes,
             verified: session.verified, failed: session.failed,
-            waitingQuota: counts[.waitingForQuota] ?? 0, waitingVolume: counts[.waitingForVolume] ?? 0)
+            waitingLimit: counts[.waitingDailyLimit] ?? 0, waitingVolume: counts[.waitingForVolume] ?? 0,
+            destination: session.directory)
     }
 
     private func stop(_ id: String, _ reason: StopReason) {

@@ -178,6 +178,32 @@ final class DatabaseManager: @unchecked Sendable {
                 PRIMARY KEY (kind, provider, folder_id, task_id)
             ) WITHOUT ROWID;
             """)
+        // v10: размер папки облака, посчитанный по запросу пользователя (обновляется только «Пересчитать»).
+        try execute("""
+            CREATE TABLE IF NOT EXISTS folder_sizes (
+                provider TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                total_size INTEGER NOT NULL,
+                file_count INTEGER NOT NULL,
+                folder_count INTEGER NOT NULL,
+                native_doc_count INTEGER NOT NULL,
+                computed_at INTEGER NOT NULL,
+                PRIMARY KEY (provider, item_id)
+            ) WITHOUT ROWID;
+            """)
+        // v11: трафик облака за скользящие 24 часа по минутам (свои дневные лимиты Google Drive).
+        try execute("DROP TABLE IF EXISTS daily_traffic;")
+        try execute("""
+            CREATE TABLE IF NOT EXISTS transfer_traffic (
+                provider TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                minute INTEGER NOT NULL,
+                bytes INTEGER NOT NULL,
+                PRIMARY KEY (provider, direction, minute)
+            ) WITHOUT ROWID;
+            """)
+        // Ожидание квоты Google с повтором через часы заменено ожиданием лимита (limitReached).
+        try execute("UPDATE download_tasks SET status = 'waiting_daily_limit' WHERE status = 'waiting_for' || '_quota';")
         if try keyColumnCount("custom_routes") == 1 {
             try rebuild("custom_routes", schema: Self.customRoutesSchema, columns: Self.customRoutesColumns)
         }
@@ -624,13 +650,15 @@ final class DatabaseManager: @unchecked Sendable {
     }
 
     /// rowid первой задачи в очереди для каждого класса (отсутствие ключа — класс пуст).
-    func queueHeads(providers: Set<CloudProviderKind>) -> [TaskSizeClass: Int64] {
+    /// - Parameter budget: свой лимит облака — только задачи, которые помещаются в остаток.
+    func queueHeads(providers: Set<CloudProviderKind>, budget: TransferBudget? = nil) -> [TaskSizeClass: Int64] {
         var heads: [TaskSizeClass: Int64] = [:]
         let filter = Self.providerFilter(providers)
+        let budgetFilter = Self.downloadBudgetFilter(budget)
         for sizeClass in TaskSizeClass.allCases {
             let rowid = try? query(
-                "SELECT rowid FROM download_tasks WHERE status = 'queued' AND size_class = ? AND \(filter.sql) ORDER BY rowid LIMIT 1",
-                [.int(Int64(sizeClass.rawValue))] + filter.values) { s in sqlite3_column_int64(s, 0) }.first
+                "SELECT rowid FROM download_tasks WHERE status = 'queued' AND size_class = ? AND \(filter.sql) AND \(budgetFilter.sql) ORDER BY rowid LIMIT 1",
+                [.int(Int64(sizeClass.rawValue))] + filter.values + budgetFilter.values) { s in sqlite3_column_int64(s, 0) }.first
             if let rowid { heads[sizeClass] = rowid }
         }
         return heads
@@ -638,13 +666,14 @@ final class DatabaseManager: @unchecked Sendable {
 
     /// Атомарно забирает следующую задачу класса: в одной транзакции переводит `queued → downloading`.
     /// Условие `AND status = 'queued'` гарантирует, что одна и та же задача не будет запущена дважды.
-    func claimNext(sizeClass: TaskSizeClass, providers: Set<CloudProviderKind>) -> DownloadTask? {
+    func claimNext(sizeClass: TaskSizeClass, providers: Set<CloudProviderKind>, budget: TransferBudget? = nil) -> DownloadTask? {
         lock.lock(); defer { lock.unlock() }
         let filter = Self.providerFilter(providers)
+        let budgetFilter = Self.downloadBudgetFilter(budget)
         guard (try? execute("BEGIN IMMEDIATE TRANSACTION;")) != nil else { return nil }
         let task = (try? query(
-            "SELECT \(Self.taskColumns) FROM download_tasks WHERE status = 'queued' AND size_class = ? AND \(filter.sql) ORDER BY rowid LIMIT 1",
-            [.int(Int64(sizeClass.rawValue))] + filter.values, map: Self.task))?.first
+            "SELECT \(Self.taskColumns) FROM download_tasks WHERE status = 'queued' AND size_class = ? AND \(filter.sql) AND \(budgetFilter.sql) ORDER BY rowid LIMIT 1",
+            [.int(Int64(sizeClass.rawValue))] + filter.values + budgetFilter.values, map: Self.task))?.first
         guard let task else {
             _ = try? execute("COMMIT;")
             return nil
@@ -663,14 +692,15 @@ final class DatabaseManager: @unchecked Sendable {
 
     /// Атомарно забирает задачу, возобновлённую вручную (priority > 0), раньше обычной очереди.
     /// - Parameter allowExport: можно ли взять экспорт Google Docs (лимит 2 одновременных).
-    func claimNextPrioritized(allowExport: Bool, providers: Set<CloudProviderKind>) -> DownloadTask? {
+    func claimNextPrioritized(allowExport: Bool, providers: Set<CloudProviderKind>, budget: TransferBudget? = nil) -> DownloadTask? {
         lock.lock(); defer { lock.unlock() }
         let filter = Self.providerFilter(providers)
+        let budgetFilter = Self.downloadBudgetFilter(budget)
         guard (try? execute("BEGIN IMMEDIATE TRANSACTION;")) != nil else { return nil }
         let exportFilter = allowExport ? "" : "AND size_class <> \(TaskSizeClass.export.rawValue)"
         let task = (try? query(
-            "SELECT \(Self.taskColumns) FROM download_tasks WHERE status = 'queued' AND priority > 0 \(exportFilter) AND \(filter.sql) ORDER BY rowid LIMIT 1",
-            filter.values, map: Self.task))?.first
+            "SELECT \(Self.taskColumns) FROM download_tasks WHERE status = 'queued' AND priority > 0 \(exportFilter) AND \(filter.sql) AND \(budgetFilter.sql) ORDER BY rowid LIMIT 1",
+            filter.values + budgetFilter.values, map: Self.task))?.first
         guard let task else {
             _ = try? execute("COMMIT;")
             return nil
@@ -848,7 +878,7 @@ final class DatabaseManager: @unchecked Sendable {
                 SUM(MAX(expected_size - downloaded_size, 0)), SUM(status = 'downloading')
             FROM download_tasks
             WHERE status IN ('queued', 'downloading', 'paused', 'paused_all', 'waiting_for_volume', 'waiting_for_network',
-                             'waiting_for_quota', 'waiting_for_space')
+                             'waiting_daily_limit', 'waiting_for_space')
             GROUP BY root
             """, reader: true) { s in
             (Self.text(s, 0) ?? "/", sqlite3_column_int64(s, 1), Int(sqlite3_column_int64(s, 2)))
@@ -893,26 +923,9 @@ final class DatabaseManager: @unchecked Sendable {
         let filter = Self.volumeFilter(volumeRoot)
         _ = try? run("""
             UPDATE download_tasks SET status = 'paused', updated_at = ?
-            WHERE status IN ('queued', 'waiting_for_volume', 'waiting_for_network', 'waiting_for_quota', 'waiting_for_space')
+            WHERE status IN ('queued', 'waiting_for_volume', 'waiting_for_network', 'waiting_daily_limit', 'waiting_for_space')
                 AND \(filter.sql)
             """, [.int(Self.now)] + filter.values)
-    }
-
-    /// Квота Google на файл: задача ждёт до `nextAttemptAt`, слот не занимает, лимит повторов не тратит.
-    func markWaitingForQuota(id: String, attempts: Int, nextAttemptAt: Int64, error: String) {
-        _ = try? run("""
-            UPDATE download_tasks SET status = 'waiting_for_quota', quota_attempts = ?, next_attempt_at = ?,
-                last_error = ?, updated_at = ? WHERE id = ?
-            """, [.int(Int64(attempts)), .int(nextAttemptAt), .text(error), .int(Self.now), .text(id)])
-    }
-
-    /// Возвращает в очередь задачи, у которых наступило время следующей попытки (или все — при `force`).
-    @discardableResult
-    func requeueDueQuotaTasks(force: Bool = false) -> Int {
-        (try? run("""
-            UPDATE download_tasks SET status = 'queued', updated_at = ?
-            WHERE status = 'waiting_for_quota' AND (? OR next_attempt_at IS NULL OR next_attempt_at <= ?)
-            """, [.int(Self.now), .int(force ? 1 : 0), .int(Self.now)])) ?? 0
     }
 
     func retryFailed() {
@@ -959,11 +972,12 @@ final class DatabaseManager: @unchecked Sendable {
             totals.expectedBytes += expected
             totals.downloadedBytes += status == .completed ? max(expected, downloaded) : downloaded
         }
-        if (totals.countsByStatus[.waitingForQuota] ?? 0) > 0 {
-            totals.nextQuotaAttemptAt = (try? query(
-                "SELECT MIN(next_attempt_at) FROM download_tasks WHERE status = 'waiting_for_quota'", reader: true) { s in
-                Self.optionalInt(s, 0)
-            })?.first ?? nil
+        totals.byProvider = downloadProgressByProvider()
+        if (totals.countsByStatus[.waitingForVolume] ?? 0) > 0 {
+            totals.volumesAwaitingMount = downloadCountsByVolume(status: .waitingForVolume)
+        }
+        if (totals.countsByStatus[.waitingForSpace] ?? 0) > 0 {
+            totals.volumesAwaitingSpace = downloadCountsByVolume(status: .waitingForSpace)
         }
         return totals
     }
@@ -1026,13 +1040,16 @@ extension DatabaseManager {
     }
 
     /// Атомарно забирает следующую задачу (сначала возобновлённые вручную, затем в порядке очереди).
-    func claimNextUpload(providers: Set<CloudProviderKind>) -> UploadTask? {
+    /// - Parameter budgets: свои лимиты облаков — только файлы, которые помещаются в остаток.
+    func claimNextUpload(providers: Set<CloudProviderKind>, budgets: [TransferBudget] = []) -> UploadTask? {
         lock.lock(); defer { lock.unlock() }
         let filter = Self.providerFilter(providers)
+        let budgetFilters = budgets.map { Self.budgetFilter($0, remainingSQL: Self.uploadRemainingSQL, doneSQL: "uploaded_bytes") }
+        let budgetSQL = budgetFilters.map { " AND \($0.sql)" }.joined()
         guard var task = (try? query("""
-            SELECT \(Self.uploadColumns) FROM upload_tasks WHERE status = 'queued' AND \(filter.sql)
+            SELECT \(Self.uploadColumns) FROM upload_tasks WHERE status = 'queued' AND \(filter.sql)\(budgetSQL)
             ORDER BY priority DESC, rowid LIMIT 1
-            """, filter.values, map: Self.upload))?.first else { return nil }
+            """, filter.values + budgetFilters.flatMap(\.values), map: Self.upload))?.first else { return nil }
         let changed = (try? run("UPDATE upload_tasks SET status = 'uploading', priority = 0, updated_at = ? WHERE id = ? AND status = 'queued'",
                                 [.int(Self.now), .text(task.id)])) ?? 0
         guard changed == 1 else { return nil }
@@ -1162,6 +1179,7 @@ extension DatabaseManager {
             totals.totalBytes += size
             totals.uploadedBytes += status == .completed ? size : uploaded
         }
+        totals.byProvider = uploadProgressByProvider()
         return totals
     }
 
@@ -1287,5 +1305,234 @@ extension DatabaseManager {
             SELECT t.id FROM transfer_folders f JOIN \(table) t ON t.provider = f.provider AND t.id = f.task_id
             WHERE f.kind = ? AND f.provider = ? AND f.folder_id = ? AND t.status NOT IN ('completed', 'cancelled')
             """, [.text(kind), .text(provider.rawValue), .text(folderId)], reader: true) { s in Self.text(s, 0) ?? "" }) ?? []
+    }
+}
+
+// MARK: - Folder sizes
+
+/// Посчитанный размер папки облака.
+struct FolderSize: Sendable, Equatable {
+    var tally: FolderSizeTally
+    var computedAt: Date
+}
+
+extension DatabaseManager {
+    func allFolderSizes() -> [(RouteKey, FolderSize)] {
+        (try? query("""
+            SELECT provider, item_id, total_size, file_count, folder_count, native_doc_count, computed_at FROM folder_sizes
+            """, reader: true) { s -> (RouteKey, FolderSize)? in
+            guard let provider = Self.text(s, 0).flatMap(CloudProviderKind.init(rawValue:)) else { return nil }
+            let tally = FolderSizeTally(totalSize: sqlite3_column_int64(s, 2), fileCount: Int(sqlite3_column_int64(s, 3)),
+                                        folderCount: Int(sqlite3_column_int64(s, 4)),
+                                        nativeDocCount: Int(sqlite3_column_int64(s, 5)))
+            return (RouteKey(provider: provider, id: Self.text(s, 1) ?? ""),
+                    FolderSize(tally: tally, computedAt: Date(timeIntervalSince1970: TimeInterval(sqlite3_column_int64(s, 6)))))
+        })?.compactMap { $0 } ?? []
+    }
+
+    func saveFolderSize(_ size: FolderSize, for key: RouteKey) throws {
+        try run("""
+            INSERT OR REPLACE INTO folder_sizes
+                (provider, item_id, total_size, file_count, folder_count, native_doc_count, computed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, [.text(key.provider.rawValue), .text(key.id), .int(size.tally.totalSize), .int(Int64(size.tally.fileCount)),
+                  .int(Int64(size.tally.folderCount)), .int(Int64(size.tally.nativeDocCount)),
+                  .int(Int64(size.computedAt.timeIntervalSince1970))])
+    }
+}
+
+// MARK: - Transfer limits
+
+extension DatabaseManager {
+    func addTraffic(provider: CloudProviderKind, direction: TransferDirection, buckets: [Int64: Int64]) {
+        lock.lock(); defer { lock.unlock() }
+        guard (try? execute("BEGIN IMMEDIATE TRANSACTION;")) != nil else { return }
+        for (minute, bytes) in buckets where bytes > 0 {
+            _ = try? run("""
+                INSERT INTO transfer_traffic (provider, direction, minute, bytes) VALUES (?, ?, ?, ?)
+                ON CONFLICT (provider, direction, minute) DO UPDATE SET bytes = bytes + excluded.bytes
+                """, [.text(provider.rawValue), .text(direction.rawValue), .int(minute), .int(bytes)])
+        }
+        if (try? execute("COMMIT;")) == nil { _ = try? execute("ROLLBACK;") }
+    }
+
+    func trafficBuckets(provider: CloudProviderKind, direction: TransferDirection, sinceMinute: Int64) -> [Int64: Int64] {
+        let rows = (try? query("""
+            SELECT minute, bytes FROM transfer_traffic WHERE provider = ? AND direction = ? AND minute >= ?
+            """, [.text(provider.rawValue), .text(direction.rawValue), .int(sinceMinute)]) { s in
+            (sqlite3_column_int64(s, 0), sqlite3_column_int64(s, 1))
+        }) ?? []
+        return Dictionary(rows, uniquingKeysWith: +)
+    }
+
+    func pruneTraffic(beforeMinute: Int64) {
+        _ = try? run("DELETE FROM transfer_traffic WHERE minute < ?", [.int(beforeMinute)])
+    }
+
+    /// Условие «задачу облака можно запустить в остаток бюджета»: остаток файла помещается в бюджет,
+    /// либо (если в остатке есть хотя бы порция) файл больше всего дневного лимита — качается частями
+    /// по дням — или уже начат: начатый файл продолжается с того же байта и не ждёт, пока освободится
+    /// бюджет на весь остаток (иначе его бы постоянно опережали мелкие файлы). Другие облака не ограничены.
+    private static func budgetFilter(_ budget: TransferBudget?, remainingSQL: String, doneSQL: String) -> (sql: String, values: [Value]) {
+        guard let budget else { return ("1", []) }
+        var sql = "(provider <> ? OR MAX(\(remainingSQL), 0) <= ?"
+        var values: [Value] = [.text(budget.provider.rawValue), .int(budget.remaining)]
+        if budget.allowsOversized {
+            sql += " OR \(remainingSQL) > ? OR \(doneSQL) > 0"
+            values.append(.int(budget.limit))
+        }
+        return (sql + ")", values)
+    }
+
+    private static func downloadBudgetFilter(_ budget: TransferBudget?) -> (sql: String, values: [Value]) {
+        budgetFilter(budget, remainingSQL: downloadRemainingSQL, doneSQL: "downloaded_size")
+    }
+
+    static let downloadRemainingSQL = "expected_size - downloaded_size"
+    static let uploadRemainingSQL = "file_size - uploaded_bytes"
+
+    /// Есть ли у облака скачивания, ждущие своей очереди.
+    func hasQueuedDownloads(provider: CloudProviderKind) -> Bool {
+        !((try? query("SELECT 1 FROM download_tasks WHERE status = 'queued' AND provider = ? LIMIT 1",
+                      [.text(provider.rawValue)]) { _ in true }) ?? []).isEmpty
+    }
+
+    private func limitWaitingStats(table: String, remainingSQL: String, doneSQL: String, provider: CloudProviderKind,
+                                   limit: Int64?) -> LimitWaitingStats {
+        let limit = limit ?? Int64.max
+        return (try? query("""
+            SELECT COUNT(*), MIN(CASE WHEN rem <= ? THEN rem END), COALESCE(MAX(rem > ? OR done > 0), 0)
+            FROM (SELECT MAX(\(remainingSQL), 0) AS rem, \(doneSQL) AS done FROM \(table)
+                  WHERE status = 'waiting_daily_limit' AND provider = ?)
+            """, [.int(limit), .int(limit), .text(provider.rawValue)], reader: true) { s in
+            LimitWaitingStats(count: Int(sqlite3_column_int64(s, 0)), smallestFitting: Self.optionalInt(s, 1),
+                              hasOversized: sqlite3_column_int64(s, 2) != 0)
+        })?.first ?? LimitWaitingStats()
+    }
+
+    /// Скачивания облака, ждущие лимита.
+    func downloadLimitStats(provider: CloudProviderKind, limit: Int64?) -> LimitWaitingStats {
+        limitWaitingStats(table: "download_tasks", remainingSQL: Self.downloadRemainingSQL, doneSQL: "downloaded_size",
+                          provider: provider, limit: limit)
+    }
+
+    /// Отправки облака, ждущие лимита.
+    func uploadLimitStats(provider: CloudProviderKind, limit: Int64?) -> LimitWaitingStats {
+        limitWaitingStats(table: "upload_tasks", remainingSQL: Self.uploadRemainingSQL, doneSQL: "uploaded_bytes",
+                          provider: provider, limit: limit)
+    }
+
+    /// Очередь скачивания облака → ожидание лимита (`nextAttemptAt` — оценка, когда продолжим).
+    @discardableResult
+    func moveQueuedToDailyLimit(provider: CloudProviderKind, nextAttemptAt: Int64?, error: String) -> Int {
+        (try? run("""
+            UPDATE download_tasks SET status = 'waiting_daily_limit', next_attempt_at = ?, last_error = ?, updated_at = ?
+            WHERE status = 'queued' AND provider = ?
+            """, [nextAttemptAt.map { .int($0) } ?? .text(nil), .text(error), .int(Self.now), .text(provider.rawValue)])) ?? 0
+    }
+
+    func markLimitWaiting(id: String, nextAttemptAt: Int64?, error: String) {
+        _ = try? run("""
+            UPDATE download_tasks SET status = 'waiting_daily_limit', next_attempt_at = ?, last_error = ?, updated_at = ?
+            WHERE id = ?
+            """, [nextAttemptAt.map { .int($0) } ?? .text(nil), .text(error), .int(Self.now), .text(id)])
+    }
+
+    /// Ждущие лимита скачивания облака → снова в очередь (в прежнем порядке).
+    @discardableResult
+    func requeueLimitWaiting(provider: CloudProviderKind) -> Int {
+        (try? run("""
+            UPDATE download_tasks SET status = 'queued', last_error = NULL, next_attempt_at = NULL, updated_at = ?
+            WHERE status = 'waiting_daily_limit' AND provider = ?
+            """, [.int(Self.now), .text(provider.rawValue)])) ?? 0
+    }
+
+    /// Пробная задача после ответа облака о лимите: та, что дольше всех не пробовалась —
+    /// если облако ограничило конкретный файл, следующая проба возьмёт другой.
+    func claimDownloadProbe(provider: CloudProviderKind) -> DownloadTask? {
+        lock.lock(); defer { lock.unlock() }
+        guard let task = (try? query("""
+            SELECT \(Self.taskColumns) FROM download_tasks WHERE status = 'waiting_daily_limit' AND provider = ?
+            ORDER BY updated_at, rowid LIMIT 1
+            """, [.text(provider.rawValue)], map: Self.task))?.first else { return nil }
+        let changed = (try? run("""
+            UPDATE download_tasks SET status = 'downloading', last_error = NULL, updated_at = ?
+            WHERE id = ? AND status = 'waiting_daily_limit'
+            """, [.int(Self.now), .text(task.id)])) ?? 0
+        guard changed == 1 else { return nil }
+        var claimed = task
+        claimed.status = .downloading
+        return claimed
+    }
+
+    /// Отправки облака (в очереди) → ожидание лимита.
+    func moveQueuedUploadsToDailyLimit(provider: CloudProviderKind, error: String) {
+        _ = try? run("""
+            UPDATE upload_tasks SET status = 'waiting_daily_limit', last_error = ?, updated_at = ?
+            WHERE status = 'queued' AND provider = ?
+            """, [.text(error), .int(Self.now), .text(provider.rawValue)])
+    }
+
+    func claimUploadProbe(provider: CloudProviderKind) -> UploadTask? {
+        lock.lock(); defer { lock.unlock() }
+        guard var task = (try? query("""
+            SELECT \(Self.uploadColumns) FROM upload_tasks WHERE status = 'waiting_daily_limit' AND provider = ?
+            ORDER BY updated_at, rowid LIMIT 1
+            """, [.text(provider.rawValue)], map: Self.upload))?.first else { return nil }
+        let changed = (try? run("""
+            UPDATE upload_tasks SET status = 'uploading', last_error = NULL, updated_at = ?
+            WHERE id = ? AND status = 'waiting_daily_limit'
+            """, [.int(Self.now), .text(task.id)])) ?? 0
+        guard changed == 1 else { return nil }
+        task.status = .uploading
+        return task
+    }
+}
+
+// MARK: - Status feed
+
+extension DatabaseManager {
+    /// Идущие и ждущие очереди скачивания по облакам: файлов, всего байт, получено байт.
+    func downloadProgressByProvider() -> [CloudProviderKind: TransferProgress] {
+        let rows = (try? query("""
+            SELECT provider, COUNT(*), SUM(MAX(expected_size, 0)),
+                SUM(MIN(downloaded_size, CASE WHEN expected_size > 0 THEN expected_size ELSE downloaded_size END))
+            FROM download_tasks WHERE status IN ('queued', 'downloading', 'verifying') GROUP BY provider
+            """, reader: true) { s in
+            (Self.provider(s, 0), TransferProgress(files: Int(sqlite3_column_int64(s, 1)),
+                                                   totalBytes: sqlite3_column_int64(s, 2), doneBytes: sqlite3_column_int64(s, 3)))
+        }) ?? []
+        return Dictionary(rows, uniquingKeysWith: { $1 })
+    }
+
+    func uploadProgressByProvider() -> [CloudProviderKind: TransferProgress] {
+        let rows = (try? query("""
+            SELECT provider, COUNT(*), SUM(file_size), SUM(MIN(uploaded_bytes, file_size))
+            FROM upload_tasks WHERE status IN ('queued', 'uploading', 'verifying') GROUP BY provider
+            """, reader: true) { s in
+            (Self.provider(s, 0), TransferProgress(files: Int(sqlite3_column_int64(s, 1)),
+                                                   totalBytes: sqlite3_column_int64(s, 2), doneBytes: sqlite3_column_int64(s, 3)))
+        }) ?? []
+        return Dictionary(rows, uniquingKeysWith: { $1 })
+    }
+
+    /// Какие из задач завершены (для сообщения «Готово: …»; ошибки и остановки по лимиту не считаются).
+    func completedTaskIds(_ ids: [String], uploads: Bool) -> Set<String> {
+        guard !ids.isEmpty else { return [] }
+        let table = uploads ? "upload_tasks" : "download_tasks"
+        let rows = (try? query("""
+            SELECT id FROM \(table) WHERE status = 'completed' AND id IN (\(Self.placeholders(ids.count)))
+            """, ids.map { .text($0) }, reader: true) { s in Self.text(s, 0) ?? "" }) ?? []
+        return Set(rows)
+    }
+
+    /// Задачи статуса по томам (корень тома → число задач): ожидание диска, нехватка места.
+    func downloadCountsByVolume(status: TaskStatus) -> [String: Int] {
+        let rows = (try? query("""
+            SELECT \(Self.volumeRootSQL), COUNT(*) FROM download_tasks WHERE status = ? GROUP BY 1
+            """, [.text(status.rawValue)], reader: true) { s in
+            (Self.text(s, 0) ?? "/", Int(sqlite3_column_int64(s, 1)))
+        }) ?? []
+        return Dictionary(rows, uniquingKeysWith: +)
     }
 }

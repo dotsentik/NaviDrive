@@ -16,8 +16,8 @@ enum TaskStatus: String, Sendable, CaseIterable, Codable {
     case waitingForNetwork = "waiting_for_network"
     /// Файл скачан, идёт сверка хеша с хешем из облака.
     case verifying
-    /// Google временно ограничил скачивание этого файла (downloadQuotaExceeded); повтор по расписанию.
-    case waitingForQuota = "waiting_for_quota"
+    /// Лимит облака (свой дневной лимит Google за 24 часа или ответ облака): продолжится сама.
+    case waitingDailyLimit = "waiting_daily_limit"
     /// На целевом диске не хватает места на оставшуюся часть файла; повтор, когда место освободится.
     case waitingForSpace = "waiting_for_space"
 
@@ -33,7 +33,7 @@ enum TaskStatus: String, Sendable, CaseIterable, Codable {
         case .waitingForVolume: String(localized: "Waiting for disk")
         case .waitingForNetwork: String(localized: "Waiting for network")
         case .verifying: String(localized: "Verifying…")
-        case .waitingForQuota: String(localized: "Waiting for Google quota")
+        case .waitingDailyLimit: String(localized: "Waiting for daily limit")
         case .waitingForSpace: String(localized: "Not enough space")
         }
     }
@@ -49,13 +49,13 @@ enum TaskStatus: String, Sendable, CaseIterable, Codable {
         case .waitingForVolume: "externaldrive.badge.exclamationmark"
         case .waitingForNetwork: "wifi.exclamationmark"
         case .verifying: "checkmark.shield"
-        case .waitingForQuota: "hourglass"
+        case .waitingDailyLimit: "hourglass"
         case .waitingForSpace: "externaldrive.badge.xmark"
         }
     }
 
     /// Статусы, которые считаются «живыми» (ещё не завершённая работа).
-    static let pending: [TaskStatus] = [.queued, .downloading, .paused, .pausedAll, .waitingForVolume, .waitingForNetwork, .verifying, .waitingForQuota, .waitingForSpace]
+    static let pending: [TaskStatus] = [.queued, .downloading, .paused, .pausedAll, .waitingForVolume, .waitingForNetwork, .verifying, .waitingDailyLimit, .waitingForSpace]
     /// Задачи, которые останавливает общая пауза (идут, ждут очереди, сети, диска или места).
     static let pausable: [TaskStatus] = [.downloading, .queued, .waitingForNetwork, .waitingForVolume, .waitingForSpace]
 }
@@ -84,9 +84,9 @@ struct DownloadTask: Sendable, Identifiable, Hashable {
     var verified = false
     /// Несовпадений контрольной суммы подряд.
     var checksumFailures = 0
-    /// Сколько раз задача уже ждала квоту облака (пауза 1 ч → 2 ч → … → 24 ч).
+    /// Сколько раз задача уже ждала квоту облака (прежняя схема; сейчас не используется).
     var quotaAttempts = 0
-    /// Время следующей попытки (Unix) для задач в ожидании квоты.
+    /// Когда задача в ожидании лимита продолжится (Unix): оценка по счётчику или следующая проверка.
     var nextAttemptAt: Int64? = nil
     var provider: CloudProviderKind = .googleDrive
     /// Путь в облаке; для объектов из общей ссылки — путь относительно корня ссылки (`resourceKey` — сама ссылка).
@@ -264,18 +264,44 @@ struct DownloadState: Sendable, Equatable {
     var snapshot = EngineSnapshot()
     var totals = QueueTotals()
     var sections: [TaskSectionKind: [DownloadTask]] = [:]
+    /// Лимиты скачивания облаков (свой счётчик за 24 часа и остановка по ответу облака).
+    var limits: [TransferLimitStatus] = []
+}
+
+/// Прогресс очереди одного облака: идущие и ждущие своей очереди файлы.
+struct TransferProgress: Sendable, Equatable {
+    var files = 0
+    var totalBytes: Int64 = 0
+    var doneBytes: Int64 = 0
+
+    var fraction: Double {
+        guard totalBytes > 0 else { return 0 }
+        return min(1, Double(doneBytes) / Double(totalBytes))
+    }
+}
+
+/// Идущая передача — имя файла для карточки статуса.
+struct RunningTransfer: Sendable, Equatable {
+    let id: String
+    let name: String
+    let provider: CloudProviderKind
+    let size: Int64
 }
 
 struct QueueTotals: Sendable, Equatable {
     var taskCount: Int = 0
     var pendingCount: Int = 0
-    /// Ближайшая попытка (Unix) среди задач в ожидании квоты Google.
-    var nextQuotaAttemptAt: Int64?
     var expectedBytes: Int64 = 0
     var downloadedBytes: Int64 = 0
     var countsByStatus: [TaskStatus: Int] = [:]
     /// Сумма expected_size по статусам (общий размер очереди и т. п.).
     var bytesByStatus: [TaskStatus: Int64] = [:]
+    /// Идущие и ждущие своей очереди файлы по облакам.
+    var byProvider: [CloudProviderKind: TransferProgress] = [:]
+    /// Корень тома → задач, ждущих подключения диска.
+    var volumesAwaitingMount: [String: Int] = [:]
+    /// Корень тома → задач, которым не хватает места.
+    var volumesAwaitingSpace: [String: Int] = [:]
 
     var fraction: Double {
         guard expectedBytes > 0 else { return 0 }
@@ -296,8 +322,10 @@ struct QueueSessionSummary: Sendable, Equatable {
     let bytes: Int64
     let verified: Int
     let failed: Int
-    let waitingQuota: Int
+    let waitingLimit: Int
     let waitingVolume: Int
+    /// Общая папка скачанных файлов (nil — файлов не было).
+    var destination: String? = nil
 
     var notificationTitle: String {
         switch projects.count {
@@ -316,7 +344,7 @@ struct QueueSessionSummary: Sendable, Equatable {
         }
         var text = parts.joined(separator: ", ")
         if failed > 0 { text += ". " + String(localized: "Errors: \(failed)") }
-        if waitingQuota > 0 { text += ". " + String(localized: "Waiting for Google quota: \(waitingQuota)") }
+        if waitingLimit > 0 { text += ". " + String(localized: "Waiting for daily limit: \(waitingLimit)") }
         if waitingVolume > 0 { text += ". " + String(localized: "Waiting for disk: \(waitingVolume)") }
         return text
     }
@@ -354,4 +382,5 @@ struct EngineSnapshot: Sendable, Equatable {
     var scanningFolders = 0
     var scannedFiles = 0
     var scanErrors: [String] = []
+    var runningTasks: [RunningTransfer] = []
 }

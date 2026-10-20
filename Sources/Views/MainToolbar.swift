@@ -105,8 +105,8 @@ struct MainToolbar: ToolbarContent {
         ToolbarItem(id: "downloads.more", placement: .primaryAction) {
             Menu {
                 Button("Retry All Failed") { model.retryFailed() }
-                Button("Try Files Waiting for Quota Now") { model.retryQuotaNow() }
-                    .disabled((model.totals.countsByStatus[.waitingForQuota] ?? 0) == 0)
+                Button("Try Files Waiting for Google Limit Now") { model.retryQuotaNow() }
+                    .disabled((model.totals.countsByStatus[.waitingDailyLimit] ?? 0) == 0)
                 Button("Clear History (Completed and Cancelled)") { model.clearHistory() }
                 Divider()
                 Button("Open Downloads Folder") { model.openDefaultFolder() }

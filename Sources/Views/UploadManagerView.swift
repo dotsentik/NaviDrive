@@ -48,6 +48,10 @@ struct UploadManagerView: View {
             }
             .help("The number of simultaneous uploads is set in Settings (1–6). Downloads run in parallel with their own limit.")
             stat("Network", snapshot.isOnline ? String(localized: "Online") : String(localized: "Waiting for network…"), color: snapshot.isOnline ? .green : .orange)
+            if model.activeCloud == .googleDrive, model.connectedClouds.contains(.googleDrive) {
+                stat("Google in 24 h", model.googleUsageText(.upload))
+                    .help("Uploaded to Google Drive in the last 24 hours (rolling window). The limit is shared by everyone who uses this Google Client ID.")
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Overall progress").font(.caption).foregroundStyle(.secondary)
                 ProgressView(value: model.uploadTotals.fraction)
@@ -99,35 +103,47 @@ struct UploadManagerView: View {
 
     private var taskList: some View {
         let kinds = model.uploadFilter.uploadSections
-        return List {
-            ForEach(kinds) { kind in
-                let rows = model.uploadSections[kind] ?? []
-                let total = max(sectionCount(kind), rows.count)
-                if total > 0 {
-                    Section {
-                        ForEach(rows) { task in
-                            UploadTaskRow(task: task,
-                                          liveBytes: model.uploadSnapshot.liveProgress[task.id],
-                                          speed: model.uploadSnapshot.speeds[task.id],
-                                          verifyBytes: model.uploadSnapshot.verificationProgress[task.id])
-                                .equatable()
+        return ScrollViewReader { proxy in
+            List {
+                ForEach(kinds) { kind in
+                    let rows = model.uploadSections[kind] ?? []
+                    let total = max(sectionCount(kind), rows.count)
+                    if total > 0 {
+                        Section {
+                            ForEach(rows) { task in
+                                UploadTaskRow(task: task,
+                                              liveBytes: model.uploadSnapshot.liveProgress[task.id],
+                                              speed: model.uploadSnapshot.speeds[task.id],
+                                              verifyBytes: model.uploadSnapshot.verificationProgress[task.id])
+                                    .equatable()
+                            }
+                            if total > rows.count {
+                                Text("…and \(total - rows.count) more").font(.caption).foregroundStyle(.secondary)
+                            }
+                        } header: {
+                            sectionHeader(kind, total: total)
+                                .id(kind)
                         }
-                        if total > rows.count {
-                            Text("…and \(total - rows.count) more").font(.caption).foregroundStyle(.secondary)
-                        }
-                    } header: {
-                        sectionHeader(kind, total: total)
                     }
                 }
             }
-        }
-        .listStyle(.inset)
-        .overlay {
-            if kinds.allSatisfy({ (model.uploadSections[$0] ?? []).isEmpty && sectionCount($0) == 0 }) {
-                ContentUnavailableView("No Uploads", systemImage: "arrow.up.circle",
-                                       description: Text("Drag files or folders from Finder into a My Drive folder, or click Upload… in the browser toolbar."))
+            .listStyle(.inset)
+            .overlay {
+                if kinds.allSatisfy({ (model.uploadSections[$0] ?? []).isEmpty && sectionCount($0) == 0 }) {
+                    ContentUnavailableView("No Uploads", systemImage: "arrow.up.circle",
+                                           description: Text("Drag files or folders from Finder into a My Drive folder, or click Upload… in the browser toolbar."))
+                }
             }
+            // Переход из карточки статуса к секции, когда её строки загружены.
+            .onChange(of: model.pendingUploadSection, initial: true) { scrollToPending(proxy) }
+            .onChange(of: model.pendingUploadSection.map { model.uploadSections[$0]?.count ?? 0 }) { scrollToPending(proxy) }
         }
+    }
+
+    private func scrollToPending(_ proxy: ScrollViewProxy) {
+        guard let section = model.pendingUploadSection, !(model.uploadSections[section] ?? []).isEmpty else { return }
+        withAnimation { proxy.scrollTo(section, anchor: .top) }
+        model.pendingUploadSection = nil
     }
 
     @ViewBuilder
@@ -147,7 +163,15 @@ struct UploadManagerView: View {
                 Button("Clear History") { model.clearUploadHistory() }
                     .buttonStyle(.link)
                     .help("Removes only the history entries; files on Google Drive stay")
-            case .uploading, .queued, .waiting:
+            case .waiting:
+                // Облака, отправка в которые стоит из-за лимита.
+                ForEach(model.limits.filter { $0.direction == .upload && $0.isReached }) { status in
+                    Button(String(localized: "Try \(status.provider.displayName) Now")) {
+                        model.retryLimit(status.provider, .upload)
+                    }
+                    .buttonStyle(.link)
+                }
+            case .uploading, .queued:
                 EmptyView()
             }
         }
@@ -272,7 +296,7 @@ private struct UploadTaskRow: View, Equatable {
             }
         case .uploading:
             if let fraction { ProgressView(value: fraction) } else { ProgressView().progressViewStyle(.linear) }
-        case .paused, .queued, .waitingForNetwork, .waitingForVolume, .failed:
+        case .paused, .queued, .waitingForNetwork, .waitingForVolume, .waitingDailyLimit, .failed:
             if uploaded > 0, let fraction { ProgressView(value: fraction).tint(.gray) }
         case .completed, .cancelled:
             EmptyView()
@@ -297,7 +321,7 @@ private struct UploadTaskRow: View, Equatable {
         case .completed: .green
         case .failed: .red
         case .uploading: .accentColor
-        case .waitingForNetwork, .waitingForVolume: .orange
+        case .waitingForNetwork, .waitingForVolume, .waitingDailyLimit: .orange
         default: .secondary
         }
     }

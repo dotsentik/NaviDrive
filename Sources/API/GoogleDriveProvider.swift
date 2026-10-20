@@ -12,7 +12,8 @@ final class GoogleDriveProvider: CloudProvider {
     /// Встроенные учётные данные или свои из настроек (их отсутствие объясняет ошибка входа).
     let canSignIn = true
 
-    static let quotaReasons: Set<String> = ["downloadQuotaExceeded", "quotaExceeded"]
+    /// Дневные лимиты Google: передача этого направления останавливается, пробный запрос — раз в час.
+    static let limitReasons: Set<String> = ["downloadQuotaExceeded", "quotaExceeded", "dailyLimitExceeded", "uploadLimitExceeded"]
     static let rateLimitReasons: Set<String> = ["rateLimitExceeded", "userRateLimitExceeded"]
 
     init(keychain: KeychainStore) {
@@ -99,6 +100,73 @@ final class GoogleDriveProvider: CloudProvider {
         return Self.cloudItem(target).renamed(item.name)
     }
 
+    // MARK: - Размер папки
+
+    /// Одновременных запросов листинга при подсчёте размера.
+    private static let sizeConcurrency = 4
+
+    /// Содержимое одной папки для подсчёта размера (все страницы).
+    private struct SizeListing: Sendable {
+        var tally = FolderSizeTally()
+        var subfolders: [String] = []
+    }
+
+    /// Обход папок files.list по родителю; подпапки читаются параллельно, не больше 4 запросов сразу.
+    /// Ярлыки и корзина не учитываются, документы Google считаются отдельно; каждая папка — один раз.
+    func folderSize(_ folder: CloudItem, progress: @escaping @Sendable (FolderSizeTally) async -> Void) async throws -> FolderSizeTally {
+        let api = api
+        let driveId = folder.targetSpaceId
+        var visited: Set<String> = [folder.targetId]
+        var pending = [folder.targetId]
+        var tally = FolderSizeTally()
+        var reporter = FolderSizeTally.Reporter()
+        try await withThrowingTaskGroup(of: SizeListing.self) { group in
+            var running = 0
+            while true {
+                while running < Self.sizeConcurrency, let id = pending.popLast() {
+                    group.addTask { try await Self.sizeListing(api, folderId: id, driveId: driveId) }
+                    running += 1
+                }
+                guard let listing = try await group.next() else { break }
+                running -= 1
+                tally.totalSize += listing.tally.totalSize
+                tally.fileCount += listing.tally.fileCount
+                tally.nativeDocCount += listing.tally.nativeDocCount
+                // Папка с несколькими родителями (или цикл) обходится один раз.
+                for id in listing.subfolders where visited.insert(id).inserted {
+                    tally.folderCount += 1
+                    pending.append(id)
+                }
+                if reporter.due() { await progress(tally) }
+            }
+        }
+        return tally
+    }
+
+    private static func sizeListing(_ api: GoogleDriveAPIClient, folderId: String, driveId: String?) async throws -> SizeListing {
+        var listing = SizeListing()
+        var token: String?
+        repeat {
+            try Task.checkCancellation()
+            let page = try await api.sizePage(.children(of: folderId, driveId: driveId), pageToken: token)
+            for file in page.files {
+                switch file.mimeType {
+                case DriveItem.folderMimeType:
+                    listing.subfolders.append(file.id)
+                case DriveItem.shortcutMimeType:
+                    continue
+                case let mime where mime.hasPrefix(DriveItem.workspacePrefix):
+                    listing.tally.nativeDocCount += 1
+                default:
+                    listing.tally.fileCount += 1
+                    listing.tally.totalSize += max(0, file.size.flatMap(Int64.init) ?? 0)
+                }
+            }
+            token = page.nextPageToken
+        } while token != nil
+        return listing
+    }
+
     func rememberAccessKey(_ key: String?, for id: String) {
         api.resourceKeys.register(id: id, key: key)
     }
@@ -133,8 +201,8 @@ final class GoogleDriveProvider: CloudProvider {
         switch status {
         case 401:
             return .unauthorized(credential: credential)
-        case 403 where !reasons.isDisjoint(with: Self.quotaReasons):
-            return .quotaExceeded(message)
+        case 403 where !reasons.isDisjoint(with: Self.limitReasons):
+            return .limitReached(message)
         case 403 where reasons.contains("cannotDownloadFile"):
             return .fatal(DownloadTask.downloadForbiddenMessage)
         case 429:
@@ -160,8 +228,13 @@ final class GoogleDriveProvider: CloudProvider {
     let uploadSessionLifetime: TimeInterval = 6 * 24 * 3600
 
     func startUploadSession(for task: UploadTask) async throws -> String {
-        try await api.startUploadSession(name: task.fileName, parentId: task.parentDriveId, size: task.fileSize,
-                                         replaceFileId: task.replaceFileId).absoluteString
+        do {
+            return try await api.startUploadSession(name: task.fileName, parentId: task.parentDriveId, size: task.fileSize,
+                                                    replaceFileId: task.replaceFileId).absoluteString
+        } catch CloudAPIError.http(403, let message, _)
+                    where Self.limitReasons.contains(where: { message.contains($0) }) {
+            throw CloudTransferError.limitReached(message)
+        }
     }
 
     /// PUT с пустым телом и `Content-Range: bytes */<размер>` → 308 + Range (сколько принял сервер) или 200/201.
@@ -200,6 +273,8 @@ final class GoogleDriveProvider: CloudProvider {
             throw CloudTransferError.unauthorized(credential: token)
         case 403 where GoogleDriveAPIClient.isInsufficientScope(status: 403, data: data):
             throw CloudAPIError.insufficientScope
+        case 403 where !reasons.isDisjoint(with: Self.limitReasons):
+            throw CloudTransferError.limitReached(message)
         case 403 where !reasons.isDisjoint(with: Self.rateLimitReasons):
             throw CloudTransferError.rateLimited(String(localized: "Google rate-limited requests (HTTP 403)"), retryAfter: nil)
         case 429:
@@ -231,6 +306,12 @@ final class GoogleDriveProvider: CloudProvider {
 
     func trash(_ item: CloudItem) async throws {
         try await mapEditErrors { try await api.trash(id: item.id) }
+    }
+
+    var canUntrash: Bool { true }
+
+    func untrash(_ item: CloudItem) async throws {
+        try await mapEditErrors { try await api.untrash(id: item.id) }
     }
 
     /// 403 storageQuotaExceeded → `CloudAPIError.storageFull`.

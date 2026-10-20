@@ -150,7 +150,7 @@ final class GoogleDriveAPIClient: Sendable {
     }
 
     /// URL files.list для области (без drives.list).
-    static func listURL(_ scope: ListScope, pageToken: String?, orderBy: String) -> URL? {
+    static func listURL(_ scope: ListScope, pageToken: String?, orderBy: String?, fields: String = listFields) -> URL? {
         var components = URLComponents(string: "\(Self.baseURL)/files")!
         func parentQuery(_ id: String) -> String {
             let escaped = id.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'")
@@ -174,9 +174,9 @@ final class GoogleDriveAPIClient: Sendable {
             URLQueryItem(name: "pageSize", value: "1000"),
             URLQueryItem(name: "supportsAllDrives", value: "true"),
             URLQueryItem(name: "includeItemsFromAllDrives", value: "true"),
-            URLQueryItem(name: "fields", value: Self.listFields),
-            URLQueryItem(name: "orderBy", value: orderBy),
+            URLQueryItem(name: "fields", value: fields),
         ] + corpus
+        if let orderBy { items.append(URLQueryItem(name: "orderBy", value: orderBy)) }
         if let pageToken { items.append(URLQueryItem(name: "pageToken", value: pageToken)) }
         components.queryItems = items
         // «+» в значениях запроса должен быть закодирован явно.
@@ -198,6 +198,40 @@ final class GoogleDriveAPIClient: Sendable {
         let list = try JSONDecoder().decode(DriveFileList.self, from: data)
         resourceKeys.register(list.files)
         return list
+    }
+
+    /// Объект в листинге для подсчёта размера папки: только поля, нужные для суммы.
+    struct SizeEntry: Decodable, Sendable {
+        let id: String
+        let mimeType: String
+        let size: String?
+        let resourceKey: String?
+    }
+
+    struct SizePage: Decodable, Sendable {
+        let nextPageToken: String?
+        let files: [SizeEntry]
+    }
+
+    /// Страница files.list для подсчёта размера: «'<id>' in parents and trashed=false», без сортировки.
+    func sizePage(_ scope: ListScope, pageToken: String?) async throws -> SizePage {
+        guard let url = Self.listURL(scope, pageToken: pageToken, orderBy: nil,
+                                     fields: "nextPageToken,files(id,mimeType,size,resourceKey)") else {
+            throw CloudAPIError.invalidResponse
+        }
+        var keyIds: [String] = []
+        switch scope {
+        case .folder(let id), .sharedDrive(_, let id): keyIds.append(id)
+        default: break
+        }
+        let keyHeader = resourceKeys.headerValue(for: keyIds)
+        let (data, _) = try await send { Self.request(url, resourceKeys: keyHeader) }
+        let page = try JSONDecoder().decode(SizePage.self, from: data)
+        // Подпапки папки из ссылки читаются со своим resourceKey.
+        for file in page.files where file.resourceKey != nil {
+            resourceKeys.register(id: file.id, key: file.resourceKey)
+        }
+        return page
     }
 
     static func request(_ url: URL, resourceKeys: String?) -> URLRequest {

@@ -48,6 +48,57 @@ enum AppSettings {
         min(uploadConcurrencyRange.upperBound, max(uploadConcurrencyRange.lowerBound, value))
     }
 
+    /// Свои дневные лимиты Google Drive (скользящие 24 часа): запас от лимитов Google —
+    /// 1 ТБ скачивания в сутки на проект и 750 ГБ отправки в сутки на пользователя.
+    static func defaultGoogleLimitGB(_ direction: TransferDirection) -> Int {
+        direction == .download ? 900 : 700
+    }
+    static let googleLimitRange = 1...100_000
+
+    /// Ключи скачивания — прежние («googleDailyLimit…»): уже выставленное значение сохраняется.
+    private static func googleLimitKey(_ direction: TransferDirection, _ suffix: String) -> String {
+        direction == .download ? "googleDailyLimit\(suffix)" : "googleUploadLimit\(suffix)"
+    }
+
+    /// «Дневной лимит Google Drive» для направления (по умолчанию включён).
+    static func googleLimitEnabled(_ direction: TransferDirection) -> Bool {
+        UserDefaults.standard.object(forKey: googleLimitKey(direction, "Enabled")) as? Bool ?? true
+    }
+
+    static func setGoogleLimitEnabled(_ enabled: Bool, _ direction: TransferDirection) {
+        UserDefaults.standard.set(enabled, forKey: googleLimitKey(direction, "Enabled"))
+    }
+
+    /// Лимит в гигабайтах (десятичных, как в Finder).
+    static func googleLimitGB(_ direction: TransferDirection) -> Int {
+        let value = UserDefaults.standard.integer(forKey: googleLimitKey(direction, "GB"))
+        return value == 0 ? defaultGoogleLimitGB(direction) : clampGoogleLimit(value)
+    }
+
+    static func setGoogleLimitGB(_ value: Int, _ direction: TransferDirection) {
+        UserDefaults.standard.set(clampGoogleLimit(value), forKey: googleLimitKey(direction, "GB"))
+    }
+
+    static func clampGoogleLimit(_ value: Int) -> Int {
+        min(googleLimitRange.upperBound, max(googleLimitRange.lowerBound, value))
+    }
+
+    /// Свой лимит за 24 часа в байтах; nil — выключен или у облака своих лимитов нет (Dropbox).
+    static func transferLimitBytes(_ provider: CloudProviderKind, _ direction: TransferDirection) -> Int64? {
+        guard provider == .googleDrive, googleLimitEnabled(direction) else { return nil }
+        return Int64(googleLimitGB(direction)) * 1_000_000_000
+    }
+
+    /// Облако сообщило о лимите: время следующего пробного запроса (сохраняется,
+    /// чтобы после перезапуска не засыпать облако запросами). nil — облако не ограничено.
+    static func limitProbeDate(_ provider: CloudProviderKind, _ direction: TransferDirection) -> Date? {
+        UserDefaults.standard.object(forKey: "limitProbe.\(provider.rawValue).\(direction.rawValue)") as? Date
+    }
+
+    static func setLimitProbeDate(_ date: Date?, _ provider: CloudProviderKind, _ direction: TransferDirection) {
+        UserDefaults.standard.set(date, forKey: "limitProbe.\(provider.rawValue).\(direction.rawValue)")
+    }
+
     static let useCustomOAuthKey = "useCustomOAuthCredentials"
 
     /// «Использовать свои учётные данные OAuth» (по умолчанию выключено — встроенные при сборке).

@@ -26,6 +26,18 @@ struct NaviDriveApp: App {
             CommandGroup(replacing: .newItem) {}
             // «Вид → Показать/Скрыть боковую панель» (⌃⌘S), как в Finder.
             SidebarCommands()
+            #if DEBUG
+            // Проверка лимитов и карточки статуса без реального превышения (только в Debug-сборке).
+            CommandMenu("Debug") {
+                Menu("Simulate") {
+                    ForEach(DebugSimulation.allCases, id: \.self) { simulation in
+                        Toggle(simulation.title, isOn: Binding(
+                            get: { model.debugSimulations.contains(simulation) },
+                            set: { _ in model.toggleDebugSimulation(simulation) }))
+                    }
+                }
+            }
+            #endif
         }
 
         // Окно приветствия: без sidebar и тулбара, фиксированного размера, по центру экрана.
@@ -52,9 +64,9 @@ struct NaviDriveApp: App {
             MenuBarContent()
                 .environment(model)
         } label: {
-            // Шаблонная иконка (Render As: Template): система сама делает её белой в тёмной теме
-            // и чёрной в светлой. Состояние сети и скорость — в самом меню.
-            Image("MenuBarIcon")
+            // Состояние сети и скорость — в самом меню; красная точка — лимит, ошибка диска, нет входа;
+            // зелёная — идёт передача.
+            MenuBarIcon(alert: model.hasCriticalStatus, transferring: model.isTransferring)
         }
         .menuBarExtraStyle(.menu)
     }

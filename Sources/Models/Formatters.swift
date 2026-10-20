@@ -5,6 +5,11 @@ enum Format {
         ByteCountFormatter.string(fromByteCount: value, countStyle: .binary)
     }
 
+    /// Размер посчитанной папки — как в Finder (десятичные единицы).
+    static func folderBytes(_ value: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: value, countStyle: .file)
+    }
+
     /// Размеры дисков — десятичные единицы, как в Finder, не больше одного знака после запятой:
     /// «49,8 ГБ», «4 ТБ». Системный форматтер единиц в текущей локали.
     static func diskBytes(_ value: Int64) -> String {

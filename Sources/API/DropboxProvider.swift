@@ -162,6 +162,33 @@ final class DropboxProvider: CloudProvider {
         return try JSONDecoder().decode(DropboxListFolderResult.self, from: data)
     }
 
+    /// Обычная папка — /2/files/list_folder с recursive=true и пагинацией по cursor: сумма size файлов.
+    /// Папка из общей ссылки — общим обходом по папкам (рекурсивный листинг для ссылок недоступен).
+    func folderSize(_ folder: CloudItem, progress: @escaping @Sendable (FolderSizeTally) async -> Void) async throws -> FolderSizeTally {
+        if folder.accessKey != nil { return try await walkFolderSize(folder, progress: progress) }
+        let rootLower = try await metadata(path: folder.id).path_lower ?? (folder.path ?? "").lowercased()
+        var tally = FolderSizeTally()
+        var reporter = FolderSizeTally.Reporter()
+        var cursor: String?
+        repeat {
+            try Task.checkCancellation()
+            let result = try await recursivePage(path: folder.id, cursor: cursor)
+            for entry in result.entries where entry.tag != "deleted" {
+                // Сама папка тоже приходит в рекурсивном листинге.
+                guard let lower = entry.path_lower, lower != rootLower else { continue }
+                if entry.tag == "folder" {
+                    tally.folderCount += 1
+                } else {
+                    tally.fileCount += 1
+                    tally.totalSize += max(0, entry.size ?? 0)
+                }
+            }
+            cursor = result.has_more ? result.cursor : nil
+            if cursor != nil, reporter.due() { await progress(tally) }
+        } while cursor != nil
+        return tally
+    }
+
     fileprivate func metadata(path: String) async throws -> DropboxEntry {
         let data = try await api.rpc("/files/get_metadata", ["path": path])
         return try JSONDecoder().decode(DropboxEntry.self, from: data)
@@ -378,6 +405,9 @@ final class DropboxProvider: CloudProvider {
         case 429:
             return CloudTransferError.rateLimited(String(localized: "Dropbox rate-limited requests (HTTP 429)"),
                                                   retryAfter: DropboxAPIClient.retryAfter(http))
+        case 403 where summary.hasPrefix("invalid_account_type"):
+            // Лимит передачи данных бизнес-тарифа (вызовы загрузки на команду в месяц).
+            return CloudTransferError.limitReached(String(localized: "Dropbox data transport limit reached"))
         case 409 where summary.contains("insufficient_space"):
             return CloudTransferError.fatal(String(localized: "Dropbox is out of storage"))
         case 409 where summary.contains("no_write_permission"):
