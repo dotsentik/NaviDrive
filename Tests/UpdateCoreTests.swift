@@ -200,3 +200,41 @@ struct ChecksumTests {
         }
     }
 }
+
+@Suite("Trusted signing fingerprints")
+struct TrustedFingerprintTests {
+    static let current = "02D0DB17A0845C1F9BFFE83748155601D7B7C0DA065336F413E580BFAA9B3E77"
+    static let other = String(repeating: "ab", count: 32)
+
+    @Test func inList() {
+        #expect(UpdatePolicy.isTrustedFingerprint(Self.current, trusted: [Self.other, Self.current]))
+    }
+
+    @Test func notInList() {
+        #expect(!UpdatePolicy.isTrustedFingerprint(Self.other, trusted: [Self.current]))
+        #expect(!UpdatePolicy.isTrustedFingerprint(Self.current, trusted: []))
+    }
+
+    @Test func caseInsensitive() {
+        #expect(UpdatePolicy.isTrustedFingerprint(Self.current.lowercased(), trusted: [Self.current]))
+        #expect(UpdatePolicy.isTrustedFingerprint(Self.current, trusted: [Self.current.lowercased()]))
+    }
+
+    @Test func colonsAndSpacesIgnored() {
+        let pairs = stride(from: 0, to: 64, by: 2).map { i -> String in
+            let start = Self.current.index(Self.current.startIndex, offsetBy: i)
+            return String(Self.current[start..<Self.current.index(start, offsetBy: 2)])
+        }
+        let openssl = pairs.joined(separator: ":")
+        #expect(UpdatePolicy.isTrustedFingerprint(openssl, trusted: [Self.current]))
+        #expect(UpdatePolicy.isTrustedFingerprint(Self.current, trusted: [" " + pairs.joined(separator: " ") + "\n"]))
+    }
+
+    @Test func malformedNeverMatches() {
+        #expect(UpdatePolicy.normalizedFingerprint("") == nil)
+        #expect(UpdatePolicy.normalizedFingerprint(String(Self.current.dropLast())) == nil)
+        #expect(UpdatePolicy.normalizedFingerprint(String(repeating: "zz", count: 32)) == nil)
+        #expect(!UpdatePolicy.isTrustedFingerprint("", trusted: [""]))
+        #expect(!UpdatePolicy.isTrustedFingerprint("garbage", trusted: ["garbage"]))
+    }
+}

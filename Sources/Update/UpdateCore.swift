@@ -118,6 +118,20 @@ enum UpdatePolicy {
     }()
     #endif
 
+    /// Отпечаток SHA-256 сертификата в каноническом виде: 64 шестнадцатеричных символа в нижнем регистре.
+    /// Регистр, пробелы и «:» (формат `openssl x509 -fingerprint`) не важны; nil — строка не отпечаток SHA-256.
+    static func normalizedFingerprint(_ text: String) -> String? {
+        let hex = text.lowercased().filter { !$0.isWhitespace && $0 != ":" }
+        guard hex.count == 64, hex.allSatisfy({ $0.isHexDigit }) else { return nil }
+        return hex
+    }
+
+    /// Отпечаток листового сертификата новой копии входит в NDTrustedSigningFingerprints запущенной копии.
+    static func isTrustedFingerprint(_ fingerprint: String, trusted: [String]) -> Bool {
+        guard let candidate = normalizedFingerprint(fingerprint) else { return false }
+        return trusted.contains { normalizedFingerprint($0) == candidate }
+    }
+
     static func isAllowed(_ url: URL?) -> Bool {
         guard let url, let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
         #if DEBUG

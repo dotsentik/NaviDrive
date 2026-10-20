@@ -46,9 +46,31 @@ still be signed with the old certificate.
 
 ## Replacing the certificate safely
 
-Replacement is possible only with a NaviDrive version whose updater supports
-`NDTrustedSigningFingerprints` (see the procedure in the `features-new` branch, released with 1.1.0).
-Until such a version is installed by users, replacing the certificate breaks their updates.
+The updater accepts a new version when its signature is valid and either:
+
+- (a) it satisfies the designated requirement of the running copy (same identifier, same certificate), or
+- (b) it has the same bundle identifier and the SHA-256 fingerprint of its leaf certificate is listed in
+  `NDTrustedSigningFingerprints` in the `Info.plist` of the running copy.
+
+The SHA-256 checksum, version and download host checks apply in both cases. Ad-hoc signatures are
+always rejected. `NDTrustedSigningFingerprints` is set in `project.yml` (target `NaviDrive` → `info`) and
+currently lists only the current fingerprint from `Config/signing-fingerprint.txt`. Fingerprints are
+compared without regard to case, spaces or colons.
+
+Procedure (requires users to run 1.1.0 or later, the first version with rule (b)):
+
+1. Create the new certificate and back it up (see above). Get its fingerprint from a test build signed with
+   it: `codesign -d --extract-certificates`, then `openssl x509 -inform DER -in codesign0 -noout -fingerprint -sha256`.
+2. Transition release: add the new fingerprint to `NDTrustedSigningFingerprints` (keep the old one), sign
+   with the **old** certificate as usual and release it. Installed copies accept it by rule (a).
+3. Wait until users have updated to the transition release (it is the copy whose `Info.plist` decides what
+   the next update may be signed with).
+4. Following releases: switch `CODE_SIGN_IDENTITY` to the new certificate, replace the fingerprint in
+   `Config/signing-fingerprint.txt` with the new one so `Scripts/release.sh` accepts the build, and update
+   the expiry date in this document. Copies that installed the transition release accept them by rule (b).
+5. Later, once old copies no longer matter, the old fingerprint can be removed from the list.
+
+Users who skip the transition release can no longer update in the app and must install the DMG by hand.
 
 ## Moving to Developer ID and notarization
 

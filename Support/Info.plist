@@ -26,6 +26,10 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NDGitHubRepo</key>
 	<string>dotsentik/NaviDrive</string>
+	<key>NDTrustedSigningFingerprints</key>
+	<array>
+		<string>02D0DB17A0845C1F9BFFE83748155601D7B7C0DA065336F413E580BFAA9B3E77</string>
+	</array>
 	<key>NSHumanReadableCopyright</key>
 	<string>NaviDrive</string>
 	<key>NSPrincipalClass</key>

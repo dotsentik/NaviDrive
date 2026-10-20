@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import os
 import Security
@@ -381,30 +382,56 @@ enum UpdateInstaller {
         return app
     }
 
-    /// Подпись новой копии проверяется требованием designated requirement запущенной копии:
-    /// принимается только приложение с тем же идентификатором и тем же сертификатом.
+    /// Подпись новой копии должна быть валидной, и выполняется одно из двух:
+    /// (а) копия удовлетворяет designated requirement запущенной копии (тот же идентификатор и сертификат);
+    /// (б) у копии тот же идентификатор, а SHA-256 отпечаток её листового сертификата — в NDTrustedSigningFingerprints
+    ///     запущенной копии (плановая замена сертификата, см. docs/SIGNING.md).
     static func verifySignature(of appURL: URL) throws {
-        var selfCode: SecCode?
-        guard SecCodeCopySelf([], &selfCode) == errSecSuccess, let selfCode else { throw UpdateError.signatureInvalid }
-        var selfStatic: SecStaticCode?
-        guard SecCodeCopyStaticCode(selfCode, [], &selfStatic) == errSecSuccess, let selfStatic else {
-            throw UpdateError.signatureInvalid
-        }
-        var requirement: SecRequirement?
-        guard SecCodeCopyDesignatedRequirement(selfStatic, [], &requirement) == errSecSuccess, let requirement else {
-            throw UpdateError.signatureInvalid
-        }
         var newCode: SecStaticCode?
         guard SecStaticCodeCreateWithPath(appURL as CFURL, [], &newCode) == errSecSuccess, let newCode else {
             throw UpdateError.signatureInvalid
         }
         let flags = SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSStrictValidate | kSecCSCheckNestedCode)
-        let status = SecStaticCodeCheckValidity(newCode, flags, requirement)
-        guard status == errSecSuccess else {
-            UpdateLog.logger.error("Update signature check failed: \(status, privacy: .public)")
+        let validity = SecStaticCodeCheckValidity(newCode, flags, nil)
+        guard validity == errSecSuccess else {
+            UpdateLog.logger.error("Update signature is not valid: \(validity, privacy: .public)")
             throw UpdateError.signatureInvalid
         }
-        UpdateLog.logger.info("Update signature verified")
+        if let requirement = designatedRequirementOfSelf(),
+           SecStaticCodeCheckValidity(newCode, flags, requirement) == errSecSuccess {
+            UpdateLog.logger.info("Update signature verified (designated requirement)")
+            return
+        }
+        let trusted = Bundle.main.object(forInfoDictionaryKey: "NDTrustedSigningFingerprints") as? [String] ?? []
+        guard let signer = signerInfo(of: newCode), signer.identifier == Bundle.main.bundleIdentifier,
+              UpdatePolicy.isTrustedFingerprint(signer.leafFingerprint, trusted: trusted) else {
+            UpdateLog.logger.error("Update is signed with an untrusted certificate")
+            throw UpdateError.signatureInvalid
+        }
+        UpdateLog.logger.info("Update signature verified (trusted certificate \(signer.leafFingerprint, privacy: .public))")
+    }
+
+    private static func designatedRequirementOfSelf() -> SecRequirement? {
+        var selfCode: SecCode?
+        guard SecCodeCopySelf([], &selfCode) == errSecSuccess, let selfCode else { return nil }
+        var selfStatic: SecStaticCode?
+        guard SecCodeCopyStaticCode(selfCode, [], &selfStatic) == errSecSuccess, let selfStatic else { return nil }
+        var requirement: SecRequirement?
+        guard SecCodeCopyDesignatedRequirement(selfStatic, [], &requirement) == errSecSuccess else { return nil }
+        return requirement
+    }
+
+    /// Идентификатор подписи и SHA-256 листового сертификата; nil — подпись ad-hoc (без сертификатов).
+    private static func signerInfo(of code: SecStaticCode) -> (identifier: String, leafFingerprint: String)? {
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let info = info as? [String: Any],
+              let identifier = info[kSecCodeInfoIdentifier as String] as? String,
+              let certificates = info[kSecCodeInfoCertificates as String] as? [SecCertificate],
+              let leaf = certificates.first else { return nil }
+        let der = SecCertificateCopyData(leaf) as Data
+        let fingerprint = CryptoKit.SHA256.hash(data: der).map { String(format: "%02x", $0) }.joined()
+        return (identifier, fingerprint)
     }
 
     static func bundleVersion(of appURL: URL) -> String? {

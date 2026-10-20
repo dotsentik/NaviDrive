@@ -97,6 +97,10 @@ targets:
         NaviDriveDropboxAppKey: $(DROPBOX_APP_KEY)
         # Обновления: GET https://api.github.com/repos/<NDGitHubRepo>/releases/latest (из git remote origin).
         NDGitHubRepo: dotsentik/NaviDrive
+        # Обновление принимается и при подписи сертификатом из этого списка (SHA-256 листового сертификата):
+        # плановая замена сертификата, см. docs/SIGNING.md. Сейчас — только текущий (Config/signing-fingerprint.txt).
+        NDTrustedSigningFingerprints:
+          - 02D0DB17A0845C1F9BFFE83748155601D7B7C0DA065336F413E580BFAA9B3E77
         NSServices:
           - NSMenuItem:
               default: Upload to NaviDrive
