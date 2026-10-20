@@ -24,6 +24,9 @@ struct NaviDriveApp: App {
         .restorationBehavior(.disabled)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { UpdateController.shared.checkManually() }
+            }
             // «Вид → Показать/Скрыть боковую панель» (⌃⌘S), как в Finder.
             SidebarCommands()
             #if DEBUG

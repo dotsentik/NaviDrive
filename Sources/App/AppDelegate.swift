@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         NSUpdateDynamicServices()
         QuitController.shared.install()
         AppModel.shared.startIfNeeded()
+        UpdateController.shared.start()
     }
 
     /// Удержание ⌘Q, подтверждение при активных передачах, аккуратная остановка (см. QuitController).

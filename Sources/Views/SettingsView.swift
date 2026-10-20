@@ -278,11 +278,37 @@ private struct GeneralSettings: View {
             Toggle("Warn before quitting during transfers", isOn: $warnOnQuit)
                 .help("Asks for confirmation if downloads, uploads, moves to the Trash or size calculations are in progress.")
         }
+        UpdatesSection()
         Section("Storage") {
             LabeledContent("State database") {
                 Text(model.db?.path ?? String(localized: "unavailable"))
                     .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                     .lineLimit(2).truncationMode(.middle)
+            }
+        }
+    }
+}
+
+/// «Updates»: версия, ручная проверка, еженедельная автопроверка, дата последней проверки.
+private struct UpdatesSection: View {
+    @Bindable private var updates = UpdateController.shared
+
+    var body: some View {
+        Section("Updates") {
+            LabeledContent("Version") {
+                HStack {
+                    Text(verbatim: updates.currentVersionText).foregroundStyle(.secondary).textSelection(.enabled)
+                    Spacer()
+                    if updates.isChecking { ProgressView().controlSize(.small) }
+                    Button("Check for Updates…") { updates.checkManually() }
+                        .disabled(updates.isChecking)
+                }
+            }
+            Toggle("Check automatically once a week", isOn: $updates.checksAutomatically)
+            LabeledContent("Last checked") {
+                Text(updates.lastCheckDate.map { $0.formatted(date: .abbreviated, time: .shortened) }
+                     ?? String(localized: "Never"))
+                    .foregroundStyle(.secondary)
             }
         }
     }

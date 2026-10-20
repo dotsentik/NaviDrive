@@ -7,7 +7,13 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-20
+
 ### Added
+- Updates from GitHub Releases: Settings → General → Updates and NaviDrive → Check for Updates…
+- Automatic check once a week (can be turned off), "Skip This Version".
+- The update is verified before installing: SHA-256 checksum, the same code signing certificate, the version number.
+- Downloads and uploads are paused with progress saved and continue after the update.
 - README in English and Russian, signing documentation (`docs/SIGNING.md`), pinned signing certificate fingerprint.
 - "READ ME FIRST.txt" with first-launch instructions inside the DMG.
 

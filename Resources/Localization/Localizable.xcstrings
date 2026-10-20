@@ -771,6 +771,38 @@
         }
       }
     },
+    "A new version of NaviDrive is available": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A new version of NaviDrive is available"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступна новая версия NaviDrive"
+          }
+        }
+      }
+    },
+    "A system tool failed while installing the update.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A system tool failed while installing the update."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Системная утилита завершилась с ошибкой при установке обновления."
+          }
+        }
+      }
+    },
     "Access denied": {
       "localizations": {
         "ru": {
@@ -1355,6 +1387,38 @@
         }
       }
     },
+    "Check automatically once a week": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check automatically once a week"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверять автоматически раз в неделю"
+          }
+        }
+      }
+    },
+    "Check for Updates…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check for Updates…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить обновления…"
+          }
+        }
+      }
+    },
     "Checksum mismatch": {
       "localizations": {
         "ru": {
@@ -1685,6 +1749,22 @@
         }
       }
     },
+    "Couldn’t check for updates": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t check for updates"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось проверить обновления"
+          }
+        }
+      }
+    },
     "Couldn’t create folder %@: %@": {
       "localizations": {
         "ru": {
@@ -1741,6 +1821,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не удалось открыть базу данных: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t open the downloaded disk image.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t open the downloaded disk image."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось открыть скачанный образ диска."
+          }
+        }
+      }
+    },
+    "Couldn’t prepare the installer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t prepare the installer."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось подготовить установщик."
           }
         }
       }
@@ -2475,6 +2587,22 @@
         }
       }
     },
+    "Downloading…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка…"
+          }
+        }
+      }
+    },
     "Downloads": {
       "localizations": {
         "ru": {
@@ -2960,6 +3088,54 @@
         }
       }
     },
+    "GitHub request limit reached. Try again in an hour.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GitHub request limit reached. Try again in an hour."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Исчерпан лимит запросов к GitHub. Попробуйте через час."
+          }
+        }
+      }
+    },
+    "GitHub responded with HTTP %lld.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GitHub responded with HTTP %lld."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GitHub ответил HTTP %lld."
+          }
+        }
+      }
+    },
+    "GitHub returned an unexpected release description.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GitHub returned an unexpected release description."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GitHub вернул неожиданное описание релиза."
+          }
+        }
+      }
+    },
     "Google Doc": {
       "localizations": {
         "ru": {
@@ -3250,6 +3426,22 @@
         }
       }
     },
+    "Installing — NaviDrive will restart…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installing — NaviDrive will restart…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установка — NaviDrive перезапустится…"
+          }
+        }
+      }
+    },
     "Internal disk": {
       "localizations": {
         "ru": {
@@ -3392,6 +3584,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "За последние 24 часа"
+          }
+        }
+      }
+    },
+    "Last checked": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last checked"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последняя проверка"
           }
         }
       }
@@ -3773,12 +3981,60 @@
       }
     },
     "NaviDrive": {},
+    "NaviDrive %@ is available — you have %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive %@ is available — you have %@."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступна NaviDrive %1$@, у вас — %2$@."
+          }
+        }
+      }
+    },
+    "NaviDrive %@ is the latest version.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive %@ is the latest version."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive %@ — последняя версия."
+          }
+        }
+      }
+    },
     "NaviDrive is now signed with the permanent “NaviDrive Local” certificate. Your saved sign-in was created by an earlier build with a temporary signature, and macOS doesn’t let the new signature access it, so the old items were removed. Open Settings, re-enter the Client ID and Client Secret if needed, and sign in to Google once more — from now on the sign-in will persist across rebuilds.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "NaviDrive теперь подписан постоянным сертификатом «NaviDrive Local». Сохранённый вход был создан прежней сборкой с временной подписью, и macOS не даёт новой подписи доступ к нему, поэтому старые записи удалены. Откройте «Настройки», при необходимости заново введите Client ID и Client Secret и войдите в Google ещё один раз — дальше вход будет сохраняться между пересборками."
+          }
+        }
+      }
+    },
+    "NaviDrive is running from a disk image or a read-only folder, so it can’t update itself. Drag NaviDrive to the Applications folder first. The new version’s disk image is in Downloads.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive is running from a disk image or a read-only folder, so it can’t update itself. Drag NaviDrive to the Applications folder first. The new version’s disk image is in Downloads."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive запущен из образа диска или из папки только для чтения, поэтому не может обновиться сам. Сначала перетащите NaviDrive в папку «Программы». Образ диска новой версии — в папке «Загрузки»."
           }
         }
       }
@@ -3819,6 +4075,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "NaviDrive закроется после завершения передач"
+          }
+        }
+      }
+    },
+    "NaviDrive.app was not found in the disk image.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive.app was not found in the disk image."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В образе диска не найден NaviDrive.app."
           }
         }
       }
@@ -3869,6 +4141,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сеть: %@"
+          }
+        }
+      }
+    },
+    "Never": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Never"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Никогда"
           }
         }
       }
@@ -4095,6 +4383,22 @@
         }
       }
     },
+    "No release notes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No release notes."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Описание релиза отсутствует."
+          }
+        }
+      }
+    },
     "No response from Google within 5 minutes. Try signing in again.": {
       "localizations": {
         "ru": {
@@ -4315,6 +4619,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сейчас"
+          }
+        }
+      }
+    },
+    "Now: %@. To update, NaviDrive will pause them and restart. Progress is saved, and transfers continue after the restart.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Now: %@. To update, NaviDrive will pause them and restart. Progress is saved, and transfers continue after the restart."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сейчас: %@. Для обновления NaviDrive приостановит их и перезапустится. Прогресс сохраняется, после перезапуска передачи продолжатся."
           }
         }
       }
@@ -4582,6 +4902,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пауза все"
+          }
+        }
+      }
+    },
+    "Pause Downloads and Update": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause Downloads and Update"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приостановить загрузки и обновить"
           }
         }
       }
@@ -4956,6 +5292,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Обновление списка"
+          }
+        }
+      }
+    },
+    "Release notes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release notes"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что нового"
           }
         }
       }
@@ -5710,6 +6062,22 @@
         }
       }
     },
+    "Skip This Version": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip This Version"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропустить эту версию"
+          }
+        }
+      }
+    },
     "Skipped: “%@” already exists in the folder": {
       "localizations": {
         "en": {
@@ -5722,6 +6090,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пропущено: «%@» уже есть в папке"
+          }
+        }
+      }
+    },
+    "Software Update": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Software Update"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновление ПО"
           }
         }
       }
@@ -5882,6 +6266,22 @@
         }
       }
     },
+    "The checksum file of the release is invalid.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The checksum file of the release is invalid."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл контрольной суммы релиза некорректен."
+          }
+        }
+      }
+    },
     "The content hash of the file on this Mac matches the Dropbox content_hash": {
       "localizations": {
         "en": {
@@ -5894,6 +6294,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Хеш файла на этом Mac совпадает с content_hash Dropbox"
+          }
+        }
+      }
+    },
+    "The disk image contains version %@ instead of %@. Nothing was installed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The disk image contains version %@ instead of %@. Nothing was installed."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В образе диска версия %1$@ вместо %2$@. Ничего не установлено."
           }
         }
       }
@@ -5934,12 +6350,60 @@
         }
       }
     },
+    "The download ended unexpectedly.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The download ended unexpectedly."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка неожиданно прервалась."
+          }
+        }
+      }
+    },
+    "The download link points outside GitHub. The update was rejected.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The download link points outside GitHub. The update was rejected."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка на загрузку ведёт за пределы GitHub. Обновление отклонено."
+          }
+        }
+      }
+    },
     "The downloaded file disappeared from the disk — downloading again": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Скачанный файл пропал с диска — скачивается заново"
+          }
+        }
+      }
+    },
+    "The downloaded file is damaged: its SHA-256 checksum doesn’t match. The file was deleted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The downloaded file is damaged: its SHA-256 checksum doesn’t match. The file was deleted."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачанный файл повреждён: контрольная сумма SHA-256 не совпадает. Файл удалён."
           }
         }
       }
@@ -5964,6 +6428,22 @@
         }
       }
     },
+    "The latest release tag “%@” is not a version number.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The latest release tag “%@” is not a version number."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тег последнего релиза «%@» не является номером версии."
+          }
+        }
+      }
+    },
     "The limit has freed up; files continue from where they stopped.": {
       "localizations": {
         "ru": {
@@ -5980,6 +6460,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Лимит общий для всех, кто использует этот Client ID Google."
+          }
+        }
+      }
+    },
+    "The new version is not signed with the same certificate as this copy. Nothing was installed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The new version is not signed with the same certificate as this copy. Nothing was installed."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая версия подписана не тем сертификатом, что эта копия. Ничего не установлено."
           }
         }
       }
@@ -6122,6 +6618,22 @@
         }
       }
     },
+    "The release has no file %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The release has no file %@."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В релизе нет файла %@."
+          }
+        }
+      }
+    },
     "The server didn’t confirm the empty file upload": {
       "localizations": {
         "ru": {
@@ -6204,6 +6716,38 @@
         }
       }
     },
+    "The temporary update folder belongs to another user.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The temporary update folder belongs to another user."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Временная папка обновления принадлежит другому пользователю."
+          }
+        }
+      }
+    },
+    "The update file is too large.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The update file is too large."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл обновления слишком большой."
+          }
+        }
+      }
+    },
     "There are no files to download in this folder": {
       "localizations": {
         "ru": {
@@ -6236,6 +6780,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "В эту копию не встроены учётные данные Google — включите параметр и введите свои."
+          }
+        }
+      }
+    },
+    "This copy of NaviDrive doesn’t know where to look for updates.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This copy of NaviDrive doesn’t know where to look for updates."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Эта копия NaviDrive не знает, где искать обновления."
           }
         }
       }
@@ -6362,6 +6922,22 @@
         }
       }
     },
+    "Transfers are in progress": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfers are in progress"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Идут передачи"
+          }
+        }
+      }
+    },
     "Transfers continue when the connection is back": {
       "localizations": {
         "ru": {
@@ -6428,6 +7004,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Отменить"
+          }
+        }
+      }
+    },
+    "Update": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить"
+          }
+        }
+      }
+    },
+    "Updates": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updates"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновления"
           }
         }
       }
@@ -6582,12 +7190,44 @@
         }
       }
     },
+    "Verifying the update…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verifying the update…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверка обновления…"
+          }
+        }
+      }
+    },
     "Verifying…": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Проверка…"
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Версия"
           }
         }
       }
@@ -7046,6 +7686,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сохранённый вход разрешает NaviDrive только чтение. Чтобы отправлять файлы и изменять папки, войдите ещё раз и на экране Google разрешите доступ к Google Drive. Скачивание при этом продолжает работать."
+          }
+        }
+      }
+    },
+    "You’re up to date (v%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You’re up to date (v%@)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У вас последняя версия (v%@)"
           }
         }
       }
