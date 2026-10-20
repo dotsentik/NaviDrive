@@ -11,6 +11,26 @@
         }
       }
     },
+    "%@ connected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ подключён"
+          }
+        }
+      }
+    },
+    "%@ couldn’t complete sign-in. Return to NaviDrive and try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ не завершил вход. Вернитесь в NaviDrive и попробуйте ещё раз."
+          }
+        }
+      }
+    },
     "%@ doesn’t accept the upload session": {
       "localizations": {
         "en": {
@@ -269,6 +289,16 @@
         }
       }
     },
+    "Access denied": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступ не предоставлен"
+          }
+        }
+      }
+    },
     "Access to Dropbox has expired. Please sign in again.": {
       "localizations": {
         "en": {
@@ -523,12 +553,12 @@
         }
       }
     },
-    "Authorization successful!": {
+    "Authorization successful": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Авторизация успешна!"
+            "value": "Авторизация выполнена"
           }
         }
       }
@@ -1427,16 +1457,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Диски"
-          }
-        }
-      }
-    },
-    "Done! You can close this tab and return to NaviDrive.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Готово! Можно закрыть вкладку и вернуться в NaviDrive."
           }
         }
       }
@@ -2649,6 +2669,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "NaviDrive теперь подписан постоянным сертификатом «NaviDrive Local». Сохранённый вход был создан прежней сборкой с временной подписью, и macOS не даёт новой подписи доступ к нему, поэтому старые записи удалены. Откройте «Настройки», при необходимости заново введите Client ID и Client Secret и войдите в Google ещё один раз — дальше вход будет сохраняться между пересборками."
+          }
+        }
+      }
+    },
+    "NaviDrive stopped waiting for a response from %@. Return to NaviDrive and start signing in again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive перестал ждать ответа от %@. Вернитесь в NaviDrive и начните вход заново."
+          }
+        }
+      }
+    },
+    "NaviDrive wasn’t allowed to access %@. To connect it, return to NaviDrive and sign in again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NaviDrive не получил доступ к %@. Чтобы подключить облако, вернитесь в NaviDrive и войдите снова."
           }
         }
       }
@@ -4046,12 +4086,22 @@
         }
       }
     },
-    "Sign-in didn’t complete. Return to NaviDrive and try again.": {
+    "Sign-in link is not valid": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Вход не завершён. Вернитесь в NaviDrive и попробуйте ещё раз."
+            "value": "Ссылка для входа недействительна"
+          }
+        }
+      }
+    },
+    "Sign-in timed out": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Время ожидания входа истекло"
           }
         }
       }
@@ -4662,6 +4712,16 @@
         }
       }
     },
+    "This sign-in link is outdated or wasn’t opened from NaviDrive. Return to NaviDrive and start signing in again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка для входа устарела или открыта не из NaviDrive. Вернитесь в NaviDrive и начните вход заново."
+          }
+        }
+      }
+    },
     "Threads (limit %lld)": {
       "localizations": {
         "ru": {
@@ -5134,6 +5194,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пока есть активные или ожидающие загрузки, система не уходит в сон. Экран при этом гаснет как обычно."
+          }
+        }
+      }
+    },
+    "You can close this tab and return to NaviDrive.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Эту вкладку можно закрыть и вернуться в NaviDrive."
           }
         }
       }

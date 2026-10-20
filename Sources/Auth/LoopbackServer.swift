@@ -48,8 +48,13 @@ final class LoopbackServer: @unchecked Sendable {
     private let callbackPath: String
     /// Ответ уже получен — новые соединения не принимаются.
     private var finished = false
+    /// Ожидание завершилось по таймауту.
+    private var timedOut = false
+    /// Название облака для страницы в браузере.
+    private let cloudName: String
 
-    init(expectedState: String, port: UInt16? = nil, callbackPath: String = "/") {
+    init(cloudName: String, expectedState: String, port: UInt16? = nil, callbackPath: String = "/") {
+        self.cloudName = cloudName
         self.expectedState = expectedState
         self.fixedPort = port
         self.callbackPath = callbackPath
@@ -73,7 +78,9 @@ final class LoopbackServer: @unchecked Sendable {
                     listener.newConnectionHandler = { connection in self.accept(connection) }
                     listener.start(queue: self.queue)
                     self.queue.asyncAfter(deadline: .now() + Self.timeout) { [weak server = self] in
-                        server?.deliver(.failure(ServerError.timedOut))
+                        guard let server, !server.finished else { return }
+                        server.timedOut = true
+                        server.deliver(.failure(ServerError.timedOut))
                     }
                 } catch {
                     continuation.resume(throwing: self.startError(error))
@@ -178,7 +185,9 @@ final class LoopbackServer: @unchecked Sendable {
 
     private func handleRequest(header: String, connection: NWConnection) {
         guard !finished, header.utf8.count <= Self.maxRequestBytes else {
-            respond(connection, status: "400 Bad Request", body: "")
+            // Соединение, открытое до таймаута, получает страницу о нём.
+            respond(connection, status: "400 Bad Request",
+                    body: timedOut ? Self.page(.timedOut, cloudName: cloudName) : "")
             return
         }
         let requestLine = header.components(separatedBy: "\r\n").first ?? ""
@@ -196,11 +205,12 @@ final class LoopbackServer: @unchecked Sendable {
         let oauthError = value("error")
         // Запрос без кода или с чужим state отклоняется; сервер продолжает ждать настоящий ответ облака.
         guard code != nil || oauthError != nil, value("state") == expectedState else {
-            respond(connection, status: "400 Bad Request", body: Self.page(success: false))
+            respond(connection, status: "400 Bad Request", body: Self.page(.invalidState, cloudName: cloudName))
             return
         }
 
-        respond(connection, status: "200 OK", body: Self.page(success: code != nil))
+        let result: PageResult = code != nil ? .success : (oauthError == "access_denied" ? .accessDenied : .failed)
+        respond(connection, status: "200 OK", body: Self.page(result, cloudName: cloudName))
         deliver(.success(Callback(code: code, state: value("state"), error: oauthError)))
     }
 
@@ -212,35 +222,92 @@ final class LoopbackServer: @unchecked Sendable {
         })
     }
 
-    /// Страница без единого параметра из запроса (защита от внедрения HTML/JS).
-    private static func page(success: Bool) -> String {
-        let title = success ? String(localized: "Authorization successful!") : String(localized: "Authorization failed")
-        let subtitle = success
-            ? String(localized: "Done! You can close this tab and return to NaviDrive.")
-            : String(localized: "Sign-in didn’t complete. Return to NaviDrive and try again.")
+    /// Итог входа, показываемый в браузере.
+    enum PageResult {
+        case success
+        /// Пользователь отказал в доступе (`error=access_denied`).
+        case accessDenied
+        /// Облако вернуло другую ошибку.
+        case failed
+        /// Чужой или устаревший `state`, либо ответ без кода.
+        case invalidState
+        case timedOut
+    }
+
+    /// Страница без единого параметра из запроса (защита от внедрения HTML/JS):
+    /// только локализованные строки приложения и название облака.
+    static func page(_ result: PageResult, cloudName: String) -> String {
+        let title: String
+        let lines: [String]
+        switch result {
+        case .success:
+            title = String(localized: "Authorization successful")
+            lines = [String(localized: "\(cloudName) connected"),
+                     String(localized: "You can close this tab and return to NaviDrive.")]
+        case .accessDenied:
+            title = String(localized: "Access denied")
+            lines = [String(localized: "NaviDrive wasn’t allowed to access \(cloudName). To connect it, return to NaviDrive and sign in again.")]
+        case .failed:
+            title = String(localized: "Authorization failed")
+            lines = [String(localized: "\(cloudName) couldn’t complete sign-in. Return to NaviDrive and try again.")]
+        case .invalidState:
+            title = String(localized: "Sign-in link is not valid")
+            lines = [String(localized: "This sign-in link is outdated or wasn’t opened from NaviDrive. Return to NaviDrive and start signing in again.")]
+        case .timedOut:
+            title = String(localized: "Sign-in timed out")
+            lines = [String(localized: "NaviDrive stopped waiting for a response from \(cloudName). Return to NaviDrive and start signing in again.")]
+        }
+        let success = result == .success
         let language = Bundle.main.preferredLocalizations.first ?? "en"
-        let icon = success ? "✓" : "!"
-        let accent = success ? "#34c759" : "#ff3b30"
+        // Галочка или крестик — встроенный SVG, без внешних ресурсов.
+        let glyph = success
+            ? #"<path d="M19 33l9 9 17-19" />"#
+            : #"<path d="M22 22l20 20M42 22L22 42" />"#
+        let text = lines.enumerated().map { index, line in
+            "<p class=\"\(index == 0 && lines.count > 1 ? "lead" : "note")\">\(escape(line))</p>"
+        }.joined()
         return """
         <!doctype html>
-        <html lang="\(language)"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>NaviDrive — \(title)</title>
+        <html lang="\(escape(language))"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>NaviDrive — \(escape(title))</title>
         <style>
-          :root { color-scheme: light dark; }
-          body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+          :root { color-scheme: light dark; --bg:#F5F5F7; --card:#FFFFFF; --border:rgba(0,0,0,0.06);
+                  --shadow:0 8px 30px rgba(0,0,0,0.08); --title:#1D1D1F; --text:#6E6E73; --brand:#AEAEB2;
+                  --accent:\(success ? "#34C759" : "#FF3B30"); }
+          @media (prefers-color-scheme: dark) {
+            :root { --bg:#1C1C1E; --card:#2C2C2E; --border:rgba(255,255,255,0.08);
+                    --shadow:0 8px 30px rgba(0,0,0,0.4); --title:#F5F5F7; --text:#AEAEB2; --brand:#636366;
+                    --accent:\(success ? "#30D158" : "#FF453A"); }
+          }
+          html, body { height:100%; }
+          body { margin:0; background:var(--bg); color:var(--text); display:flex; flex-direction:column;
+                 align-items:center; justify-content:center; padding:24px; box-sizing:border-box; text-align:center;
                  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
-                 background:linear-gradient(135deg,#4285f4 0%,#34a853 50%,#fbbc05 100%); }
-          .card { background:rgba(255,255,255,.92); color:#1d1d1f; border-radius:24px; padding:48px 56px;
-                  text-align:center; box-shadow:0 30px 80px rgba(0,0,0,.25); max-width:440px; margin:16px; }
-          @media (prefers-color-scheme: dark) { .card { background:rgba(30,30,32,.92); color:#f5f5f7; } }
-          .icon { width:84px; height:84px; border-radius:50%; background:\(accent); color:#fff; font-size:46px;
-                  line-height:84px; margin:0 auto 24px; font-weight:700; }
-          h1 { font-size:26px; margin:0 0 12px; }
-          p { font-size:16px; opacity:.75; margin:0; line-height:1.5; }
-          .brand { margin-top:28px; font-size:13px; opacity:.5; letter-spacing:.08em; text-transform:uppercase; }
+                 -webkit-font-smoothing:antialiased; }
+          main { width:420px; max-width:90%; box-sizing:border-box; padding:40px 32px; border-radius:20px;
+                 background:var(--card); border:1px solid var(--border); box-shadow:var(--shadow);
+                 animation:appear 250ms ease-out both; }
+          @keyframes appear { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+          @media (prefers-reduced-motion: reduce) { main { animation:none; } }
+          .icon { width:64px; height:64px; border-radius:50%; background:var(--accent); margin:0 auto 20px;
+                  display:flex; align-items:center; justify-content:center; }
+          .icon svg { width:64px; height:64px; fill:none; stroke:#FFFFFF; stroke-width:5;
+                      stroke-linecap:round; stroke-linejoin:round; }
+          h1 { color:var(--title); font-size:22px; font-weight:600; margin:0 0 8px; letter-spacing:-.01em; }
+          p { font-size:15px; line-height:1.45; margin:0; }
+          p.lead { color:var(--title); font-size:16px; margin-bottom:4px; }
+          footer { position:fixed; bottom:24px; left:0; right:0; font-size:11px; letter-spacing:.12em;
+                   color:var(--brand); }
         </style></head>
-        <body><div class="card"><div class="icon">\(icon)</div><h1>\(title)</h1><p>\(subtitle)</p>
-        <div class="brand">NaviDrive</div></div></body></html>
+        <body><main><div class="icon"><svg viewBox="0 0 64 64" aria-hidden="true">\(glyph)</svg></div>
+        <h1>\(escape(title))</h1>\(text)</main><footer>NAVIDRIVE</footer></body></html>
         """
+    }
+
+    private static func escape(_ string: String) -> String {
+        string.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
     }
 }

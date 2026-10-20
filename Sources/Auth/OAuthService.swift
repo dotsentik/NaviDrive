@@ -76,7 +76,7 @@ enum OAuthService {
 
         let verifier = PKCE.makeVerifier()
         let state = PKCE.base64URL(PKCE.randomBytes(16))
-        let server = LoopbackServer(expectedState: state)
+        let server = LoopbackServer(cloudName: CloudProviderKind.googleDrive.displayName, expectedState: state)
         defer { server.stop() }
         let port = try await server.start()
         let redirectURI = "http://127.0.0.1:\(port)"

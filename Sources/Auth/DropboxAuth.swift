@@ -77,7 +77,7 @@ enum DropboxOAuth {
     static func signIn(appKey: String, openURL: @escaping @MainActor @Sendable (URL) -> Void) async throws -> DropboxTokens {
         let verifier = PKCE.makeVerifier()
         let state = PKCE.base64URL(PKCE.randomBytes(16))
-        let server = LoopbackServer(expectedState: state, port: redirectPort, callbackPath: redirectPath)
+        let server = LoopbackServer(cloudName: CloudProviderKind.dropbox.displayName, expectedState: state, port: redirectPort, callbackPath: redirectPath)
         defer { server.stop() }
         _ = try await server.start()
 

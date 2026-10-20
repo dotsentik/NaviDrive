@@ -41,3 +41,4 @@ scratchpad/
 # Локальные заметки, не для репозитория
 PROMPT.md
 CLAUDE.md
+scripts/install.sh
