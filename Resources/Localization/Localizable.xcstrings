@@ -2163,6 +2163,38 @@
         }
       }
     },
+    "Download All": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download All"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать всё"
+          }
+        }
+      }
+    },
+    "Download All to Default Folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download All to Default Folder"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать всё в дефолтную папку"
+          }
+        }
+      }
+    },
     "Download Anyway": {
       "localizations": {
         "ru": {
@@ -2243,12 +2275,44 @@
         }
       }
     },
+    "Download to Custom Folder / External SSD… (%lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download to Custom Folder / External SSD… (%lld)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать в кастомную папку / на внешний SSD… (%lld)"
+          }
+        }
+      }
+    },
     "Download to Default Folder": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Скачать в дефолтную папку"
+          }
+        }
+      }
+    },
+    "Download to Default Folder (%lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download to Default Folder (%lld)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать в дефолтную папку (%lld)"
           }
         }
       }

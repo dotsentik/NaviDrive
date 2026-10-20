@@ -299,12 +299,20 @@ struct DriveBrowserView: View {
             // Загружаемый файл нельзя открыть, скачать, переименовать или переместить.
             let uploading = selected.contains(where: isUploading)
             // Неподдерживаемые объекты не отбрасываются молча: итог покажет баннер в «Менеджере загрузок».
-            Button("Download to Default Folder") {
+            Button {
                 model.downloadToDefault(selected, ancestors: stack)
+            } label: {
+                if selected.count > 1 { Text("Download to Default Folder (\(selected.count))") } else { Text("Download to Default Folder") }
             }
             .disabled(uploading)
-            Button("Download to Custom Folder / External SSD…") {
+            Button {
                 model.downloadToCustom(selected, ancestors: stack)
+            } label: {
+                if selected.count > 1 {
+                    Text("Download to Custom Folder / External SSD… (\(selected.count))")
+                } else {
+                    Text("Download to Custom Folder / External SSD…")
+                }
             }
             .disabled(uploading)
             Button("Set Permanent Custom Location…") {
@@ -562,6 +570,9 @@ struct DriveBrowserView: View {
     /// Выделение для команд тулбара (скачать и т. п.): без файлов, которые ещё отправляются.
     private var selectedItems: [CloudItem] { items(for: selection).filter { !isUploading($0) } }
 
+    /// «Скачать всё»: строки списка с учётом фильтра, без файлов, которые ещё отправляются.
+    private var downloadableItems: [CloudItem] { displayedItems.filter { !isUploading($0) } }
+
     private func items(for ids: Set<CloudItem.ID>) -> [CloudItem] {
         allRows.filter { ids.contains($0.id) }
     }
@@ -609,7 +620,7 @@ struct DriveBrowserView: View {
 
     private var toolbarState: BrowserToolbarState {
         BrowserToolbarState(canGoBack: !stack.isEmpty, uploadTarget: uploadTarget,
-                            hasSelection: !selection.isEmpty, isLoading: isLoading)
+                            hasSelection: !selection.isEmpty, hasItems: !downloadableItems.isEmpty, isLoading: isLoading)
     }
 
     private func perform(_ command: BrowserCommand) {
@@ -619,6 +630,7 @@ struct DriveBrowserView: View {
         case .newFolder: if uploadTarget != nil { createFolder() }
         case .upload: if let target = uploadTarget { model.chooseFilesToUpload(into: target, ancestorIds: uploadAncestorIds) }
         case .download: model.downloadToDefault(selectedItems, ancestors: stack)
+        case .downloadAll: model.downloadToDefault(downloadableItems, ancestors: stack)
         case .downloadToCustom: model.downloadToCustom(selectedItems, ancestors: stack)
         case .setPermanentRoute: model.setPermanentRoute(selectedItems)
         }

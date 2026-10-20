@@ -229,6 +229,7 @@ actor DownloadScheduler {
     func enqueue(_ items: [CloudItem], destinationDir: String, projectName: String,
                  ancestorIds: [String] = []) async -> EnqueueReport {
         session.active = true
+        let startedAt = Int64(Date().timeIntervalSince1970)
         if !projectName.isEmpty, !session.projects.contains(projectName) { session.projects.append(projectName) }
         var report = EnqueueReport()
         var files: [DownloadTask] = []
@@ -270,6 +271,18 @@ actor DownloadScheduler {
             }
         }
 
+        // Если среди выбранного есть папки, отдельные файлы ставятся после их обхода: файл, лежащий
+        // внутри выбранной папки, уже поставлен обходом в её структуру и второй раз не добавляется.
+        if !scans.isEmpty {
+            for scan in scans {
+                report.merge(await scan.value)
+            }
+            files.removeAll { file in
+                guard let queued = db.task(id: file.id) else { return false }
+                return queued.provider == file.provider && queued.updatedAt >= startedAt
+            }
+        }
+
         do {
             let result = try db.enqueue(files)
             report.added += result.added
@@ -281,10 +294,6 @@ actor DownloadScheduler {
             report.errors.append(message)
         }
         schedule()
-
-        for scan in scans {
-            report.merge(await scan.value)
-        }
         return report
     }
 

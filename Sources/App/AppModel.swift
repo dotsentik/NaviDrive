@@ -154,11 +154,13 @@ struct BrowserToolbarState: Equatable {
     /// Текущая папка, в которую можно создавать и загружать (nil — нельзя).
     var uploadTarget: UploadTarget?
     var hasSelection = false
+    /// В списке есть что скачать (для «Скачать всё» в разделе «Добавленные по ссылке»).
+    var hasItems = false
     var isLoading = false
 }
 
 enum BrowserCommand: Equatable {
-    case back, refresh, newFolder, upload, download, downloadToCustom, setPermanentRoute
+    case back, refresh, newFolder, upload, download, downloadAll, downloadToCustom, setPermanentRoute
 }
 
 struct BrowserCommandRequest: Equatable {

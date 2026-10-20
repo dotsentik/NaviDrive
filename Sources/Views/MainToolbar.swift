@@ -62,6 +62,13 @@ struct MainToolbar: ToolbarContent {
                 .help("Download Selection to Default Folder")
                 .disabled(!state.hasSelection)
         }
+        if section == .linked {
+            ToolbarItem(id: "browser.downloadAll", placement: .primaryAction) {
+                Button { model.sendBrowserCommand(.downloadAll) } label: { Text("Download All") }
+                    .help("Download All to Default Folder")
+                    .disabled(!state.hasItems)
+            }
+        }
         // Редкие действия — в одном меню.
         ToolbarItem(id: "browser.more", placement: .primaryAction) {
             Menu {
