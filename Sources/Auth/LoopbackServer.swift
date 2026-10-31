@@ -191,28 +191,18 @@ final class LoopbackServer: @unchecked Sendable {
                     body: timedOut ? Self.page(.timedOut, cloudName: cloudName) : "")
             return
         }
-        let requestLine = header.components(separatedBy: "\r\n").first ?? ""
-        let parts = requestLine.split(separator: " ")
-        // Только GET на путь redirect_uri; всё остальное — 404.
-        guard parts.count >= 2, parts[0] == "GET", let components = URLComponents(string: "http://127.0.0.1" + parts[1]),
-              components.path == callbackPath || (callbackPath == "/" && components.path.isEmpty) else {
+        switch LoopbackRequest.evaluate(header: header, callbackPath: callbackPath, expectedState: expectedState) {
+        case .notFound:
+            // Только GET на путь redirect_uri; всё остальное — 404.
             respond(connection, status: "404 Not Found", body: "")
-            return
-        }
-        let items = components.queryItems ?? []
-        func value(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
-
-        let code = value("code")
-        let oauthError = value("error")
-        // Запрос без кода или с чужим state отклоняется; сервер продолжает ждать настоящий ответ облака.
-        guard code != nil || oauthError != nil, value("state") == expectedState else {
+        case .invalidState:
+            // Запрос без кода или с чужим state отклоняется; сервер продолжает ждать настоящий ответ облака.
             respond(connection, status: "400 Bad Request", body: Self.page(.invalidState, cloudName: cloudName))
-            return
+        case .callback(let code, let oauthError):
+            let result: PageResult = code != nil ? .success : (oauthError == "access_denied" ? .accessDenied : .failed)
+            respond(connection, status: "200 OK", body: Self.page(result, cloudName: cloudName))
+            deliver(.success(Callback(code: code, state: expectedState, error: oauthError)))
         }
-
-        let result: PageResult = code != nil ? .success : (oauthError == "access_denied" ? .accessDenied : .failed)
-        respond(connection, status: "200 OK", body: Self.page(result, cloudName: cloudName))
-        deliver(.success(Callback(code: code, state: value("state"), error: oauthError)))
     }
 
     private func respond(_ connection: NWConnection, status: String, body: String) {
