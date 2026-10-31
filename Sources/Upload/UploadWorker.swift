@@ -167,7 +167,8 @@ struct UploadWorker: Sendable {
         }
 
         // 2. Части фиксированного размера, потоковое чтение через FileHandle.
-        guard let handle = FileHandle(forReadingAtPath: task.localPath) else {
+        //    Без перехода по ссылке: файл в очереди, подменённый ссылкой (например, на ~/.ssh), не отправляется.
+        guard let handle = try? SafeFile.openForReading(task.localPath) else {
             if case .missing(let message) = PathResolver.volumeState(for: task.localPath) { throw AttemptError.volume(message) }
             throw AttemptError.fatal(String(localized: "Can’t open file “\(task.fileName)”"), nil)
         }
