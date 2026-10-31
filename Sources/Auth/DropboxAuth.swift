@@ -209,14 +209,25 @@ actor DropboxTokenManager {
     func signOut() async {
         refreshTask?.cancel()
         refreshTask = nil
-        let access = tokens.flatMap { $0.accessToken.isEmpty || $0.expiryDate < Date() ? nil : $0.accessToken }
+        let current = tokens
+        let access = current.flatMap { $0.accessToken.isEmpty || $0.expiryDate < Date() ? nil : $0.accessToken }
         tokens = nil
         do {
             try keychain.deleteDropboxSecrets()
         } catch {
             KeychainStore.logger.error("Failed to delete Dropbox tokens on sign-out: \(error.localizedDescription, privacy: .public)")
         }
-        if let access { await DropboxOAuth.revoke(accessToken: access) }
+        // Отзыв access_token отключает и его refresh_token на стороне Dropbox.
+        if let access {
+            await DropboxOAuth.revoke(accessToken: access)
+        } else if let current, let appKey = DropboxAppKey.bundled {
+            // Живого access_token нет (например, после перезапуска): получаем его один раз только для отзыва,
+            // в фоне — выход в интерфейсе не ждёт сети.
+            Task.detached {
+                guard let fresh = try? await DropboxOAuth.refresh(current, appKey: appKey) else { return }
+                await DropboxOAuth.revoke(accessToken: fresh.accessToken)
+            }
+        }
     }
 
     func validAccessToken() async throws -> String {
