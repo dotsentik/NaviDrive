@@ -292,6 +292,10 @@ struct DownloadWorker: Sendable {
         do {
             written = try await ChunkPump.run(stream: stream, writer: writer, startingAt: localBytes,
                                               chunkSize: Self.chunkSize) { delta, total in
+                // Сервер отдаёт больше объявленного размера — запись прерывается, диск не заполняется.
+                if DownloadLimits.exceeds(written: total, expectedSize: task.expectedSize, isExport: isExport) {
+                    throw AttemptError.transient(String(localized: "Size mismatch: received \(total) of \(task.expectedSize) bytes"))
+                }
                 await scheduler.report(id: task.id, delta: delta, total: total)
                 sinceSync += delta
                 if sinceSync >= Self.syncInterval {
