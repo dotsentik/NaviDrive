@@ -165,6 +165,8 @@ actor DropboxTokenManager {
     private let keychain: KeychainStore
     private var tokens: DropboxTokens?
     private var refreshTask: Task<DropboxTokens, Error>?
+    /// Поколение входа (см. TokenManager): обновление, начатое до смены входа, не применяется.
+    private var generation = 0
 
     static let refreshMargin: TimeInterval = 300
 
@@ -196,6 +198,8 @@ actor DropboxTokenManager {
 
     /// Сохраняет вход. Если Связка ключей не приняла запись, вход действует до перезапуска.
     func store(_ newTokens: DropboxTokens) throws {
+        generation += 1
+        refreshTask = nil
         tokens = newTokens
         keychainLoadError = nil
         do {
@@ -207,6 +211,7 @@ actor DropboxTokenManager {
     }
 
     func signOut() async {
+        generation += 1
         refreshTask?.cancel()
         refreshTask = nil
         let current = tokens
@@ -251,6 +256,7 @@ actor DropboxTokenManager {
         if let refreshTask { return try await refreshTask.value }
         guard let current = tokens else { throw DropboxAuthError.notSignedIn }
         guard let appKey = DropboxAppKey.bundled else { throw DropboxAuthError.missingAppKey }
+        let startedGeneration = generation
 
         let task = Task<DropboxTokens, Error> {
             var lastError: Error = DropboxAuthError.notSignedIn
@@ -269,11 +275,14 @@ actor DropboxTokenManager {
         refreshTask = task
         do {
             let fresh = try await task.value
+            // Пока шло обновление, вход сменился: результат относится к прежнему аккаунту.
+            guard generation == startedGeneration else { throw DropboxAuthError.notSignedIn }
             refreshTask = nil
             // access_token живёт только в памяти; refresh_token в Связке ключей не меняется.
             if tokens != nil { tokens = fresh }
             return fresh
         } catch {
+            guard generation == startedGeneration else { throw error }
             refreshTask = nil
             if case DropboxAuthError.reauthenticationRequired = error { revokeLocally() }
             throw error

@@ -6,6 +6,9 @@ actor TokenManager {
     private let keychain: KeychainStore
     private var tokens: OAuthTokens?
     private var refreshTask: Task<OAuthTokens, Error>?
+    /// Поколение входа: меняется при новом входе и выходе. Результат обновления, начатого
+    /// до смены входа, не применяется — токены одного аккаунта не попадут в другой.
+    private var generation = 0
 
     static let refreshMargin: TimeInterval = 300
 
@@ -42,6 +45,8 @@ actor TokenManager {
     /// Сохраняет токены. Если Связка ключей не приняла запись, вход действует до перезапуска,
     /// а ошибка уходит наверх, чтобы UI сообщил о ней.
     func store(_ newTokens: OAuthTokens) throws {
+        generation += 1
+        refreshTask = nil
         tokens = newTokens
         keychainLoadError = nil
         do {
@@ -53,6 +58,7 @@ actor TokenManager {
     }
 
     func signOut() async {
+        generation += 1
         refreshTask?.cancel()
         refreshTask = nil
         let token = tokens?.refreshToken
@@ -100,6 +106,7 @@ actor TokenManager {
             throw OAuthError.keychainUnavailable(error.localizedDescription)
         }
         let clientId = credentials.clientId, clientSecret = credentials.clientSecret
+        let startedGeneration = generation
 
         let task = Task<OAuthTokens, Error> {
             var lastError: Error = OAuthError.notSignedIn
@@ -123,6 +130,8 @@ actor TokenManager {
         refreshTask = task
         do {
             let fresh = try await task.value
+            // Пока шло обновление, вход сменился: результат относится к прежнему аккаунту.
+            guard generation == startedGeneration else { throw OAuthError.notSignedIn }
             refreshTask = nil
             if tokens != nil {
                 tokens = fresh
@@ -135,6 +144,7 @@ actor TokenManager {
             }
             return fresh
         } catch {
+            guard generation == startedGeneration else { throw error }
             refreshTask = nil
             if case OAuthError.reauthenticationRequired = error { revokeLocally() }
             throw error
