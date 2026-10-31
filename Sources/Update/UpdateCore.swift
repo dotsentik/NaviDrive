@@ -159,7 +159,9 @@ enum UpdatePolicy {
             throw UpdateCoreError.malformedRelease
         }
         guard !release.draft, !release.prerelease else { return .upToDate }
-        guard let version = SemanticVersion(release.tagName) else {
+        // Тег без пробелов по краям: SemanticVersion их отбрасывает, а имя ассета строится из тега как есть.
+        guard release.tagName == release.tagName.trimmingCharacters(in: .whitespacesAndNewlines),
+              let version = SemanticVersion(release.tagName) else {
             throw UpdateCoreError.unsupportedTag(release.tagName)
         }
         guard version > currentVersion else { return .upToDate }
