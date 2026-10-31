@@ -57,7 +57,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     SKIP_REASON="режим --dry-run"
 elif [ "$BRANCH" != "main" ]; then
     PUBLISH=0
-    SKIP_REASON="текущая ветка «$BRANCH», публиковать можно только из main"
+    SKIP_REASON="текущая ветка «${BRANCH}», публиковать можно только из main"
 elif [ -n "$(git status --porcelain)" ]; then
     PUBLISH=0
     SKIP_REASON="в рабочей копии есть незакоммиченные изменения"
@@ -124,7 +124,7 @@ if [ "$EXPIRY_EPOCH" -gt 0 ]; then
         echo "Предупреждение: до окончания срока сертификата меньше $EXPIRY_WARNING_DAYS дней — пора выпускать переходную версию (docs/SIGNING.md)." >&2
     fi
 else
-    echo "Предупреждение: не удалось разобрать дату окончания сертификата «$NOT_AFTER»" >&2
+    echo "Предупреждение: не удалось разобрать дату окончания сертификата «${NOT_AFTER}»" >&2
 fi
 
 step "DMG"
