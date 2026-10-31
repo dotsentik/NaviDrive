@@ -189,6 +189,12 @@ final class DataTaskStream: NSObject, URLSessionDataDelegate, ResponseBodyStream
 
     // MARK: - URLSessionDataDelegate
 
+    /// Делегат задачи перекрывает делегат сессии — та же политика редиректов (RedirectPolicy).
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(RedirectPolicy.redirect(request, from: task.currentRequest ?? task.originalRequest))
+    }
+
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
                     completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
         let continuation = lock.withLock {

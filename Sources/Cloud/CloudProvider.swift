@@ -395,7 +395,8 @@ enum CloudNetwork {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
         configuration.httpMaximumConnectionsPerHost = maxConnectionsPerHost
-        return URLSession(configuration: configuration)
+        // Редиректы — только HTTPS; токен не уходит на другой хост (RedirectPolicy).
+        return URLSession(configuration: configuration, delegate: CloudSessionDelegate(), delegateQueue: nil)
     }()
 
     /// Пауза перед повтором со случайным разбросом ±50%, чтобы параллельные запросы не повторялись синхронно.
