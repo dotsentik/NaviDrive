@@ -90,7 +90,8 @@ struct FolderScanner: Sendable {
             return nil
         }
         if case .available = PathResolver.volumeState(for: dir) {
-            try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            // Созданные папки — в карантине: .app, скачанный папкой, тоже проверит Gatekeeper.
+            try? Quarantine.createDirectories(atPath: dir)
         }
         return dir
     }

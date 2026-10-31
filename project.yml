@@ -131,6 +131,8 @@ targets:
     sources:
       - path: Tests
       - path: Sources/Update/UpdateCore.swift
+      # Чистая логика защиты (аудит безопасности): без UI, Связки ключей и сети.
+      - path: Sources/Security
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.navidrive.NaviDriveTests

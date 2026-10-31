@@ -35,8 +35,10 @@ enum FileFinalizer {
         if PathResolver.isSymlink(task.partPath) { throw PathResolver.PathSafetyError.symlink(task.partPath) }
         let size = DownloadWorker.fileSize(task.partPath) ?? 0
         let origin = "\(task.provider.rawValue):\(task.driveFileId)"
-        // Метка ставится до переименования и переезжает вместе с файлом.
+        // Метки ставятся до переименования и переезжают вместе с файлом.
         setOrigin(origin, at: task.partPath)
+        // Карантин: Gatekeeper проверит скачанный исполняемый файл, образ или пакет при открытии.
+        Quarantine.mark(task.partPath)
         let path = try place(task, origin: origin)
         applyDriveModificationDate(task, at: path)
         return size

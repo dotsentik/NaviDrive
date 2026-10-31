@@ -179,7 +179,8 @@ struct DownloadWorker: Sendable {
         // 1. Целевой том доступен?
         if case .missing(let message) = PathResolver.volumeState(for: dir) { throw AttemptError.volume(message) }
         do {
-            try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            // Созданные папки — в карантине: .app, скачанный папкой, тоже проверит Gatekeeper.
+            try Quarantine.createDirectories(atPath: dir)
         } catch {
             throw AttemptError.fatal(String(localized: "Couldn’t create folder \(dir): \(error.localizedDescription)"))
         }
