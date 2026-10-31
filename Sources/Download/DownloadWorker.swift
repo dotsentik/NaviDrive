@@ -201,7 +201,10 @@ struct DownloadWorker: Sendable {
         if let size = Self.fileSize(partPath) {
             localBytes = size
         } else {
-            guard fm.createFile(atPath: partPath, contents: nil) else {
+            // Создание без перехода по ссылке: подложенная вместо .part ссылка — отказ.
+            do {
+                try SafeFile.openForUpdate(partPath, create: true).close()
+            } catch {
                 throw AttemptError.fatal(String(localized: "No write access: \(dir)"))
             }
             localBytes = 0
@@ -242,7 +245,7 @@ struct DownloadWorker: Sendable {
         let handle: FileHandle
         switch http.statusCode {
         case 206:
-            guard let opened = FileHandle(forUpdatingAtPath: partPath) else { throw AttemptError.fatal(String(localized: "Couldn’t open \(partPath)")) }
+            guard let opened = try? SafeFile.openForUpdate(partPath) else { throw AttemptError.fatal(String(localized: "Couldn’t open \(partPath)")) }
             if let start = Self.contentRangeStart(http.value(forHTTPHeaderField: "Content-Range")), start != localBytes {
                 try? opened.close()
                 stream.cancel()
@@ -252,7 +255,7 @@ struct DownloadWorker: Sendable {
             try opened.seekToEnd()
             handle = opened
         case 200:
-            guard let opened = FileHandle(forUpdatingAtPath: partPath) else { throw AttemptError.fatal(String(localized: "Couldn’t open \(partPath)")) }
+            guard let opened = try? SafeFile.openForUpdate(partPath) else { throw AttemptError.fatal(String(localized: "Couldn’t open \(partPath)")) }
             if localBytes > 0 {
                 // Сервер проигнорировал Range и отдаёт файл целиком: продолжить нельзя, начинаем заново — открыто.
                 Self.logger.warning("Download \(task.id, privacy: .public): HTTP 200 instead of 206 for Range from \(localBytes), restarting")
@@ -330,10 +333,13 @@ struct DownloadWorker: Sendable {
         return (attributes[.size] as? NSNumber)?.int64Value
     }
 
+    /// Обрезка .part по дескриптору, без перехода по ссылке. Файла нет — нечего обрезать.
     private static func truncate(_ path: String) throws {
-        guard let handle = FileHandle(forWritingAtPath: path) else { return }
-        defer { try? handle.close() }
-        try handle.truncate(atOffset: 0)
+        do {
+            try SafeFile.truncate(path)
+        } catch let error as POSIXError where error.code == .ENOENT {
+            return
+        }
     }
 
     /// `Content-Range: bytes 100-999/1000` → 100
