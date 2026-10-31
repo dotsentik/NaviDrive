@@ -46,3 +46,7 @@ scratchpad/
 PROMPT.md
 CLAUDE.md
 Scripts/install.sh
+
+# Локальный аудит безопасности
+security-audit/
+DerivedData-audit/
