@@ -213,7 +213,10 @@ enum AppSettings {
     static var supportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent("NaviDrive", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: FilePermissions.privateDirectory])
+        // Папка создана прежней версией с правами 0755 — только владелец.
+        FilePermissions.restrict(directory: dir.path)
         return dir
     }
 }

@@ -38,6 +38,8 @@ final class DatabaseManager: @unchecked Sendable {
         }
         sqlite3_busy_timeout(db, 5_000)
         try execute("PRAGMA journal_mode=WAL;")
+        // База, журнал WAL и общая память — только для владельца (имена файлов, пути, ссылки на папки).
+        FilePermissions.restrict(files: [path, path + "-wal", path + "-shm"])
         try execute("PRAGMA synchronous=NORMAL;")
         try execute("""
             CREATE TABLE IF NOT EXISTS custom_routes (
