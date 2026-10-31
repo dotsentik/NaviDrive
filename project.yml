@@ -26,6 +26,15 @@ schemes:
         - NaviDriveTests
     archive:
       config: Release
+  # Только тесты: собирает NaviDriveTests без приложения, NaviDrive не запускается.
+  NaviDriveTests:
+    build:
+      targets:
+        NaviDriveTests: [test]
+    test:
+      config: Debug
+      targets:
+        - NaviDriveTests
 
 targets:
   NaviDrive:
