@@ -212,8 +212,8 @@ final class DropboxProvider: CloudProvider {
     func parseLink(_ text: String) -> CloudLink? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "<>\"'")))
         let urlString = trimmed.contains("://") ? trimmed : "https://" + trimmed
-        guard let components = URLComponents(string: urlString), let host = components.host?.lowercased(),
-              host == "dropbox.com" || host.hasSuffix(".dropbox.com") || host == "db.tt",
+        guard let components = URLComponents(string: urlString), LinkHosts.isWebScheme(components.scheme),
+              let host = components.host, LinkHosts.isDropbox(host),
               components.path.count > 1 else { return nil }
         return CloudLink(id: urlString, accessKey: urlString)
     }

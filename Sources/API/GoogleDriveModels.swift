@@ -84,9 +84,8 @@ struct DriveLink: Sendable, Equatable {
         if isValidId(text) { return DriveLink(id: text, resourceKey: nil) }
 
         let urlString = text.contains("://") ? text : "https://" + text
-        guard let components = URLComponents(string: urlString),
-              let host = components.host?.lowercased(),
-              host.hasSuffix("google.com") || host.hasSuffix("googleusercontent.com") else { return nil }
+        guard let components = URLComponents(string: urlString), LinkHosts.isWebScheme(components.scheme),
+              let host = components.host, LinkHosts.isGoogle(host) else { return nil }
 
         let query = components.queryItems ?? []
         func queryValue(_ name: String) -> String? {
