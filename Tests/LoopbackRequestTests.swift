@@ -9,7 +9,7 @@ struct LoopbackRequestTests {
     }
 
     private func evaluate(_ header: String, path: String = "/callback") -> LoopbackRequest.Decision {
-        LoopbackRequest.evaluate(header: header, callbackPath: path, expectedState: state)
+        LoopbackRequest.evaluate(header: header, callbackPath: path, expectedState: state, port: 53682)
     }
 
     @Test func acceptsCodeWithMatchingState() {
@@ -40,8 +40,9 @@ struct LoopbackRequestTests {
         #expect(evaluate(header("/callback?code=a&state=\(state)", method: "POST")) == .notFound)
         #expect(evaluate(header("/other?code=a&state=\(state)")) == .notFound)
         #expect(evaluate(header("/callback/../callback?code=a&state=\(state)")) == .notFound)
-        #expect(evaluate("") == .notFound)
-        #expect(evaluate("GET") == .notFound)
+        #expect(evaluate("\r\nHost: 127.0.0.1:53682") == .notFound)
+        #expect(evaluate("GET\r\nHost: 127.0.0.1:53682") == .notFound)
+        #expect(evaluate("") == .forbiddenHost)
     }
 
     @Test func rejectsAbsoluteAndUserInfoTargets() {
@@ -54,5 +55,20 @@ struct LoopbackRequestTests {
         #expect(!LoopbackRequest.constantTimeEquals("abc", "abd"))
         #expect(!LoopbackRequest.constantTimeEquals("abc", "abcd"))
         #expect(LoopbackRequest.constantTimeEquals("", ""))
+    }
+
+    @Test func rejectsForeignHostHeader() {
+        let target = "/callback?code=a&state=\(state)"
+        #expect(evaluate(header(target, host: "evil.example:53682")) == .forbiddenHost)
+        #expect(evaluate(header(target, host: "127.0.0.1:1234")) == .forbiddenHost)
+        #expect(evaluate(header(target, host: "127.0.0.1")) == .forbiddenHost)
+        #expect(evaluate("GET \(target) HTTP/1.1\r\nUser-Agent: x") == .forbiddenHost)
+        #expect(evaluate("GET \(target) HTTP/1.1\r\nHost: 127.0.0.1:53682\r\nHost: evil.example") == .forbiddenHost)
+    }
+
+    @Test func acceptsLoopbackHostVariants() {
+        let target = "/callback?code=a&state=\(state)"
+        #expect(evaluate(header(target, host: "localhost:53682")) == .callback(code: "a", error: nil))
+        #expect(evaluate("GET \(target) HTTP/1.1\r\nhost:127.0.0.1:53682") == .callback(code: "a", error: nil))
     }
 }

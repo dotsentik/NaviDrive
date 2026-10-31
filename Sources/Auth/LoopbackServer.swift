@@ -7,10 +7,15 @@ import Network
 ///
 /// Защита: только 127.0.0.1; принимается один запрос на путь redirect_uri с совпадающим `state`
 /// (остальные получают 400/404, сервер продолжает ждать); после него приём закрывается;
-/// таймаут 5 минут; заголовок запроса не больше 16 КБ; параметры запроса в HTML не попадают.
+/// таймаут 5 минут; заголовок запроса не больше 16 КБ и не дольше 10 с; не больше 16 соединений;
+/// Host — только 127.0.0.1/localhost с портом сервера (DNS-rebinding); параметры запроса в HTML не попадают.
 final class LoopbackServer: @unchecked Sendable {
     static let timeout: TimeInterval = 5 * 60
     static let maxRequestBytes = 16 * 1024
+    /// Сколько секунд соединение может присылать заголовок запроса (защита от «медленных» соединений).
+    static let requestReadTimeout: TimeInterval = 10
+    /// Одновременно открытых соединений не больше этого числа (браузеру хватает пары).
+    static let maxConnections = 16
 
     struct Callback: Sendable {
         let code: String?
@@ -53,6 +58,10 @@ final class LoopbackServer: @unchecked Sendable {
     private var timedOut = false
     /// Название облака для страницы в браузере.
     private let cloudName: String
+    /// Порт, на котором слушает сервер (известен после .ready): с ним сверяется заголовок Host.
+    private var boundPort: UInt16 = 0
+    /// Открытые сейчас соединения.
+    private var openConnections = 0
 
     init(cloudName: String, expectedState: String, port: UInt16? = nil, callbackPath: String = "/") {
         self.cloudName = cloudName
@@ -123,6 +132,7 @@ final class LoopbackServer: @unchecked Sendable {
         switch state {
         case .ready:
             if let port = listener?.port?.rawValue {
+                boundPort = port
                 portContinuation?.resume(returning: port)
                 portContinuation = nil
             }
@@ -160,11 +170,23 @@ final class LoopbackServer: @unchecked Sendable {
     }
 
     private func accept(_ connection: NWConnection) {
-        guard !finished else {
+        guard !finished, openConnections < Self.maxConnections else {
             connection.cancel()
             return
         }
+        openConnections += 1
+        connection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .cancelled, .failed:
+                connection.stateUpdateHandler = nil
+                self?.openConnections -= 1
+            default:
+                break
+            }
+        }
         connection.start(queue: queue)
+        // Заголовок не пришёл вовремя — соединение закрывается (после ответа cancel() ничего не меняет).
+        queue.asyncAfter(deadline: .now() + Self.requestReadTimeout) { connection.cancel() }
         receive(on: connection, buffer: Data())
     }
 
@@ -191,10 +213,14 @@ final class LoopbackServer: @unchecked Sendable {
                     body: timedOut ? Self.page(.timedOut, cloudName: cloudName) : "")
             return
         }
-        switch LoopbackRequest.evaluate(header: header, callbackPath: callbackPath, expectedState: expectedState) {
+        switch LoopbackRequest.evaluate(header: header, callbackPath: callbackPath, expectedState: expectedState,
+                                        port: boundPort) {
         case .notFound:
             // Только GET на путь redirect_uri; всё остальное — 404.
             respond(connection, status: "404 Not Found", body: "")
+        case .forbiddenHost:
+            // Host не 127.0.0.1/localhost этого порта: запрос пришёл со страницы через DNS-rebinding.
+            respond(connection, status: "403 Forbidden", body: "")
         case .invalidState:
             // Запрос без кода или с чужим state отклоняется; сервер продолжает ждать настоящий ответ облака.
             respond(connection, status: "400 Bad Request", body: Self.page(.invalidState, cloudName: cloudName))
