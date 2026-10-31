@@ -46,6 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
            let legacy = pasteboard.propertyList(forType: NSPasteboard.PasteboardType("NSFilenamesPboardType")) as? [String] {
             paths = legacy
         }
+        // Пасборд заполняет любое приложение: только абсолютные пути к существующим объектам, без повторов.
+        paths = ServicePaths.sanitize(paths)
         guard !paths.isEmpty else {
             error.pointee = String(localized: "No files selected for upload") as NSString
             return
