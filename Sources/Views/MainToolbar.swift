@@ -24,6 +24,8 @@ struct MainToolbar: ToolbarContent {
             downloadItems
         } else if section == .uploads {
             uploadItems
+        } else if section == .routes {
+            routeItems
         }
     }
 
@@ -143,6 +145,18 @@ struct MainToolbar: ToolbarContent {
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
+        }
+    }
+
+    // MARK: - Маршруты сохранения
+
+    /// Без элементов тулбар окна схлопывается и светофор с sidebar «прыгают» вверх при переходе
+    /// на эту вкладку, поэтому здесь всегда есть хотя бы одна кнопка (как у остальных разделов).
+    @ToolbarContentBuilder
+    private var routeItems: some ToolbarContent {
+        ToolbarItem(id: "routes.refresh", placement: .primaryAction) {
+            Button { model.reloadRoutes() } label: { Image(systemName: "arrow.clockwise") }
+                .help("Refresh")
         }
     }
 }
