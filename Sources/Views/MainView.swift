@@ -67,7 +67,7 @@ struct MainView: View {
                             // Счётчик активных потоков в строке не показываем — активность видна в строке статуса.
                             sidebarRow(.downloads)
                             sidebarRow(.uploads, badge: model.uploadTotals.activeCount)
-                            sidebarRow(.routes, badge: model.routes.count)
+                            sidebarRow(.routes, badge: model.activeRoutes.count)
                         }
                         if !model.volumes.isEmpty {
                             // Строки дисков — кнопки без `.tag`: в выборе экрана через List(selection:) они не участвуют.

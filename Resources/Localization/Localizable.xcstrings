@@ -1497,6 +1497,16 @@
         }
       }
     },
+    "Clear All": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистить всё"
+          }
+        }
+      }
+    },
     "Clear History": {
       "localizations": {
         "ru": {
@@ -3023,6 +3033,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ошибки сканирования папок"
+          }
+        }
+      }
+    },
+    "Folder not found": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка не найдена"
           }
         }
       }
@@ -4666,6 +4686,16 @@
         }
       }
     },
+    "Only the saved location assignments for %@ are removed. Files and folders on disk are not deleted.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удаляются только сохранённые привязки путей для %@. Файлы и папки на диске не удаляются."
+          }
+        }
+      }
+    },
     "Open": {
       "localizations": {
         "ru": {
@@ -5334,6 +5364,68 @@
         }
       }
     },
+    "Remove": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить"
+          }
+        }
+      }
+    },
+    "Remove %lld unavailable save locations?": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Remove %lld unavailable save location?"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Remove %lld unavailable save locations?"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Удалить %lld недоступную привязку?"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Удалить %lld недоступные привязки?"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Удалить %lld недоступных привязок?"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Удалить %lld недоступной привязки?"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Remove Custom Location": {
       "localizations": {
         "ru": {
@@ -5350,6 +5442,68 @@
           "stringUnit": {
             "state": "translated",
             "value": "Удалить привязку"
+          }
+        }
+      }
+    },
+    "Remove Unavailable Locations (%lld)…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить недоступные привязки (%lld)…"
+          }
+        }
+      }
+    },
+    "Remove all %lld save locations?": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Remove %lld save location?"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Remove all %lld save locations?"
+                }
+              }
+            }
+          }
+        },
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Удалить %lld привязку?"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Удалить все %lld привязки?"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Удалить все %lld привязок?"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Удалить все %lld привязки?"
+                }
+              }
+            }
           }
         }
       }
@@ -5390,6 +5544,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Удаляет только записи истории; файлы на Google Drive остаются"
+          }
+        }
+      }
+    },
+    "Removes only the saved location assignments; files on disk stay": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удаляет только сохранённые привязки путей; файлы на диске остаются"
           }
         }
       }

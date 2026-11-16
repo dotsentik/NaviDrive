@@ -1,13 +1,14 @@
 import SwiftUI
 
 /// «Маршруты сохранения»: все объекты облака с назначенным кастомным путём (ключ — провайдер и ID).
-/// Данные — `model.routes` (загружаются из custom_routes в фоне), статус диска — `model.routeVolumeMissing`.
+/// Данные — `model.activeRoutes`: маршруты облака из переключателя sidebar (все — `model.routes`, грузятся из custom_routes в фоне);
+/// статус диска — `model.routeVolumeMissing` / `model.routePathMissing`.
 struct RoutesView: View {
     @Environment(AppModel.self) private var model
-    @State private var selection: CustomRoute.ID?
+    @State private var selection = Set<CustomRoute.ID>()
 
     var body: some View {
-        Table(model.routes, selection: $selection) {
+        Table(model.activeRoutes, selection: $selection) {
             TableColumn("Cloud Folder/File") { route in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
@@ -29,7 +30,8 @@ struct RoutesView: View {
             .width(min: 200, ideal: 340)
 
             TableColumn("Disk Status") { route in
-                DiskStatusLabel(path: route.localPath, missing: model.routeVolumeMissing.contains(route.id))
+                DiskStatusLabel(path: route.localPath, missing: model.routeVolumeMissing.contains(route.id),
+                                folderMissing: model.routePathMissing.contains(route.id))
             }
             .width(min: 120, ideal: 140)
 
@@ -45,7 +47,7 @@ struct RoutesView: View {
             .width(min: 330, ideal: 350)
         }
         .contextMenu(forSelectionType: CustomRoute.ID.self) { ids in
-            if let id = ids.first, let route = model.routes.first(where: { $0.id == id }) {
+            if let id = ids.first, let route = model.activeRoutes.first(where: { $0.id == id }) {
                 Button("Change Location…") { model.changeRoute(route) }
                 Button("Show in Finder") { model.revealRoute(route) }
                 Divider()
@@ -53,7 +55,7 @@ struct RoutesView: View {
             }
         }
         .overlay {
-            if model.routes.isEmpty {
+            if model.activeRoutes.isEmpty {
                 ContentUnavailableView {
                     Label("No custom save locations", systemImage: "arrow.triangle.branch")
                 } description: {
@@ -70,10 +72,14 @@ struct RoutesView: View {
 private struct DiskStatusLabel: View {
     let path: String
     let missing: Bool
+    let folderMissing: Bool
 
     var body: some View {
         if missing {
             Label("Not connected", systemImage: "externaldrive.badge.exclamationmark")
+                .foregroundStyle(.orange)
+        } else if folderMissing {
+            Label("Folder not found", systemImage: "folder.badge.questionmark")
                 .foregroundStyle(.orange)
         } else if PathResolver.volumeRoot(for: path) != nil {
             Label("Connected", systemImage: "externaldrive.badge.checkmark")

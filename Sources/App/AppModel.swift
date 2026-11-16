@@ -335,6 +335,8 @@ final class AppModel {
     var routeMap: [RouteKey: String] = [:]
     /// Маршруты, чей внешний диск сейчас не подключён (проверяется в фоне, не в body).
     var routeVolumeMissing: Set<RouteKey> = []
+    /// Маршруты на доступном диске, чьей папки больше нет (проверяется в фоне вместе с routeVolumeMissing).
+    var routePathMissing: Set<RouteKey> = []
     /// Посчитанные по запросу размеры папок облака (из SQLite).
     var folderSizes: [RouteKey: FolderSize] = [:]
     /// Папки, размер которых сейчас считается или ждёт очереди (промежуточный итог — у идущего подсчёта).
@@ -763,18 +765,53 @@ final class AppModel {
     }
 
     private func reloadRoutesNow() async {
-        guard let (newRoutes, missing) = await inBackground({ db -> ([CustomRoute], Set<RouteKey>) in
+        guard let (newRoutes, missing, pathMissing) = await inBackground({ db -> ([CustomRoute], Set<RouteKey>, Set<RouteKey>) in
             let routes = db.allRoutes()
-            let missing = routes.filter {
-                if case .missing = PathResolver.volumeState(for: $0.localPath) { return true }
-                return false
+            var missing: Set<RouteKey> = [], pathMissing: Set<RouteKey> = []
+            for route in routes {
+                if case .missing = PathResolver.volumeState(for: route.localPath) {
+                    missing.insert(route.id)
+                } else if !FileManager.default.fileExists(atPath: PathResolver.expand(route.localPath)) {
+                    pathMissing.insert(route.id)
+                }
             }
-            return (routes, Set(missing.map(\.id)))
+            return (routes, missing, pathMissing)
         }) else { return }
         if newRoutes != routes { routes = newRoutes }
         let map = Dictionary(newRoutes.map { ($0.id, $0.localPath) }, uniquingKeysWith: { a, _ in a })
         if map != routeMap { routeMap = map }
         if missing != routeVolumeMissing { routeVolumeMissing = missing }
+        if pathMissing != routePathMissing { routePathMissing = pathMissing }
+    }
+
+    /// Маршруты облака, выбранного в переключателе sidebar (список, счётчик и очистка — только по нему).
+    var activeRoutes: [CustomRoute] { routes.filter { $0.provider == activeCloud } }
+
+    /// Маршрут недоступен: внешний диск не подключён или папки по пути больше нет.
+    func isRouteUnavailable(_ route: CustomRoute) -> Bool {
+        routeVolumeMissing.contains(route.id) || routePathMissing.contains(route.id)
+    }
+
+    var activeUnavailableRoutes: [CustomRoute] { activeRoutes.filter(isRouteUnavailable) }
+
+    /// Очистка списка «Маршрутов сохранения» текущего облака после подтверждения с числом записей.
+    /// Удаляются только сохранённые соответствия путей; файлы и папки на диске не трогаются.
+    func confirmClearRoutes(onlyUnavailable: Bool) {
+        let targets = onlyUnavailable ? activeUnavailableRoutes : activeRoutes
+        guard !targets.isEmpty else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = onlyUnavailable
+            ? String(localized: "Remove \(targets.count) unavailable save locations?")
+            : String(localized: "Remove all \(targets.count) save locations?")
+        alert.informativeText = String(localized: "Only the saved location assignments for \(activeCloud.displayName) are removed. Files and folders on disk are not deleted.")
+        alert.addButton(withTitle: String(localized: "Remove"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        for route in targets { routeMap[route.id] = nil }
+        let provider = activeCloud, ids = targets.map(\.driveId)
+        writeRoute { try $0.deleteRoutes(provider: provider, driveIds: ids) }
     }
 
     /// Запись маршрута в фоне; routeMap обновляется сразу, чтобы следующие действия уже видели путь.

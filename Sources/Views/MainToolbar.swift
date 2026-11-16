@@ -158,6 +158,25 @@ struct MainToolbar: ToolbarContent {
             Button { model.reloadRoutes() } label: { Image(systemName: "arrow.clockwise") }
                 .help("Refresh")
         }
+        // Очистка одним действием — видимой кнопкой, как «Clear History» в Менеджере загрузок и Отправке;
+        // подтверждение с числом записей — в AppModel.confirmClearRoutes (привязки не восстановить).
+        ToolbarItem(id: "routes.clear", placement: .primaryAction) {
+            Button("Clear All") { model.confirmClearRoutes(onlyUnavailable: false) }
+                .help("Removes only the saved location assignments; files on disk stay")
+                .disabled(model.activeRoutes.isEmpty)
+        }
+        // Редкое действие — в меню, как в остальных разделах.
+        ToolbarItem(id: "routes.more", placement: .primaryAction) {
+            let unavailable = model.activeUnavailableRoutes.count
+            Menu {
+                Button("Remove Unavailable Locations (\(unavailable))…") { model.confirmClearRoutes(onlyUnavailable: true) }
+                    .disabled(unavailable == 0)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuIndicator(.hidden)
+            .help("More Actions")
+        }
     }
 }
 

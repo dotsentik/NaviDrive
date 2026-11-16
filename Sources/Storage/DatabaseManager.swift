@@ -489,6 +489,22 @@ final class DatabaseManager: @unchecked Sendable {
         try run("DELETE FROM custom_routes WHERE provider = ? AND drive_id = ?", [.text(provider.rawValue), .text(driveId)])
     }
 
+    /// Удаляет несколько маршрутов одного провайдера (только записи соответствий, файлы на диске не трогаются).
+    /// Пачками, чтобы не упереться в лимит параметров SQLite.
+    @discardableResult
+    func deleteRoutes(provider: CloudProviderKind, driveIds: [String]) throws -> Int {
+        var removed = 0
+        var start = 0
+        while start < driveIds.count {
+            let chunk = driveIds[start..<min(start + 500, driveIds.count)]
+            let placeholders = Array(repeating: "?", count: chunk.count).joined(separator: ", ")
+            removed += try run("DELETE FROM custom_routes WHERE provider = ? AND drive_id IN (\(placeholders))",
+                               [.text(provider.rawValue)] + chunk.map { .text($0) })
+            start += chunk.count
+        }
+        return removed
+    }
+
     // MARK: - Linked items
 
     func linkedItems() -> [LinkedItem] {
