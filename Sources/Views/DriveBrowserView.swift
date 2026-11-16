@@ -1092,7 +1092,9 @@ private struct LinkInputBar: View {
                                   text: $text, prompt: Text(verbatim: "https://www.dropbox.com/scl/fo/…"))
                     } else {
                         TextField("Paste a link to a Google Drive file or folder",
-                                  text: $text, prompt: Text("https://drive.google.com/drive/folders/…  or ID"))
+                                  // verbatim: иначе SwiftUI разбирает строку как Markdown и делает адрес синей ссылкой,
+                                  // а «or ID» — белым; подсказка должна быть целиком серой, как у Dropbox.
+                                  text: $text, prompt: Text(verbatim: String(localized: "https://drive.google.com/drive/folders/…  or ID")))
                     }
                 }
                 .textFieldStyle(.roundedBorder)
