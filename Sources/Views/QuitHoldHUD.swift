@@ -13,6 +13,8 @@ final class QuitHoldHUD {
         var progress: Double = 0
         /// Масштаб появления (без него при «Уменьшить движение»).
         var appeared = false
+        /// Удержание завершено — выход по отпусканию клавиш.
+        var armed = false
     }
 
     private static let size: CGFloat = 200
@@ -27,6 +29,7 @@ final class QuitHoldHUD {
 
     func show(duration: Duration) {
         generation += 1
+        state.armed = false
         let panel = panel ?? makePanel()
         self.panel = panel
         if let screen = (NSApp.keyWindow ?? NSApp.mainWindow)?.screen ?? NSScreen.main {
@@ -55,6 +58,15 @@ final class QuitHoldHUD {
                                         .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 
+    /// Удержание завершено: кольцо заполнено, подпись — «Отпустите ⌘Q для выхода».
+    func showArmed() {
+        state.progress = 1
+        state.armed = true
+        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                             userInfo: [.announcement: String(localized: "Release ⌘Q to Quit"),
+                                        .priority: NSAccessibilityPriorityLevel.high.rawValue])
+    }
+
     /// Прячет окно с затуханием; `completed == false` — кольцо плавно сбрасывается.
     func hide(completed: Bool) {
         guard let panel, panel.isVisible else { return }
@@ -73,6 +85,7 @@ final class QuitHoldHUD {
                 guard self.generation == current else { return }
                 panel.orderOut(nil)
                 self.state.progress = 0
+                self.state.armed = false
             }
         })
     }
@@ -113,7 +126,7 @@ private struct QuitHoldView: View {
                     .font(.system(size: 30, weight: .semibold))
             }
             .frame(width: 92, height: 92)
-            Text("Hold ⌘Q to Quit")
+            Text(state.armed ? LocalizedStringKey("Release ⌘Q to Quit") : LocalizedStringKey("Hold ⌘Q to Quit"))
                 .font(.system(size: 13, weight: .medium))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)

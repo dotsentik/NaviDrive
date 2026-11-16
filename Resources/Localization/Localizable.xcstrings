@@ -5648,6 +5648,16 @@
         }
       }
     },
+    "Release ⌘Q to Quit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отпустите ⌘Q для выхода"
+          }
+        }
+      }
+    },
     "Reliable downloads and uploads for Google Drive and Dropbox — even very large files, with resume after interruptions": {
       "localizations": {
         "en": {

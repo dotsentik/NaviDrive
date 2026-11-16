@@ -23,6 +23,7 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - Opening an unsupported link no longer breaks the window layout.
 - The window no longer jumps when switching to Save Locations.
+- Holding ⌘Q to quit no longer also quits the next app in focus: NaviDrive now quits when the keys are released ("Release ⌘Q to Quit").
 
 ## [1.1.2] - 2026-10-31
 

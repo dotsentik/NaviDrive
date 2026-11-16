@@ -6,6 +6,9 @@ enum QuitFlow: Equatable {
     case idle
     /// Идёт удержание ⌘Q, показан HUD.
     case holding
+    /// Удержали достаточно — выход по отпусканию ⌘ или Q. Если выйти, пока клавиши ещё зажаты,
+    /// автоповтор ⌘Q достаётся следующему приложению в фокусе и закрывает и его.
+    case armed
     /// Выход решён, `terminate` уже запрошен. `checkTransfers` — ещё спросить об идущих передачах
     /// (после удержания ⌘Q); false — без вопросов (перезапуск, «Выйти после завершения»).
     case confirmed(checkTransfers: Bool)
@@ -17,6 +20,7 @@ enum QuitFlow: Equatable {
 ///
 /// - ⌘Q с клавиатуры (если включено «Удерживать ⌘Q для выхода») перехватывает локальный монитор событий:
 ///   нужно держать 1,5 секунды, ход показывает HUD. Отпустили раньше — приложение продолжает работу.
+///   Выход — только после отпускания клавиш (HUD «Отпустите ⌘Q»), чтобы ⌘Q не ушёл следующему приложению.
 /// - «Выйти из NaviDrive» в меню приложения или трея, выбранный мышью, и Quit в Dock — сразу проверка передач.
 /// - Выход по команде системы (перезагрузка, выключение, выход из учётной записи) и Apple Event quit
 ///   от скриптов — без окон и вопросов: передачи останавливаются с сохранением прогресса, приложение завершается.
@@ -83,7 +87,7 @@ final class QuitController {
         case .keyDown:
             guard Self.isQuitShortcut(event) else { return false }
             switch flow {
-            case .holding, .confirmed, .terminating:
+            case .holding, .armed, .confirmed, .terminating:
                 // Повторное нажатие и автоповтор не сбивают таймер; после решения о выходе ⌘Q ничего не делает.
                 return true
             case .idle:
@@ -94,10 +98,12 @@ final class QuitController {
                 return true
             }
         case .keyUp:
-            if flow == .holding, Self.isQKey(event) { cancelHold() }
+            guard Self.isQKey(event) else { return false }
+            if flow == .holding { cancelHold() } else if flow == .armed { quitAfterRelease() }
             return false
         case .flagsChanged:
-            if flow == .holding, !event.modifierFlags.contains(.command) { cancelHold() }
+            guard !event.modifierFlags.contains(.command) else { return false }
+            if flow == .holding { cancelHold() } else if flow == .armed { quitAfterRelease() }
             return false
         default:
             return false
@@ -133,6 +139,14 @@ final class QuitController {
             return
         }
         holdTask = nil
+        // Не выходим, пока ⌘Q зажаты: иначе фокус перейдёт к другому приложению вместе с автоповтором ⌘Q.
+        flow = .armed
+        hud.showArmed()
+    }
+
+    /// ⌘ или Q отпущены после полного удержания — выход.
+    private func quitAfterRelease() {
+        guard flow == .armed else { return }
         hud.hide(completed: true)
         flow = .confirmed(checkTransfers: true)
         terminateFromRunLoop()
@@ -146,7 +160,7 @@ final class QuitController {
     }
 
     func cancelHold() {
-        guard flow == .holding else { return }
+        guard flow == .holding || flow == .armed else { return }
         holdTask?.cancel()
         holdTask = nil
         flow = .idle
@@ -162,7 +176,7 @@ final class QuitController {
             return .terminateNow
         case .confirmed(checkTransfers: false):
             return beginTerminating()
-        case .holding:
+        case .holding, .armed:
             cancelHold()
         case .idle, .confirmed(checkTransfers: true):
             break
