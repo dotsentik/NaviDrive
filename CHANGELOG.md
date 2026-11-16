@@ -7,6 +7,23 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-11-16
+
+### Added
+- Save Locations: a Clear All button removes all save locations of the selected cloud after a confirmation; the … menu removes only unavailable ones (disk not connected or folder missing). Files on disk are never deleted.
+- Delete, ⌘⌫ and ⌦ remove the selected entries in Added by Link, Save Locations, Uploads and Download Manager; ⌘A selects all. In Uploads and Download Manager only completed and cancelled entries are removed — running, waiting and failed transfers are not touched.
+- A transfer log (Help → Show Log in Finder) records resume offsets, server responses, interruptions, pauses, retries and why a partial file was truncated. Link keys and tokens are never written to it.
+- A download that receives no data for 60 seconds shows the reason in its row; after 5 minutes the connection is restarted from the partial file, and after 3 restarts the download fails with the reason.
+- Diagnostics… in the Download Manager row explains in plain words what is happening with a download and shows its recent events, with Copy Report.
+
+### Changed
+- Save Locations and its sidebar counter show only the cloud selected in the sidebar.
+- A link of another cloud (for example a Dropbox link on the Google Drive tab) says which tab opens it.
+
+### Fixed
+- Opening an unsupported link no longer breaks the window layout.
+- The window no longer jumps when switching to Save Locations.
+
 ## [1.1.2] - 2026-10-31
 
 ### Security
