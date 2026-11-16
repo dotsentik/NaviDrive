@@ -7022,6 +7022,16 @@
         }
       }
     },
+    "This is a %@ link. Switch to the %@ tab to open it.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это ссылка %1$@. Чтобы открыть её, переключитесь на вкладку %2$@."
+          }
+        }
+      }
+    },
     "This is the upper limit. The engine starts with 4 threads and adds one every 15 seconds while total speed keeps growing. If Google reports rate limiting (429), the number of threads is halved immediately. Changes apply on the fly; running downloads are not interrupted.": {
       "localizations": {
         "ru": {

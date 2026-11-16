@@ -1083,9 +1083,14 @@ private struct LinkInputBar: View {
                     .help("Folder size, number of files and free disk space")
             }
             if let error {
+                // Без .fixedSize(vertical:): при расчёте минимального размера окна SwiftUI предлагает ширину ≈0,
+                // и «вертикально фиксированный» текст переносился по буквам — минимальная высота detail-колонки
+                // становилась больше окна, и всё окно (с sidebar) обрезалось сверху и снизу.
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(error)
             }
         }
         .padding(.horizontal, 12)

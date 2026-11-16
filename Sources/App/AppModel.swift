@@ -634,6 +634,8 @@ final class AppModel {
 
     enum LinkLookupError: LocalizedError {
         case invalidLink(CloudProviderKind)
+        /// Ссылка другого облака (например, Dropbox на вкладке Google Drive).
+        case otherCloudLink(CloudProviderKind)
         case notFound(hasResourceKey: Bool)
         /// Общая ссылка не найдена (удалена или устарела).
         case linkNotFound
@@ -645,6 +647,8 @@ final class AppModel {
                 String(localized: "This doesn’t look like a Google Drive link. Paste a link like drive.google.com/drive/folders/… or an ID.")
             case .invalidLink(.dropbox):
                 String(localized: "This doesn’t look like a Dropbox link. Paste a shared link like dropbox.com/scl/fo/…")
+            case .otherCloudLink(let cloud):
+                String(localized: "This is a \(cloud.displayName) link. Switch to the \(cloud.displayName) tab to open it.")
             case .linkNotFound:
                 String(localized: "The shared link wasn’t found. It may have been deleted or have expired.")
             case .notFound(let hasKey):
@@ -673,7 +677,12 @@ final class AppModel {
     /// Находит объект по ссылке текущего облака, раскрывает ярлык и сохраняет в «Добавленные по ссылке».
     func lookupLink(_ text: String) async throws -> CloudItem {
         let provider = provider
-        guard let link = provider.parseLink(text) else { throw LinkLookupError.invalidLink(provider.kind) }
+        guard let link = provider.parseLink(text) else {
+            if let other = providers.all.first(where: { $0.kind != provider.kind && $0.parseLink(text) != nil }) {
+                throw LinkLookupError.otherCloudLink(other.kind)
+            }
+            throw LinkLookupError.invalidLink(provider.kind)
+        }
         var item: CloudItem
         do {
             item = try await provider.item(id: link.id, accessKey: link.accessKey)
