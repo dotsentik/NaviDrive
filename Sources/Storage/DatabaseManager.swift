@@ -1184,6 +1184,33 @@ extension DatabaseManager {
             """, [.int(Self.now)])
     }
 
+    /// Удаляет выбранные строки, только если их статус по-прежнему один из `statuses` (проверка в самом SQL:
+    /// задача, успевшая стать активной, не удалится). Пачками — из-за лимита параметров SQLite.
+    @discardableResult
+    private func deleteRows(table: String, ids: [String], statuses: [String]) -> Int {
+        guard !statuses.isEmpty else { return 0 }
+        let statusList = statuses.map { _ in "?" }.joined(separator: ",")
+        var removed = 0, start = 0
+        while start < ids.count {
+            let chunk = ids[start..<min(start + 500, ids.count)]
+            let idList = chunk.map { _ in "?" }.joined(separator: ",")
+            let values: [Value] = chunk.map { .text($0) } + statuses.map { .text($0) }
+            removed += (try? run("DELETE FROM \(table) WHERE id IN (\(idList)) AND status IN (\(statusList))", values)) ?? 0
+            start += chunk.count
+        }
+        return removed
+    }
+
+    @discardableResult
+    func deleteTasks(ids: [String], statuses: [TaskStatus]) -> Int {
+        deleteRows(table: "download_tasks", ids: ids, statuses: statuses.map(\.rawValue))
+    }
+
+    @discardableResult
+    func deleteUploads(ids: [String], statuses: [UploadStatus]) -> Int {
+        deleteRows(table: "upload_tasks", ids: ids, statuses: statuses.map(\.rawValue))
+    }
+
     func deleteUploads(statuses: [UploadStatus]) {
         let placeholders = statuses.map { _ in "?" }.joined(separator: ",")
         _ = try? run("DELETE FROM upload_tasks WHERE status IN (\(placeholders))", statuses.map { .text($0.rawValue) })

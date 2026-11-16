@@ -263,6 +263,15 @@ struct DriveBrowserView: View {
                 open(folder)
             }
         }
+        // Delete / ⌘⌫ / ⌦ в корне «Добавленных по ссылке» убирают выделенные ссылки из списка
+        // (как пункт меню «Remove from Added by Link»; в облаке ничего не удаляется). Внутри папок
+        // клавиша ничего не делает: удаление файлов облака — только через меню с подтверждением.
+        .onDeleteCommand(perform: linkDeleteAction)
+        .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+            guard isLinkedRoot, !selection.isEmpty else { return .ignored }
+            removeSelectedLinks()
+            return .handled
+        }
         .overlay {
             // Анимация ограничена содержимым оверлея, чтобы не анимировать подмену строк таблицы.
             ZStack {
@@ -360,9 +369,8 @@ struct DriveBrowserView: View {
             .disabled(!selected.allSatisfy(\.canTrash))
             if isLinkedRoot {
                 Divider()
-                Button("Remove from Added by Link") {
-                    for item in selected { model.removeLinked(item) }
-                }
+                Button("Remove from Added by Link") { model.removeLinked(selected) }
+                    .keyboardShortcut(.delete, modifiers: [])
             }
             if selected.count == 1, let folder = selected.first, folder.isFolder {
                 Divider()
@@ -676,6 +684,19 @@ struct DriveBrowserView: View {
 
     /// ⌘R / кнопка «Обновить»: текущий список остаётся на экране до полной замены.
     private var isLinkedRoot: Bool { scope == .linked && stack.isEmpty }
+
+    /// Delete-команда таблицы: только в корне «Добавленных по ссылке», иначе nil (команда недоступна).
+    private var linkDeleteAction: (() -> Void)? {
+        guard isLinkedRoot else { return nil }
+        return { removeSelectedLinks() }
+    }
+
+    private func removeSelectedLinks() {
+        let selected = items(for: selection)
+        guard !selected.isEmpty else { return }
+        model.removeLinked(selected)
+        selection.removeAll()
+    }
 
     private var stackKey: BrowserStackKey { BrowserStackKey(cloud: model.activeCloud, scope: scope) }
 

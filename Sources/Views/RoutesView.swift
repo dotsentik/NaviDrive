@@ -47,12 +47,23 @@ struct RoutesView: View {
             .width(min: 330, ideal: 350)
         }
         .contextMenu(forSelectionType: CustomRoute.ID.self) { ids in
-            if let id = ids.first, let route = model.activeRoutes.first(where: { $0.id == id }) {
+            let selected = routes(for: ids)
+            if selected.count == 1, let route = selected.first {
                 Button("Change Location…") { model.changeRoute(route) }
                 Button("Show in Finder") { model.revealRoute(route) }
                 Divider()
-                Button("Remove Location") { model.deleteRoute(route) }
             }
+            if !selected.isEmpty {
+                Button("Remove Location") { model.deleteRoutes(selected) }
+                    .keyboardShortcut(.delete, modifiers: [])
+            }
+        }
+        // Delete / ⌘⌫ / ⌦ удаляют выделенные привязки (⌘A — выделить все); файлы на диске не трогаются.
+        .onDeleteCommand(perform: removeSelected)
+        .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+            guard !selection.isEmpty else { return .ignored }
+            removeSelected()
+            return .handled
         }
         .overlay {
             if model.activeRoutes.isEmpty {
@@ -66,6 +77,17 @@ struct RoutesView: View {
         .mainContentFocus()
         .navigationTitle("Save Locations")
         .onAppear { model.reloadRoutes() }
+    }
+
+    private func routes(for ids: Set<CustomRoute.ID>) -> [CustomRoute] {
+        model.activeRoutes.filter { ids.contains($0.id) }
+    }
+
+    private func removeSelected() {
+        let selected = routes(for: selection)
+        guard !selected.isEmpty else { return }
+        model.deleteRoutes(selected)
+        selection.removeAll()
     }
 }
 

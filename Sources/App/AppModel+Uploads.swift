@@ -242,6 +242,17 @@ extension AppModel {
         Task { await uploadScheduler?.setPaused(paused); await refresh() }
     }
 
+    /// Delete / ⌘⌫ в «Отправке»: из выделенного убираются только завершённые и отменённые записи истории;
+    /// идущие, ожидающие и упавшие отправки не трогаются, файлы в облаке остаются.
+    func removeFinishedUploads(_ tasks: [UploadTask]) {
+        let ids = tasks.filter { [.completed, .cancelled].contains($0.status) }.map(\.id)
+        guard !ids.isEmpty, let db else { return }
+        Task {
+            _ = await Task.detached { db.deleteUploads(ids: ids, statuses: [.completed, .cancelled]) }.value
+            await refresh()
+        }
+    }
+
     func clearUploadHistory() {
         guard let db else { return }
         Task {

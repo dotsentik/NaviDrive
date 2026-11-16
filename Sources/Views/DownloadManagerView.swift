@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DownloadManagerView: View {
     @Environment(AppModel.self) private var model
+    @State private var selection = Set<String>()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -112,7 +113,7 @@ struct DownloadManagerView: View {
     private var taskList: some View {
         let kinds = model.downloadFilter.sections
         return ScrollViewReader { proxy in
-            List {
+            List(selection: $selection) {
                 ForEach(kinds) { kind in
                     let rows = model.sections[kind] ?? []
                     // Строки и счётчики — из одного снимка состояния: число в заголовке совпадает со строками
@@ -135,6 +136,13 @@ struct DownloadManagerView: View {
                 }
             }
             .listStyle(.inset)
+            // Выделение (⌘A — все) + Delete / ⌘⌫ / ⌦: убирает из истории выделенные завершённые и отменённые записи.
+            .onDeleteCommand(perform: removeSelected)
+            .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+                guard !selection.isEmpty else { return .ignored }
+                removeSelected()
+                return .handled
+            }
             .overlay {
                 if kinds.allSatisfy({ (model.sections[$0] ?? []).isEmpty }) {
                     ContentUnavailableView("No Tasks", systemImage: "tray",
@@ -145,6 +153,13 @@ struct DownloadManagerView: View {
             .onChange(of: model.pendingDownloadSection, initial: true) { scrollToPending(proxy) }
             .onChange(of: model.pendingDownloadSection.map { model.sections[$0]?.count ?? 0 }) { scrollToPending(proxy) }
         }
+    }
+
+    private func removeSelected() {
+        let selected = model.sections.values.flatMap { $0 }.filter { selection.contains($0.id) }
+        guard !selected.isEmpty else { return }
+        model.removeFinishedDownloads(selected)
+        selection.removeAll()
     }
 
     private func scrollToPending(_ proxy: ScrollViewProxy) {

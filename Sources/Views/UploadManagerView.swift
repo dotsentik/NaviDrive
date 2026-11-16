@@ -3,6 +3,7 @@ import SwiftUI
 /// Экран «Отправка»: очередь загрузки файлов в Google Drive (устроен как «Менеджер загрузок»).
 struct UploadManagerView: View {
     @Environment(AppModel.self) private var model
+    @State private var selection = Set<String>()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -99,7 +100,7 @@ struct UploadManagerView: View {
     private var taskList: some View {
         let kinds = model.uploadFilter.uploadSections
         return ScrollViewReader { proxy in
-            List {
+            List(selection: $selection) {
                 ForEach(kinds) { kind in
                     let rows = model.uploadSections[kind] ?? []
                     let total = max(sectionCount(kind), rows.count)
@@ -123,6 +124,13 @@ struct UploadManagerView: View {
                 }
             }
             .listStyle(.inset)
+            // Выделение (⌘A — все) + Delete / ⌘⌫ / ⌦: убирает из истории выделенные завершённые и отменённые записи.
+            .onDeleteCommand(perform: removeSelected)
+            .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+                guard !selection.isEmpty else { return .ignored }
+                removeSelected()
+                return .handled
+            }
             .overlay {
                 if kinds.allSatisfy({ (model.uploadSections[$0] ?? []).isEmpty && sectionCount($0) == 0 }) {
                     ContentUnavailableView("No Uploads", systemImage: "arrow.up.circle",
@@ -133,6 +141,13 @@ struct UploadManagerView: View {
             .onChange(of: model.pendingUploadSection, initial: true) { scrollToPending(proxy) }
             .onChange(of: model.pendingUploadSection.map { model.uploadSections[$0]?.count ?? 0 }) { scrollToPending(proxy) }
         }
+    }
+
+    private func removeSelected() {
+        let selected = model.uploadSections.values.flatMap { $0 }.filter { selection.contains($0.id) }
+        guard !selected.isEmpty else { return }
+        model.removeFinishedUploads(selected)
+        selection.removeAll()
     }
 
     private func scrollToPending(_ proxy: ScrollViewProxy) {

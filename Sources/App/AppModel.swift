@@ -703,9 +703,17 @@ final class AppModel {
     }
 
     func removeLinked(_ item: CloudItem) {
-        let id = item.id, kind = item.provider
+        removeLinked([item])
+    }
+
+    /// Убирает объекты из «Добавленных по ссылке» (только записи списка, в облаке и на диске ничего не удаляется).
+    func removeLinked(_ items: [CloudItem]) {
+        let keys = items.map { ($0.provider, $0.id) }
+        guard !keys.isEmpty else { return }
         Task {
-            _ = await inBackground { try? $0.deleteLinked(provider: kind, driveId: id) }
+            _ = await inBackground { db in
+                for (kind, id) in keys { try? db.deleteLinked(provider: kind, driveId: id) }
+            }
             await reloadLinkedNow()
         }
     }
@@ -849,6 +857,17 @@ final class AppModel {
     func deleteRoute(_ route: CustomRoute) {
         routeMap[route.id] = nil
         writeRoute { try $0.deleteRoute(provider: route.provider, driveId: route.driveId) }
+    }
+
+    /// Удаление выделенных маршрутов (клавиша Delete / ⌘⌫ в «Маршрутах сохранения»), без подтверждения —
+    /// как «Remove Location» в строке. Файлы на диске не трогаются.
+    func deleteRoutes(_ routes: [CustomRoute]) {
+        guard !routes.isEmpty else { return }
+        for route in routes { routeMap[route.id] = nil }
+        let groups = Dictionary(grouping: routes, by: \.provider).mapValues { $0.map(\.driveId) }
+        writeRoute { db in
+            for (provider, ids) in groups { try db.deleteRoutes(provider: provider, driveIds: ids) }
+        }
     }
 
     /// Маршрут самого объекта (без учёта предков).
@@ -1042,6 +1061,18 @@ final class AppModel {
 
     func limit(_ provider: CloudProviderKind, _ direction: TransferDirection) -> TransferLimitStatus? {
         limits.first { $0.provider == provider && $0.direction == direction }
+    }
+
+    /// Delete / ⌘⌫ в Менеджере загрузок: из выделенного убираются только завершённые и отменённые записи
+    /// истории (как «Clear History», но для выделения). Идущие, ожидающие и упавшие задачи не трогаются,
+    /// скачанные файлы остаются на диске.
+    func removeFinishedDownloads(_ tasks: [DownloadTask]) {
+        let ids = tasks.filter { [.completed, .cancelled].contains($0.status) }.map(\.id)
+        guard !ids.isEmpty else { return }
+        Task {
+            _ = await inBackground { $0.deleteTasks(ids: ids, statuses: [.completed, .cancelled]) }
+            await refresh()
+        }
     }
 
     func clearHistory() {
