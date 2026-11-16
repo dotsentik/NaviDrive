@@ -29,6 +29,10 @@ struct NaviDriveApp: App {
             }
             // «Вид → Показать/Скрыть боковую панель» (⌃⌘S), как в Finder.
             SidebarCommands()
+            // Подробный журнал передач — для разбора, почему файл не докачался.
+            CommandGroup(after: .help) {
+                Button("Show Log in Finder") { AppLog.reveal() }
+            }
             #if DEBUG
             // Проверка лимитов и карточки статуса без реального превышения (только в Debug-сборке).
             CommandMenu("Debug") {

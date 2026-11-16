@@ -384,3 +384,14 @@ struct EngineSnapshot: Sendable, Equatable {
     var scanErrors: [String] = []
     var runningTasks: [RunningTransfer] = []
 }
+
+/// Состояние идущей загрузки для окна «Диагностика» (из сторожа зависаний планировщика).
+struct DownloadLiveDiagnostics: Sendable {
+    let lastEvent: String
+    let secondsWithoutData: TimeInterval
+    /// Пауза перед повтором или лимит запросов — ожидание намеренное.
+    let isWaitingOnPurpose: Bool
+    let stallRestarts: Int
+    let maxStallRestarts: Int
+    let liveBytes: Int64?
+}

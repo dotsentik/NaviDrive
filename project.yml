@@ -131,6 +131,8 @@ targets:
     sources:
       - path: Tests
       - path: Sources/Update/UpdateCore.swift
+      # Журнал в файл (ротация, вырезание секретов) — без зависимостей от приложения.
+      - path: Sources/Storage/FileLogWriter.swift
       # Чистая логика защиты (аудит безопасности): без UI, Связки ключей и сети.
       - path: Sources/Security
     settings:

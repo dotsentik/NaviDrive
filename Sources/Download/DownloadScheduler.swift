@@ -19,6 +19,10 @@ actor DownloadScheduler {
 
     private enum StopReason {
         case pauseTask, pauseAll, network, cancel, requeue
+        /// Сторож: данных нет `stallRestartAfter` — соединение рвётся, задача сразу продолжается с `.part`.
+        case stalled
+        /// Сторож: переподключения не помогли — ошибка с причиной.
+        case stalledGiveUp
         /// Лимит облака (свой счётчик за 24 часа или ответ облака): задача ждёт, прогресс сохранён.
         case dailyLimit
     }
@@ -34,6 +38,32 @@ actor DownloadScheduler {
     private let progress: ProgressStore
 
     private var running: [String: Running] = [:]
+
+    // MARK: Сторож зависаний
+
+    /// Что происходит с идущей загрузкой: когда пришли последние байты и какое было последнее событие
+    /// (ожидание ответа сервера, обрыв, пауза перед повтором). Из этого — причина в строке и в «Диагностике».
+    struct Activity: Sendable {
+        var lastBytesAt: TimeInterval
+        var lastEvent: String
+        /// Намеренное ожидание (пауза перед повтором, лимит запросов) — до этого времени это не зависание.
+        var waitUntil: TimeInterval?
+        var stallReported = false
+
+        func idle(at now: TimeInterval) -> TimeInterval { now - max(lastBytesAt, waitUntil ?? 0) }
+    }
+
+    /// Без данных столько секунд — в строке появляется «Нет данных N с» с последним событием.
+    static let stallWarningAfter: TimeInterval = 60
+    /// Без данных столько секунд — соединение рвётся и задача продолжается с `.part` заново.
+    static let stallRestartAfter: TimeInterval = 300
+    /// Столько переподключений подряд без данных — задача получает статус «Ошибка» с причиной.
+    static let maxStallRestarts = 3
+    static let stallCheckInterval: Duration = .seconds(15)
+
+    private var activity: [String: Activity] = [:]
+    /// Переподключения сторожа подряд, без пришедших данных между ними (сбрасывается при первых байтах).
+    private var stallRestarts: [String: Int] = [:]
     /// Пути `.gdrive.part`, в которые сейчас идёт запись: два потока никогда не пишут в один файл.
     private var activePartPaths: Set<String> = []
     private var stopReasons: [String: StopReason] = [:]
@@ -118,6 +148,8 @@ actor DownloadScheduler {
         guard !started else { return }
         started = true
         self.authorized = authorized
+        let interrupted = db.tasks(statuses: [.downloading, .waitingForNetwork], limit: 1_000).count
+        AppLog.download("scheduler start: \(interrupted) interrupted task(s) back to queue, signed in: \(authorized.map(\.rawValue).sorted())")
         db.moveStatuses([.downloading, .waitingForNetwork], to: .queued)
         // Незавершённые задачи после перезапуска — тоже сессия (уведомление в конце без имени проекта).
         if db.totals().pendingCount > 0 { session.active = true }
@@ -129,6 +161,12 @@ actor DownloadScheduler {
             while !Task.isCancelled {
                 try? await Task.sleep(for: AdaptiveConcurrency.evaluationInterval)
                 await self?.rebalance()
+            }
+        })
+        timers.append(Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.stallCheckInterval)
+                await self?.checkStalls()
             }
         })
         timers.append(Task { [weak self] in
@@ -155,6 +193,7 @@ actor DownloadScheduler {
     func setOnline(_ online: Bool) {
         guard online != isOnline else { return }
         isOnline = online
+        AppLog.download("network \(online ? "restored" : "lost")\(online ? "" : ": \(running.count) running task(s) wait for network")")
         if online {
             balancer.reset(reason: String(localized: "Network restored"))
             meter.reset()
@@ -174,6 +213,7 @@ actor DownloadScheduler {
     /// в очередь (прогресс — в `.gdrive.part`), функция ждёт, пока потоки закроют файлы.
     /// После запуска очередь продолжается автоматически.
     func stopForRelaunch() async {
+        AppLog.download("stop for quit/relaunch: \(running.count) running task(s) back to queue")
         isHalted = true
         googleLimit.flush(db: db)
         let handles = running.values.map(\.handle)
@@ -184,6 +224,7 @@ actor DownloadScheduler {
     /// Общая пауза: идущие и ожидающие задачи → `pausedAll` одной операцией. Идущие потоки
     /// останавливаются и дописывают .part, но в списке и счётчиках уже считаются приостановленными.
     func pauseAll() {
+        AppLog.download("pause all (\(running.count) running)")
         for (id, _) in running where stopReasons[id] == nil { stop(id, .pauseAll) }
         db.pauseAll()
         if pausedAllAt == nil { pausedAllAt = Date().timeIntervalSinceReferenceDate }
@@ -191,6 +232,7 @@ actor DownloadScheduler {
 
     /// Снять общую паузу (кнопка тулбара и трей): `pausedAll` → очередь. Вручную приостановленные остаются.
     func resumePausedAll() {
+        AppLog.download("resume all after Pause All")
         db.resumePausedAll()
         resumeStopping(reasons: [.pauseAll])
         afterResume()
@@ -298,6 +340,7 @@ actor DownloadScheduler {
     }
 
     func pauseTask(_ id: String) {
+        AppLog.download("pause task id=\(id) running=\(running[id] != nil) part=\(AppLog.bytes(db.task(id: id).flatMap { DownloadWorker.fileSize($0.partPath) } ?? 0))")
         // Проверка хеша локальная и короткая — её не прерываем.
         if verifying[id] != nil || verificationQueue.contains(where: { $0.id == id }) { return }
         if running[id] != nil { stop(id, .pauseTask) }
@@ -306,6 +349,7 @@ actor DownloadScheduler {
 
     /// «Возобновить» отдельный файл: в начало очереди, докачка с размера .gdrive.part через Range.
     func resumeTask(_ id: String) {
+        AppLog.download("resume task id=\(id) part=\(AppLog.bytes(db.task(id: id).flatMap { DownloadWorker.fileSize($0.partPath) } ?? 0))")
         resumeStopping(reasons: [.pauseTask, .pauseAll], id: id)
         db.resume(id: id)
         schedule()
@@ -313,12 +357,14 @@ actor DownloadScheduler {
 
     /// «Возобновить все» в секции «На паузе»: и вручную приостановленные, и после общей паузы.
     func resumeAllPaused() {
+        AppLog.download("resume all paused")
         db.resumeAllPaused()
         resumeStopping(reasons: [.pauseTask, .pauseAll])
         afterResume()
     }
 
     func cancelTask(_ id: String) {
+        AppLog.download("cancel task id=\(id) running=\(running[id] != nil)")
         if running[id] != nil {
             stop(id, .cancel)
             db.updateStatus(id: id, status: .cancelled)
@@ -347,6 +393,7 @@ actor DownloadScheduler {
     func cancelUnfinished(_ provider: CloudProviderKind) {
         for task in db.tasks(statuses: Self.unfinishedStatuses + [.paused, .pausedAll, .failed], limit: 1_000_000, provider: provider)
         where running[task.id] == nil {
+            AppLog.download("account changed: cancel “\(task.fileName)” and delete part")
             db.updateStatus(id: task.id, status: .cancelled)
             try? FileManager.default.removeItem(atPath: task.partPath)
         }
@@ -441,6 +488,7 @@ actor DownloadScheduler {
             if running[id]?.task.provider == .googleDrive { countGoogleTraffic(delta, id: id) }
             receivedBytes.insert(id)
             let now = Date().timeIntervalSinceReferenceDate
+            markReceiving(id, at: now)
             meter.add(delta, at: now)
             taskMeters[id, default: ThroughputMeter()].add(delta, at: now)
         }
@@ -630,6 +678,8 @@ actor DownloadScheduler {
             await self.finish(task, outcome: outcome)
         }
         running[task.id] = Running(task: task, sizeClass: sizeClass, handle: handle)
+        activity[task.id] = Activity(lastBytesAt: Date().timeIntervalSinceReferenceDate,
+                                     lastEvent: String(localized: "Connecting to the server…"))
     }
 
     private func finish(_ task: DownloadTask, outcome: DownloadWorker.Outcome) {
@@ -643,6 +693,8 @@ actor DownloadScheduler {
         taskMeters[task.id] = nil
         receivedBytes.remove(task.id)
         let reason = stopReasons.removeValue(forKey: task.id)
+        let lastActivity = activity.removeValue(forKey: task.id)
+        AppLog.download("finish “\(task.fileName)” id=\(task.id): \(outcome), stop reason: \(reason.map { "\($0)" } ?? "none")")
 
         switch outcome {
         case .completed(let size):
@@ -696,6 +748,16 @@ actor DownloadScheduler {
                 removePartFile(task.id)
             case .requeue, nil:
                 db.updateStatus(id: task.id, status: .queued)
+            case .stalled:
+                // Сразу в начало очереди: докачка с размера .part по новому соединению.
+                let count = stallRestarts[task.id] ?? 1
+                db.updateStatus(id: task.id, status: .queued,
+                                error: String(localized: "No data for \(Int(Self.stallRestartAfter / 60)) min — reconnecting (\(count) of \(Self.maxStallRestarts)). \(lastActivity?.lastEvent ?? "")"))
+            case .stalledGiveUp:
+                stallRestarts[task.id] = nil
+                db.updateStatus(id: task.id, status: .failed,
+                                error: String(localized: "The download stalled: no data after \(Self.maxStallRestarts) reconnects. Last event: \(lastActivity?.lastEvent ?? "—")"))
+                session.failed += 1
             }
         case .signedOut:
             // Вход отозван: очередь стоит до нового входа, скачанная часть файла сохранена.
@@ -885,6 +947,7 @@ actor DownloadScheduler {
     private func finalizeFile(_ task: DownloadTask, verified: Bool) {
         do {
             let size = try FileFinalizer.finalize(task)
+            AppLog.download("completed “\(task.fileName)” \(AppLog.bytes(size)) verified=\(verified)")
             db.markCompleted(id: task.id, size: size, verified: verified)
             session.files += 1
             session.bytes += size
@@ -935,6 +998,7 @@ actor DownloadScheduler {
         case .verified:
             finalizeFile(current, verified: true)
         case .mismatch(let expected, let actual):
+            AppLog.download("“\(current.fileName)” checksum mismatch: expected \(expected), got \(actual) — deleting part \(AppLog.bytes(DownloadWorker.fileSize(current.partPath) ?? 0)) and downloading again")
             try? FileManager.default.removeItem(atPath: current.partPath)
             let failures = current.checksumFailures + 1
             let giveUp = failures >= 2
@@ -944,6 +1008,7 @@ actor DownloadScheduler {
             db.markChecksumMismatch(id: current.id, failures: failures, error: message, giveUp: giveUp)
             if giveUp { session.failed += 1 }
         case .missingFile:
+            AppLog.download("“\(current.fileName)” part missing at verification — downloading again")
             db.markChecksumMismatch(id: current.id, failures: current.checksumFailures,
                                     error: String(localized: "The downloaded file disappeared from the disk — downloading again"), giveUp: false)
         case .failed(let message):
@@ -976,6 +1041,61 @@ actor DownloadScheduler {
             destination: session.directory)
     }
 
+    // MARK: - Сторож зависаний
+
+    /// Событие идущей загрузки от воркера (ожидание ответа, обрыв, пауза перед повтором).
+    /// - Parameter waitSeconds: намеренное ожидание — столько секунд это не считается зависанием.
+    func note(id: String, event: String, waitSeconds: TimeInterval? = nil) {
+        guard activity[id] != nil else { return }
+        activity[id]?.lastEvent = event
+        activity[id]?.waitUntil = waitSeconds.map { Date().timeIntervalSinceReferenceDate + $0 }
+    }
+
+    /// Пришли данные: загрузка не висит, предупреждение и счётчик переподключений сбрасываются.
+    private func markReceiving(_ id: String, at now: TimeInterval) {
+        guard var current = activity[id] else { return }
+        current.lastBytesAt = now
+        current.waitUntil = nil
+        if current.stallReported {
+            current.stallReported = false
+            db.clearLastError(id: id)
+            AppLog.download("data flowing again for id=\(id)")
+        }
+        current.lastEvent = String(localized: "Receiving data")
+        activity[id] = current
+        stallRestarts[id] = nil
+    }
+
+    private func checkStalls() {
+        let now = Date().timeIntervalSinceReferenceDate
+        for (id, entry) in running where stopReasons[id] == nil {
+            guard var current = activity[id] else { continue }
+            let idle = current.idle(at: now)
+            if idle >= Self.stallRestartAfter {
+                let count = (stallRestarts[id] ?? 0) + 1
+                stallRestarts[id] = count
+                let giveUp = count >= Self.maxStallRestarts
+                AppLog.download("watchdog: “\(entry.task.fileName)” no data for \(Int(idle)) s (last event: \(current.lastEvent)) — \(giveUp ? "giving up" : "reconnecting \(count) of \(Self.maxStallRestarts)")")
+                stop(id, giveUp ? .stalledGiveUp : .stalled)
+            } else if idle >= Self.stallWarningAfter, !current.stallReported {
+                current.stallReported = true
+                activity[id] = current
+                AppLog.download("watchdog: “\(entry.task.fileName)” no data for \(Int(idle)) s (last event: \(current.lastEvent))")
+                db.setLastError(id: id, error: String(localized: "No data for \(Int(idle)) s. \(current.lastEvent)"))
+            }
+        }
+    }
+
+    /// Для окна «Диагностика»: последнее событие, сколько секунд нет данных, переподключения сторожа.
+    func diagnostics(id: String) -> DownloadLiveDiagnostics? {
+        guard let current = activity[id] else { return nil }
+        let now = Date().timeIntervalSinceReferenceDate
+        return DownloadLiveDiagnostics(lastEvent: current.lastEvent, secondsWithoutData: max(0, current.idle(at: now)),
+                                       isWaitingOnPurpose: (current.waitUntil ?? 0) > now,
+                                       stallRestarts: stallRestarts[id] ?? 0, maxStallRestarts: Self.maxStallRestarts,
+                                       liveBytes: liveProgress[id])
+    }
+
     private func stop(_ id: String, _ reason: StopReason) {
         guard let entry = running[id] else { return }
         stopReasons[id] = reason
@@ -989,6 +1109,7 @@ actor DownloadScheduler {
 
     private func removePartFile(_ id: String) {
         guard let task = db.task(id: id) else { return }
+        AppLog.download("delete part of “\(task.fileName)” (\(AppLog.bytes(DownloadWorker.fileSize(task.partPath) ?? 0))), status \(task.status.rawValue)")
         try? FileManager.default.removeItem(atPath: task.partPath)
     }
 

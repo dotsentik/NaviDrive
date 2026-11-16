@@ -173,10 +173,12 @@ actor UploadScheduler {
     }
 
     func pauseTask(_ id: String) {
+        AppLog.upload("pause upload id=\(id) running=\(running[id] != nil)")
         if running[id] != nil { stop(id, .pause) } else { db.updateUploadStatus(id: id, status: .paused) }
     }
 
     func resumeTask(_ id: String) {
+        AppLog.upload("resume upload id=\(id) running=\(running[id] != nil)")
         guard running[id] == nil else { return }
         db.resumeUpload(id: id)
         schedule()
@@ -198,6 +200,7 @@ actor UploadScheduler {
     }
 
     func cancelTask(_ id: String) {
+        AppLog.upload("cancel upload id=\(id) running=\(running[id] != nil)")
         if running[id] != nil {
             stop(id, .cancel)
         } else {

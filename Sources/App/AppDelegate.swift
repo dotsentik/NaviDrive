@@ -4,6 +4,8 @@ import UserNotifications
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let info = Bundle.main.infoDictionary
+        AppLog.app("launch NaviDrive \(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?")), macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
         UNUserNotificationCenter.current().delegate = self
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
@@ -20,6 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// Закрытие окна не завершает приложение: загрузки продолжаются в фоне, управление — из трея.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        AppLog.app("quit")
+        AppLog.flush()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

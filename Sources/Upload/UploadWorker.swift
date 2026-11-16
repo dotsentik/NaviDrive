@@ -41,6 +41,13 @@ struct UploadWorker: Sendable {
     static var sourceChangedMessage: String { String(localized: "The file changed during upload") }
 
     func run(_ initial: UploadTask) async -> Outcome {
+        AppLog.upload("start \(initial.provider.rawValue) “\(initial.fileName)” id=\(initial.id) size=\(AppLog.bytes(initial.fileSize)) confirmed=\(AppLog.bytes(initial.uploadedBytes)) retryCount=\(initial.retryCount) → “\(initial.parentName)”")
+        let outcome = await runAttempts(initial)
+        AppLog.upload("end “\(initial.fileName)” id=\(initial.id): \(outcome)")
+        return outcome
+    }
+
+    private func runAttempts(_ initial: UploadTask) async -> Outcome {
         var task = initial
         var retries = task.retryCount
         var rateLimitRetries = 0
@@ -57,6 +64,7 @@ struct UploadWorker: Sendable {
             } catch AttemptError.volume(let message) {
                 return .waitingForVolume(message)
             } catch AttemptError.sessionExpired {
+                AppLog.upload("“\(task.fileName)” upload session expired, starting a new one (\(expiredSessions + 1))")
                 // Сессия истекла (404/410): новая сессия с нуля. Защита от бесконечного цикла.
                 expiredSessions += 1
                 guard expiredSessions <= 3 else {
@@ -117,6 +125,7 @@ struct UploadWorker: Sendable {
                 }
                 retries += 1
                 // Обрывы сети повторяются без ограничения: файл продолжится с подтверждённого байта.
+                AppLog.upload("“\(task.fileName)” attempt failed (\(retries)\(networkDrop ? ", network — unlimited" : " of \(Self.maxRetries)")): \(message) [\(AppLog.describe(error))]; confirmed=\(AppLog.bytes(task.uploadedBytes))")
                 guard networkDrop || retries <= Self.maxRetries else { return .failed(message, nil) }
                 let delay = DownloadWorker.jitteredDelay(attempt: min(retries, 6), cap: 64)
                 db.recordUploadRetry(id: task.id, retryCount: retries,
@@ -137,6 +146,7 @@ struct UploadWorker: Sendable {
         if let session = task.sessionURI, sessionAge < provider.uploadSessionLifetime {
             switch try await provider.uploadState(session: session, task: task) {
             case .incomplete(let next):
+                AppLog.upload("“\(task.fileName)” resuming session: server confirmed \(AppLog.bytes(next)) of \(AppLog.bytes(task.fileSize))")
                 offset = next
             case .complete(let fileId, let hash, let name):
                 return .uploaded(fileId: fileId, hash: hash, size: task.fileSize, name: name)
@@ -150,6 +160,8 @@ struct UploadWorker: Sendable {
                 return .skipped
             }
             let session = try await provider.startUploadSession(for: task)
+            // Адрес сессии — секрет (по нему можно дописать файл), в журнал не пишется.
+            AppLog.upload("“\(task.fileName)” new upload session\(task.sessionURI != nil ? " (previous one is older than the session lifetime)" : "")")
             let created = Int64(Date().timeIntervalSince1970)
             db.saveUploadSession(id: task.id, uri: session, createdAt: created)
             task.sessionURI = session

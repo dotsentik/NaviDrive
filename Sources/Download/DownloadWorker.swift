@@ -57,6 +57,13 @@ struct DownloadWorker: Sendable {
     }
 
     func run(_ task: DownloadTask) async -> Outcome {
+        AppLog.download("start \(AppLog.describe(task)) retryCount=\(task.retryCount) dir=\(task.targetDirPath)")
+        let outcome = await runAttempts(task)
+        AppLog.download("end “\(task.fileName)” id=\(task.id): \(outcome) part=\(AppLog.bytes(Self.fileSize(task.partPath) ?? 0))")
+        return outcome
+    }
+
+    private func runAttempts(_ task: DownloadTask) async -> Outcome {
         var retries = task.retryCount
         var rateLimitRetries = 0
         var unauthorizedRefreshes = 0
@@ -73,6 +80,7 @@ struct DownloadWorker: Sendable {
             do {
                 return try await attempt(task, useAsyncBytes: frequentOverflows >= 2)
             } catch AttemptError.fatal(let message) {
+                AppLog.download("“\(task.fileName)” fatal: \(message)")
                 return .failed(message)
             } catch AttemptError.limit {
                 return .limitReached
@@ -80,6 +88,7 @@ struct DownloadWorker: Sendable {
                 return .waitingForVolume(message)
             } catch AttemptError.unauthorized(let token) {
                 unauthorizedRefreshes += 1
+                AppLog.download("“\(task.fileName)” HTTP 401, refreshing authorization (\(unauthorizedRefreshes))")
                 guard unauthorizedRefreshes <= 2 else { return .failed(String(localized: "HTTP 401: access denied")) }
                 do {
                     try await provider.refreshAuthorization(after: token)
@@ -97,6 +106,9 @@ struct DownloadWorker: Sendable {
                 guard rateLimitRetries <= Self.maxRateLimitRetries else { return .failed(message) }
                 // Пауза, назначенная сервером (Retry-After), соблюдается всегда.
                 let delay = max(Self.jitteredDelay(attempt: rateLimitRetries, cap: Self.rateLimitMaxDelay), retryAfter ?? 0)
+                AppLog.download("“\(task.fileName)” rate-limited (\(rateLimitRetries)): \(message); retry in \(Int(delay.rounded())) s")
+                await scheduler.note(id: task.id, event: String(localized: "The cloud limited requests — retrying in \(Int(delay.rounded())) s"),
+                                     waitSeconds: delay)
                 Self.logger.error("Download \(task.id, privacy: .public) rate-limited: \(message, privacy: .public)")
                 db.recordRetry(id: task.id, retryCount: retries + rateLimitRetries,
                                error: String(localized: "\(message) — retrying in \(Int(delay.rounded())) s"),
@@ -119,13 +131,16 @@ struct DownloadWorker: Sendable {
                     guard continuationsWithoutProgress <= 3 else { return .failed(String(localized: "Can’t continue the download: no progress")) }
                 }
                 lastContinuationSize = size
+                AppLog.download("“\(task.fileName)” buffer overflow, continuing from disk at \(AppLog.bytes(size)) (no-progress continuations: \(continuationsWithoutProgress))")
                 continue
             } catch AttemptError.restart {
                 restarts += 1
+                AppLog.download("“\(task.fileName)” restart from zero (\(restarts) of 3)")
                 guard restarts <= 3 else { return .failed(String(localized: "The server doesn’t support resuming (Range)")) }
                 continue
             } catch {
                 if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled {
+                    AppLog.download("“\(task.fileName)” stopped (cancelled by scheduler)")
                     return .stopped
                 }
                 if case .missing(let message) = PathResolver.volumeState(for: task.targetDirPath) {
@@ -154,9 +169,12 @@ struct DownloadWorker: Sendable {
 
                 retries += 1
                 let delay = Self.jitteredDelay(attempt: retries, cap: 32)
+                AppLog.download("“\(task.fileName)” attempt failed (\(retries)\(unlimited ? ", network — unlimited" : " of \(Self.maxHTTPRetries)")): \(message) [\(AppLog.describe(error))]; part=\(AppLog.bytes(Self.fileSize(task.partPath) ?? 0)); retry in \(Int(delay.rounded())) s")
                 Self.logger.error("Download \(task.id, privacy: .public) attempt \(retries) failed: \(message, privacy: .public)")
                 db.recordRetry(id: task.id, retryCount: retries, error: message,
                                nextAttemptAt: Self.unix(Date().addingTimeInterval(delay)))
+                await scheduler.note(id: task.id, event: String(localized: "Attempt \(retries) failed: \(message). Retrying in \(Int(delay.rounded())) s"),
+                                     waitSeconds: delay)
                 if !unlimited && retries > Self.maxHTTPRetries { return .failed(message) }
                 do {
                     // Досрочно прерывается после пробуждения Mac или возврата сети.
@@ -210,6 +228,7 @@ struct DownloadWorker: Sendable {
             localBytes = 0
         }
         if localBytes > 0, isExport || (task.expectedSize > 0 && localBytes > task.expectedSize) {
+            AppLog.download("“\(task.fileName)” truncating part \(AppLog.bytes(localBytes)): \(isExport ? "export can’t resume" : "larger than expected size")")
             try Self.truncate(partPath)
             localBytes = 0
         }
@@ -220,6 +239,10 @@ struct DownloadWorker: Sendable {
         await scheduler.report(id: task.id, delta: 0, total: localBytes)
 
         // 4–6. Подписанный провайдером запрос с Range.
+        AppLog.download("“\(task.fileName)” request \(localBytes > 0 ? "Range bytes=\(localBytes)- (part \(AppLog.bytes(localBytes)))" : "from start")\(task.resourceKey != nil ? " via shared link" : "")")
+        await scheduler.note(id: task.id, event: localBytes > 0
+            ? String(localized: "Waiting for the server to respond to the resume request from \(Format.bytes(localBytes))")
+            : String(localized: "Waiting for the server to respond"))
         let authorized = try await provider.downloadRequest(for: task, offset: localBytes)
         var request = authorized.request
         if localBytes > 0 { request.timeoutInterval = max(request.timeoutInterval, Self.resumeResponseTimeout) }
@@ -242,11 +265,14 @@ struct DownloadWorker: Sendable {
         }
 
         // 7. Разбор HTTP-ответа.
+        AppLog.download("“\(task.fileName)” response HTTP \(http.statusCode) Content-Range=\(http.value(forHTTPHeaderField: "Content-Range") ?? "-") Content-Length=\(http.value(forHTTPHeaderField: "Content-Length") ?? "-")")
+        await scheduler.note(id: task.id, event: String(localized: "The server responded (HTTP \(http.statusCode)), waiting for data"))
         let handle: FileHandle
         switch http.statusCode {
         case 206:
             guard let opened = try? SafeFile.openForUpdate(partPath) else { throw AttemptError.fatal(String(localized: "Couldn’t open \(partPath)")) }
             if let start = Self.contentRangeStart(http.value(forHTTPHeaderField: "Content-Range")), start != localBytes {
+                AppLog.download("“\(task.fileName)” Content-Range starts at \(start), expected \(localBytes): truncating part and restarting")
                 try? opened.close()
                 stream.cancel()
                 try Self.truncate(partPath)
@@ -259,13 +285,16 @@ struct DownloadWorker: Sendable {
             if localBytes > 0 {
                 // Сервер проигнорировал Range и отдаёт файл целиком: продолжить нельзя, начинаем заново — открыто.
                 Self.logger.warning("Download \(task.id, privacy: .public): HTTP 200 instead of 206 for Range from \(localBytes), restarting")
+                AppLog.download("“\(task.fileName)” HTTP 200 instead of 206 for Range from \(AppLog.bytes(localBytes)): server ignored Range, part truncated to zero")
                 db.setLastError(id: task.id, error: String(localized: "The server doesn’t support resuming — the download was restarted"))
+                await scheduler.note(id: task.id, event: String(localized: "The server ignored the resume request — the download was restarted from zero"))
                 try opened.truncate(atOffset: 0)
                 localBytes = 0
                 await scheduler.report(id: task.id, delta: 0, total: 0)
             }
             handle = opened
         case 416:
+            AppLog.download("“\(task.fileName)” HTTP 416 at \(AppLog.bytes(localBytes)) (expected \(AppLog.bytes(task.expectedSize)))")
             stream.cancel()
             if task.expectedSize > 0, localBytes >= task.expectedSize {
                 return try finalize(task)
@@ -307,7 +336,9 @@ struct DownloadWorker: Sendable {
             await writer.close()
         } catch let interrupted as ChunkPump.Interrupted {
             await writer.close()
+            AppLog.download("“\(task.fileName)” stream interrupted: written=\(AppLog.bytes(interrupted.written)) part=\(AppLog.bytes(Self.fileSize(partPath) ?? 0)); cause: \(AppLog.describe(interrupted.underlying))")
             await progress.commit(id: task.id, bytes: Self.fileSize(partPath) ?? interrupted.written)
+            await scheduler.note(id: task.id, event: String(localized: "Connection dropped: \(interrupted.underlying.localizedDescription)"))
             if case DataTaskStream.StreamError.bufferOverflow = interrupted.underlying {
                 throw AttemptError.continueFromDisk
             }
@@ -323,6 +354,7 @@ struct DownloadWorker: Sendable {
     private func finalize(_ task: DownloadTask) throws -> Outcome {
         let size = Self.fileSize(task.partPath) ?? 0
         if task.exportFormat == nil, task.expectedSize > 0, size != task.expectedSize {
+            AppLog.download("“\(task.fileName)” stream ended early: part \(AppLog.bytes(size)) of \(AppLog.bytes(task.expectedSize))\(size > task.expectedSize ? ", larger — truncating" : "")")
             if size > task.expectedSize { try Self.truncate(task.partPath) }
             throw AttemptError.transient(String(localized: "Size mismatch: received \(size) of \(task.expectedSize) bytes"))
         }

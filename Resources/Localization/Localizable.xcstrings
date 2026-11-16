@@ -11,6 +11,16 @@
         }
       }
     },
+    "%@ / %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ / %@"
+          }
+        }
+      }
+    },
     "%@ connected": {
       "localizations": {
         "ru": {
@@ -83,6 +93,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ за 24 ч: %@ из %@ (%lld%%)"
+          }
+        }
+      }
+    },
+    "%@ is kept on disk — Retry continues from this point.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На диске сохранено %@ — «Повторить» продолжит с этого места."
           }
         }
       }
@@ -621,6 +641,16 @@
         }
       }
     },
+    "%lld s": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld с"
+          }
+        }
+      }
+    },
     "%lld size calculations": {
       "localizations": {
         "en": {
@@ -1001,6 +1031,16 @@
         }
       }
     },
+    "After %lld min without data the connection is restarted automatically (reconnects so far: %lld of %lld); after that the download gets the Error status with the reason.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Через %lld мин без данных соединение перезапускается автоматически (переподключений: %lld из %lld); после этого загрузка получает статус «Ошибка» с причиной."
+          }
+        }
+      }
+    },
     "All": {
       "localizations": {
         "ru": {
@@ -1089,6 +1129,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Попытка %lld"
+          }
+        }
+      }
+    },
+    "Attempt %lld failed: %@. Retrying in %lld s": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попытка %lld не удалась: %@. Повтор через %lld с"
           }
         }
       }
@@ -1271,6 +1321,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Отменено"
+          }
+        }
+      }
+    },
+    "Cancelled.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменено."
           }
         }
       }
@@ -1691,6 +1751,16 @@
         }
       }
     },
+    "Connecting to the server…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подключение к серверу…"
+          }
+        }
+      }
+    },
     "Connecting…": {
       "localizations": {
         "en": {
@@ -1703,6 +1773,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Подключение…"
+          }
+        }
+      }
+    },
+    "Connection dropped: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Соединение оборвалось: %@"
           }
         }
       }
@@ -1735,6 +1815,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Продолжить с Google Drive"
+          }
+        }
+      }
+    },
+    "Copied": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скопировано"
+          }
+        }
+      }
+    },
+    "Copy Report": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скопировать отчёт"
           }
         }
       }
@@ -2207,6 +2307,26 @@
         }
       }
     },
+    "Diagnostics": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диагностика"
+          }
+        }
+      }
+    },
+    "Diagnostics…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диагностика…"
+          }
+        }
+      }
+    },
     "Disk Disconnected": {
       "localizations": {
         "ru": {
@@ -2243,6 +2363,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Диски"
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово"
           }
         }
       }
@@ -2561,6 +2691,26 @@
         }
       }
     },
+    "Downloaded, but the file is no longer at its location (moved or deleted).": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачано, но файла больше нет на месте (перемещён или удалён)."
+          }
+        }
+      }
+    },
+    "Downloaded.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачано."
+          }
+        }
+      }
+    },
     "Downloading": {
       "localizations": {
         "ru": {
@@ -2577,6 +2727,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Скачивается сюда: %@ осталось"
+          }
+        }
+      }
+    },
+    "Downloading normally: %@ of %@. Last event: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачивается нормально: %@ из %@. Последнее событие: %@"
           }
         }
       }
@@ -2883,6 +3043,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Внешний диск «%@» не подключён. Загрузка продолжится автоматически после подключения."
+          }
+        }
+      }
+    },
+    "Failed attempts so far: %lld.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неудачных попыток: %lld."
           }
         }
       }
@@ -3446,6 +3616,16 @@
         }
       }
     },
+    "In the queue: the download will continue from %@ of %@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В очереди: загрузка продолжится с %@ из %@."
+          }
+        }
+      }
+    },
     "Installing — NaviDrive will restart…": {
       "localizations": {
         "en": {
@@ -3620,6 +3800,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Последняя проверка"
+          }
+        }
+      }
+    },
+    "Last error": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последняя ошибка"
           }
         }
       }
@@ -4337,6 +4527,36 @@
         }
       }
     },
+    "No data for": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет данных"
+          }
+        }
+      }
+    },
+    "No data for %lld min — reconnecting (%lld of %lld). %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет данных %lld мин — переподключение (%lld из %lld). %@"
+          }
+        }
+      }
+    },
+    "No data for %lld s. %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет данных %lld с. %@"
+          }
+        }
+      }
+    },
     "No downloads": {
       "localizations": {
         "ru": {
@@ -4359,6 +4579,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Нет загрузок, которые можно приостановить или возобновить"
+          }
+        }
+      }
+    },
+    "No events for this file in the log yet. Events are recorded from this version on.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В журнале пока нет событий этого файла. События записываются начиная с этой версии."
           }
         }
       }
@@ -4672,6 +4902,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Не в сети"
+          }
+        }
+      }
+    },
+    "On disk": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На диске"
           }
         }
       }
@@ -5004,6 +5244,26 @@
         }
       }
     },
+    "Paused: %@ of %@ is on disk. After Resume the download continues from this point.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На паузе: на диске %@ из %@. После «Продолжить» загрузка пойдёт с этого места."
+          }
+        }
+      }
+    },
+    "Paused: nothing is on disk yet — the download will start from the beginning.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На паузе: на диске пока ничего нет — загрузка начнётся с начала."
+          }
+        }
+      }
+    },
     "Per 24 hours": {
       "localizations": {
         "ru": {
@@ -5308,6 +5568,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Пересчитать размер"
+          }
+        }
+      }
+    },
+    "Receiving data": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Идёт приём данных"
+          }
+        }
+      }
+    },
+    "Recent events": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последние события"
+          }
+        }
+      }
+    },
+    "Recent events:": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последние события:"
+          }
+        }
+      }
+    },
+    "Recorded progress": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Записанный прогресс"
           }
         }
       }
@@ -5994,6 +6294,16 @@
         }
       }
     },
+    "Show Log in Finder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать журнал в Finder"
+          }
+        }
+      }
+    },
     "Show Main Window": {
       "localizations": {
         "ru": {
@@ -6320,6 +6630,16 @@
         }
       }
     },
+    "Stalled: no data for %lld s. Last event: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зависло: нет данных %lld с. Последнее событие: %@"
+          }
+        }
+      }
+    },
     "Start Over": {
       "localizations": {
         "ru": {
@@ -6340,12 +6660,32 @@
         }
       }
     },
+    "Starting the download…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка запускается…"
+          }
+        }
+      }
+    },
     "State database": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "База состояния"
+          }
+        }
+      }
+    },
+    "Status": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Статус"
           }
         }
       }
@@ -6452,6 +6792,16 @@
         }
       }
     },
+    "The cloud limited requests — retrying in %lld s": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Облако ограничило запросы — повтор через %lld с"
+          }
+        }
+      }
+    },
     "The content hash of the file on this Mac matches the Dropbox content_hash": {
       "localizations": {
         "en": {
@@ -6536,6 +6886,16 @@
         }
       }
     },
+    "The download failed: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка не удалась: %@"
+          }
+        }
+      }
+    },
     "The download link points outside GitHub. The update was rejected.": {
       "localizations": {
         "en": {
@@ -6548,6 +6908,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ссылка на загрузку ведёт за пределы GitHub. Обновление отклонено."
+          }
+        }
+      }
+    },
+    "The download stalled: no data after %lld reconnects. Last event: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка зависла: нет данных после %lld переподключений. Последнее событие: %@"
           }
         }
       }
@@ -6584,6 +6954,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Файл изменён во время загрузки"
+          }
+        }
+      }
+    },
+    "The file is downloaded, checking the checksum.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Файл скачан, идёт проверка контрольной суммы."
           }
         }
       }
@@ -6856,6 +7236,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Сервер не поддерживает докачку — скачивание начато заново"
+          }
+        }
+      }
+    },
+    "The server ignored the resume request — the download was restarted from zero": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер проигнорировал запрос докачки — загрузка начата с нуля"
+          }
+        }
+      }
+    },
+    "The server responded (HTTP %lld), waiting for data": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер ответил (HTTP %lld), ожидание данных"
           }
         }
       }
@@ -7422,6 +7822,16 @@
         }
       }
     },
+    "Waiting before the next attempt: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидание перед следующей попыткой: %@"
+          }
+        }
+      }
+    },
     "Waiting for daily limit": {
       "localizations": {
         "ru": {
@@ -7544,6 +7954,26 @@
         }
       }
     },
+    "Waiting for the server to respond": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидание ответа сервера"
+          }
+        }
+      }
+    },
+    "Waiting for the server to respond to the resume request from %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидание ответа сервера на запрос докачки с %@"
+          }
+        }
+      }
+    },
     "Waiting to calculate size…": {
       "localizations": {
         "ru": {
@@ -7554,12 +7984,32 @@
         }
       }
     },
+    "Waiting: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидание: %@"
+          }
+        }
+      }
+    },
     "Warn before quitting during transfers": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Предупреждать при выходе во время передач"
+          }
+        }
+      }
+    },
+    "Warning: only %@ is on disk, but %@ was recorded as downloaded — part of the downloaded data was lost or the file was truncated. The events below show when it happened.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Внимание: на диске только %@, а скачанным записано %@ — часть скачанного потеряна или файл был обрезан. По событиям ниже видно, когда это произошло."
           }
         }
       }

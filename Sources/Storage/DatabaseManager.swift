@@ -839,6 +839,11 @@ final class DatabaseManager: @unchecked Sendable {
     }
 
     /// Пояснение к идущему скачиванию без изменения счётчика повторов (например, «начато заново»).
+    /// Загрузка снова получает данные — сообщение сторожа о зависании убирается.
+    func clearLastError(id: String) {
+        _ = try? run("UPDATE download_tasks SET last_error = NULL WHERE id = ? AND status = 'downloading'", [.text(id)])
+    }
+
     func setLastError(id: String, error: String) {
         _ = try? run("UPDATE download_tasks SET last_error = ?, next_attempt_at = NULL, updated_at = ? WHERE id = ?",
                  [.text(error), .int(Self.now), .text(id)])

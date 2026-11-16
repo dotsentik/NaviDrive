@@ -295,6 +295,7 @@ private struct DownloadTaskRow: View, Equatable {
     /// Поток запущен, первые байты ещё не пришли.
     let isConnecting: Bool
     @State private var confirmCancel = false
+    @State private var showDiagnostics = false
 
     nonisolated static func == (lhs: DownloadTaskRow, rhs: DownloadTaskRow) -> Bool {
         lhs.task == rhs.task && lhs.liveBytes == rhs.liveBytes && lhs.verifyBytes == rhs.verifyBytes
@@ -372,11 +373,14 @@ private struct DownloadTaskRow: View, Equatable {
                     iconButton("xmark", "Cancel Download") { confirmCancel = true }
                 }
                 iconButton("magnifyingglass", "Show in Finder") { model.revealTask(task) }
+                iconButton("stethoscope", "Diagnostics…") { showDiagnostics = true }
             }
         }
         .padding(.vertical, 4)
+        .sheet(isPresented: $showDiagnostics) { DownloadDiagnosticsView(task: task) }
         .contextMenu {
             Button("Show in Finder") { model.revealTask(task) }
+            Button("Diagnostics…") { showDiagnostics = true }
             if [.downloading, .queued, .waitingForNetwork, .waitingForVolume, .waitingForSpace].contains(task.status) {
                 Button("Pause") { model.pause(task) }
             }
